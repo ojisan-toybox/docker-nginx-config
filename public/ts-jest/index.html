@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>preset: ts-jest とは</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Jest で TypeScript を動かす時「 とすればいい」という話をたまに聞くのでその補足です。">
+    <meta property="og:title" content="preset: ts-jest とは">
+    <meta property="og:image" content="https://blog.ojisan.io//ts-jest/visual.png">
+    <meta property="og:description" content="Jest で TypeScript を動かす時「 とすればいい」という話をたまに聞くのでその補足です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="preset: ts-jest とは">
+    <meta name="twitter:description" content="Jest で TypeScript を動かす時「 とすればいい」という話をたまに聞くのでその補足です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-02</time>
+      <h1>preset: ts-jest とは</h1>
+    </div>
+    <div class="post-contents"><p>Jest で TypeScript を動かす時「<code>preset: ts-jest</code> とすればいい」という話をたまに聞くのでその補足です。</p>
+<h2>結論</h2>
+<p>jest.config.js の transform もしくは preset に ts-jest をセットすれば TypeScript をテストできるようになります。ただ TypeScript が使えるようになる直接的な立役者は transform であり、preset は内部で transform の設定をしているだけです。そのためユーザーは <code>preset: ts-jest</code> と設定すればよく、公式推奨の Basic Usage もこのやり方です。</p>
+<h2>準備</h2>
+<p>パッケージインストール</p>
+<pre><code class="language-sh">npm i -D jest @types/jest typescript
+</code></pre>
+<p>ツールの設定ファイルを生成</p>
+<pre><code class="language-sh">npx jest --init
+
+npx tsc --init
+</code></pre>
+<p>テスト対象を作成</p>
+<pre><code class="language-ts:title=src/index.ts">export const sum = (left: number, right: number): number =&gt; {
+  return left + right
+}
+
+console.log(sum(1, 2))
+</code></pre>
+<p>テストを作成</p>
+<pre><code class="language-ts:title=src/index.test.ts">import { sum } from &quot;.&quot;
+
+describe(&quot;index.js&quot;, () =&gt; {
+  it(&quot;should be 3 when inputs are 1, 2&quot;, () =&gt; {
+    const actual = sum(1, 2)
+    expect(actual).toBe(3)
+  })
+})
+</code></pre>
+<p>jest の設定. 検証用として preset は undefined にする。</p>
+<pre><code class="language-js:title=jest.config.js">module.exports = {
+  clearMocks: true,
+  // Indicates which provider should be used to instrument code for coverage
+  coverageProvider: &quot;babel&quot;,
+  // A preset that is used as a base for Jest's configuration
+  // preset: undefined,
+  // The test environment that will be used for testing
+  testEnvironment: &quot;node&quot;,
+  // A map from regular expressions to paths to transformers
+  // transform: undefined,
+}
+</code></pre>
+<p>TypeScript の設定</p>
+<pre><code class="language-js:title=tsconfig.js">{
+  &quot;compilerOptions&quot;: {
+    &quot;target&quot;: &quot;es5&quot;,
+    &quot;module&quot;: &quot;commonjs&quot;,
+    &quot;outDir&quot;: &quot;./dist&quot;,
+    &quot;strict&quot;: true,
+    &quot;esModuleInterop&quot;: true,
+    &quot;skipLibCheck&quot;: true,
+    &quot;forceConsistentCasingInFileNames&quot;: true
+  },
+  &quot;include&quot;: [&quot;src&quot;]
+}
+
+</code></pre>
+<h2>Jest の設定で preset を指定しないと何が問題になるか</h2>
+<p>上の設定で preset を undefined にしました。
+この状態で TypeScript のテストを実行します。</p>
+<pre><code class="language-sh">npm run test
+
+ FAIL  src/index.test.ts
+  ● Test suite failed to run
+
+    Jest encountered an unexpected token
+
+    This usually means that you are trying to import
+    a file which Jest cannot parse, e.g. it's not plain JavaScript.
+
+    By default, if Jest sees a Babel config,
+    it will use that to transform your files, ignoring &quot;node_modules&quot;.
+
+    Here's what you can do:
+     • To have some of your &quot;node_modules&quot; files
+     transformed, you can specify a custom
+     &quot;transformIgnorePatterns&quot; in your config.
+     • If you need a custom transformation
+     specify a &quot;transform&quot; option in your config.
+     • If you simply want to mock your non-JS modules
+     (e.g. binary assets) you can stub them out with
+     the &quot;moduleNameMapper&quot; config option.
+
+    You'll find more details and examples of
+    these config options in the docs:
+    https://jestjs.io/docs/en/configuration.html
+
+    Details:
+
+    import { sum } from &quot;.&quot;;
+    ^^^^^^
+
+    SyntaxError: Cannot use import statement outside a module
+
+      at Runtime._execModule
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        1.13 s
+Ran all test suites.
+</code></pre>
+<p>当然素の JS では import が使えないので、予想通り失敗しました。</p>
+<h3>preset: ts-jest に設定してみる</h3>
+<p>次に preset に ts-jest を指定してみましょう。</p>
+<pre><code class="language-sh">npm i -D ts-jest
+</code></pre>
+<pre><code class="language-js:title=jest.config.js">module.exports = {
+  clearMocks: true,
+  // Indicates which provider should be used to instrument code for coverage
+  coverageProvider: &quot;babel&quot;,
+  // A preset that is used as a base for Jest's configuration
+  preset: &quot;ts-jest&quot;,
+  // The test environment that will be used for testing
+  testEnvironment: &quot;node&quot;,
+  // A map from regular expressions to paths to transformers
+  // transform: undefined,
+}
+</code></pre>
+<pre><code class="language-sh">$ npm run test
+
+ PASS  src/index.test.ts
+  index.js
+    ✓ should be 3 when inputs are 1, 2 (2 ms)
+
+  console.log
+    3
+
+      at Object.&lt;anonymous&gt; (src/index.ts:5:9)
+
+Test Suites: 1 passed, 1 total
+Tests:       1 passed, 1 total
+Snapshots:   0 total
+Time:        3.041 s
+Ran all test suites.
+</code></pre>
+<p>成功しました。</p>
+<h2>transform と何が違うのか？</h2>
+<p>ちなみに先ほどのコードは、preset を使わずに transform に <code>ts-jest</code> を指定してもうまく行きます。</p>
+<pre><code class="language-js:title=jest.config.js">module.exports = {
+  clearMocks: true,
+  coverageProvider: &quot;babel&quot;,
+  preset: undefined,
+  testEnvironment: &quot;node&quot;,
+  transform: {
+    &quot;.ts&quot;: &quot;ts-jest&quot;,
+  },
+}
+</code></pre>
+<p>それでは僕たちはどういう設定をすべきなのでしょうか。
+どっちでもいいのでしょうか？</p>
+<h2>preset と transform のどちらを使うべきなのか</h2>
+<h3>ts-jest とは</h3>
+<p>そもそも preset にも transform にも設定した <a href="https://github.com/kulshekhar/ts-jest">ts-jest</a> とは何なのでしょうか。
+これは、</p>
+<blockquote>
+<p>ts-jest is a TypeScript preprocessor with source map support for Jest that lets you use Jest to test projects written in TypeScript.</p>
+</blockquote>
+<p>とあり、TS で書かれたコードをテストするための preprocessor です。</p>
+<p>ちなみにこのページに ts-jest それ自体の使い方がまとまっていますので、気になる方は参照してください。</p>
+<p>FYI: https://kulshekhar.github.io/ts-jest/user/config/</p>
+<h3>preset</h3>
+<p>jest の<a href="https://jestjs.io/docs/ja/configuration#preset-string">preset</a> は</p>
+<blockquote>
+<p>A preset that is used as a base for Jest's configuration. A preset should point to an npm module that has a jest-preset.json or jest-preset.js file at the root.</p>
+</blockquote>
+<p>とあり、jest のいろんな設定の詰め合わせです。</p>
+<p>つまり <code>{preset: ts-jest}</code> としていたのは、いろんな設定を読み込んでいたのです。</p>
+<h3>transorm</h3>
+<p>一方で<a href="https://jestjs.io/docs/en/configuration#transform-objectstring-pathtotransformer--pathtotransformer-object">transorm</a> は、</p>
+<blockquote>
+<p>A map from regular expressions to paths to transformers. A transformer is a module that provides a synchronous function for transforming source files.</p>
+</blockquote>
+<p>とあり、指定されたファイルパターンのファイルに変換をかけてくれる機能です。</p>
+<p>つまり、<strong>transform が TypeScript でテストを実行できる立役者</strong>です。</p>
+<h2>preset: &quot;ts-jest&quot; はどういう設定を提供しているのか</h2>
+<p>ts-jest の中に <a href="https://github.com/kulshekhar/ts-jest/blob/b0464e9cd57c52bbc65835b6ec784629cf5e7f73/src/presets/create-jest-preset.ts">create-jest-preset</a> というのがあり、これは</p>
+<pre><code class="language-ts">export function createJestPreset(
+  { allowJs = false }: CreateJestPresetOptions = {},
+  from: Config.InitialOptions = {}
+): TsJestPresets {
+  logger.debug(
+    { allowJs },
+    &quot;creating jest presets&quot;,
+    allowJs ? &quot;handling&quot; : &quot;not handling&quot;,
+    &quot;JavaScript files&quot;
+  )
+
+  return {
+    transform: {
+      ...from.transform,
+      [allowJs ? &quot;^.+\\.[tj]sx?$&quot; : &quot;^.+\\.tsx?$&quot;]: &quot;ts-jest&quot;,
+    },
+    ...(from.testMatch ? { testMatch: from.testMatch } : undefined),
+    ...(from.moduleFileExtensions
+      ? { moduleFileExtensions: from.moduleFileExtensions }
+      : undefined),
+  }
+}
+</code></pre>
+<p>としています。
+つまり、jest の<strong>transform, testMatch, moduleFileExtensions</strong> を設定しているわけです。
+transform は先ほど説明したからはしょるとして、残りの 2 つは何をしているのでしょうか</p>
+<h3>testMatch</h3>
+<p><a href="https://jestjs.io/docs/ja/configuration#testmatch-arraystring">testMatch</a> はテストファイルを検出するのに Jest が使用する glob パターンを指定します。
+標準では、<code>__tests__/**/</code> や <code>*.test.</code> がサポートされていますが、ts-jest を使うとこれを TypeScript 用にセットしてくれます。</p>
+<p>ただデフォルトで <code>[ &quot;**/__tests__/**/*.[jt]s?(x)&quot;, &quot;**/?(*.)+(spec|test).[jt]s?(x)&quot; ]</code>がサポートされているので、ts-jest 側から恣意的に上書きたい場合にしか嬉しくない気がします。
+（=ts-jest を直接使うユーザーからは恩恵がなさそうな気も）</p>
+<h3>moduleFileExtensions</h3>
+<p><a href="https://jestjs.io/docs/ja/configuration#modulefileextensions-arraystring">moduleFileExtensions</a> は拡張子のファイル自動解決をしてくれるオプションです。
+import 時に自動で resolve してくれます。（同一ファイル名なら先頭が優先される）</p>
+<p>ただこれもデフォルトで <code>Default: [&quot;js&quot;, &quot;json&quot;, &quot;jsx&quot;, &quot;ts&quot;, &quot;tsx&quot;, &quot;node&quot;]</code> がサポートされているので、ts-jest 側から恣意的に上書きたい場合にしか嬉しくない気がします。
+（=ts-jest を直接使うユーザーからは恩恵がなさそうな気も）</p>
+<h2>結局 preset: ts-jest は何をしているのか</h2>
+<p>Jest には transform という機能があり、特定のファイルに変換処理をかけられる。
+preset がこの transform を実行してファイルを変換しているので、ts-jest を指定すると TypeScript 対応ができる。
+ts-jest 自体はただの変換ツールなので、直接 transform に指定して実行することもできる。</p>
+<h2>サンプルコード</h2>
+<p>https://github.com/ojisan-toybox/ts-jest-practice</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>NextJS における環境変数まわりの挙動まとめ</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="OGP は「環境を考慮しよう！」という画像です。NextJS へ環境変数をセットする時、デプロイを考慮した上で.env を使いたい・ビルド時と起動時の環境変数がある・サーバーとブラウザでの環境変数があるといった風にややこしい点があり、自分はよく調べ直しています。">
+    <meta property="og:title" content="NextJS における環境変数まわりの挙動まとめ">
+    <meta property="og:image" content="https://blog.ojisan.io//next-env/visual.png">
+    <meta property="og:description" content="OGP は「環境を考慮しよう！」という画像です。NextJS へ環境変数をセットする時、デプロイを考慮した上で.env を使いたい・ビルド時と起動時の環境変数がある・サーバーとブラウザでの環境変数があるといった風にややこしい点があり、自分はよく調べ直しています。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="NextJS における環境変数まわりの挙動まとめ">
+    <meta name="twitter:description" content="OGP は「環境を考慮しよう！」という画像です。NextJS へ環境変数をセットする時、デプロイを考慮した上で.env を使いたい・ビルド時と起動時の環境変数がある・サーバーとブラウザでの環境変数があるといった風にややこしい点があり、自分はよく調べ直しています。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-18</time>
+      <h1>NextJS における環境変数まわりの挙動まとめ</h1>
+    </div>
+    <div class="post-contents"><p>OGP は「環境を考慮しよう！」という画像です。</p>
+<p>NextJS へ環境変数をセットする時、デプロイを考慮した上で.env を使いたい・ビルド時と起動時の環境変数がある・サーバーとブラウザでの環境変数があるといった風にややこしい点があり、自分はよく調べ直しています。</p>
+<p>基本的には以下の 3 つの公式ドキュメントを見ればいいのですが、</p>
+<ul>
+<li><a href="https://nextjs.org/docs/api-reference/next.config.js/environment-variables">Environment Variables</a></li>
+<li><a href="https://nextjs.org/docs/basic-features/environment-variables">Environment Variables(basic-features)</a></li>
+<li><a href="https://nextjs.org/docs/api-reference/next.config.js/runtime-configuration">Runtime Configuration</a></li>
+</ul>
+<p>整備されたのが最近なので古い情報が定着していたり、ここに書いていない細かい挙動なんかもあったりするので、まとめて行こうと思います。</p>
+<h2>.env.* を使って読み込める</h2>
+<p><a href="https://nextjs.org/docs/basic-features/environment-variables">Environment Variables</a> にもある通り、.env.* を使うことで環境変数を読み込めます。</p>
+<p>設定ファイルに環境変数を書いておけば、ビルド時に process.env へと環境変数を登録してくれます。</p>
+<pre><code class="language-sh:title=.env.local">DB_HOST=localhost
+DB_USER=myuser
+DB_PASS=mypassword
+</code></pre>
+<p>.env.local は <code>next dev</code> のときに読み込まれ、.env.development は <code>NODE_ENV</code> が development のとき、 .env.production は <code>NODE_ENV</code> が production のときに読み込まれます。
+なのでこの機能を使うだけで環境変数を読み込めます。（※完全に使えるとは言っていない。）</p>
+<h2>ブラウザから環境変数を使う</h2>
+<p>さて、先ほどの環境変数が使えるのは <strong>Data Fetching methods</strong> と <strong>API Routes</strong> の中だけです。
+<a href="https://nextjs.org/docs/basic-features/data-fetching">Data Fetching methods</a>は<code>getStaticProps</code>, <code>getStaticPaths</code>, <code>getServerSideProps</code> などのメソッドで、SSR/SSG/ISR などで実行される NodeJS 上でのメソッドです。
+API Route は NextJS に生えている API サーバーの口です。
+<strong>つまり 先ほどの.env 経由での環境変数 は NodeJS のサーバー側の処理でしか使えず、クライアントサイドでは process.env の配下にセットされません。</strong></p>
+<p>これは理由が明記されてはいないのですが、おそらくビルド時にバンドルへ環境変数が紛れ込まないようにしているのだと思います。</p>
+<h3>ブラウザから読み込むためには <code>NEXT_PUBLIC_</code> をつける</h3>
+<p>では、どのようにしてクライアントサイドでその環境変数を使えば良いのでしょうか。
+一つには環境変数名を <code>NEXT_PUBLIC_</code> で始まるものにしておくというものです。
+このようにしておけば、NextJS が勝手にクライアント側の <code>process.env</code>配下に入れてくれます。</p>
+<pre><code class="language-sh:title=.env.local">NEXT_PUBLIC_API_ENDOPOINT=http://localhost:3001
+</code></pre>
+<h3>next.config.js からブラウザに環境変数を渡せる</h3>
+<p>NEXT_PUBLIC を使わなくても環境変数を渡せる方法もあります。
+それは next.config.js の中から渡すというものです。</p>
+<p>next.config.js は NextJS の設定ファイルで、ここに環境変数を設定する env という機能があります。
+その解説では、</p>
+<blockquote>
+<p>To add environment variables to the JavaScript bundle, open next.config.js and add the env config:</p>
+</blockquote>
+<p>FYI: https://nextjs.org/docs/api-reference/next.config.js/environment-variables</p>
+<p>とある通り、env を使えばクライアント側の JS へと環境変数を渡せるようになります。</p>
+<pre><code class="language-js">module.exports = {
+  env: {
+    TEST_VAR_FOR_BROWSER: process.env.TEST_VAR,
+  },
+}
+</code></pre>
+<pre><code class="language-jsx:title=index.jsx">export default () =&gt; {
+  console.log(process.env.TEST_VAR_FOR_BROWSER)
+  return &lt;div&gt;hello&lt;/div&gt;
+}
+</code></pre>
+<p>つまりこれを使って、.env.* から読み込んだ環境変数を流してやれば良いのです。</p>
+<h2>dotenv 系は不要?</h2>
+<p>ここまでを読むと dotenv 系のライブラリは不要と言えそうに見えます。
+しかし、NextJS を v9.4 より前で使うなら、.env を使ったビルトインサポートがないため必要になります。
+やはり .env があった方が使いやすいと思うので、.env を使いたくて 9.4 より前のバージョンを使うのであれば、dotenv 系のツールを使いましょう。</p>
+<p>NodeJS では dotenv, dotenv-webpack を使えます。</p>
+<pre><code class="language-js">require(&quot;dotenv&quot;).config()
+module.exports = {
+  env: {
+    // Reference a variable that was defined in the .env file and make it available at Build Time
+    TEST_VAR: process.env.TEST_VAR,
+  },
+}
+</code></pre>
+<p>こうすることで、.env から環境変数を読み取って、クライアント側に引き回せます。</p>
+<p>ちなみに dotenv を使うことは昔は公式も example を作るくらいには推奨されていましたが、Next が 9.4 出た時から公式のサンプルプロジェクトが消えました。</p>
+<p>FYI: https://github.com/vercel/next.js/tree/canary/examples/with-dotenv</p>
+<p>ただレポジトリは残っているので、上のリンクでタグを 9.3.0 とかのを見るとやり方は確認できます。</p>
+<h2>そもそも何の機能も使わない = npm scripts から渡す</h2>
+<p>あと、環境変数の秘匿などを考えないのでいいのであれば、そもそも起動時に環境変数を渡しても良いです。
+<code>next build</code>, <code>next start</code> に環境変数を渡すことで利用できます。
+しかし、これは起動スクリプトをカスタマイズできる必要があり、例えば vercel や Netlify のようなマネジメントサービスを使う場合は厳しい方法です。（起動スクリプトの改変はできるが、ブランチごとにスクリプトを指定できないため。）</p>
+<h3>build 時に渡すか start 時に渡すか</h3>
+<p>結論: 両方に同じ値を渡しましょう。</p>
+<p>NextJS は SSR や ISR する場合は ホスティング先で <code>next build</code>, <code>next start</code> と二つのコマンドを実行しなければいけません。
+next build はレンダリングのための事前ビルドフェーズで SSR や ISR するための雛形を作るので、Data Fetching methods が実行されます。
+この時に環境変数を使うことができます。
+next start はサーバー自体を立ち上げる機能で起動に環境変数を埋め込めます。
+ただし起動した後はビルド済みのコードをホスティングするので、ユーザーがアクセスするときはビルド時の環境変数が使われます。</p>
+<p>簡単な実験をしてみましょう。</p>
+<p>たとえば、npm scripts には</p>
+<pre><code class="language-js">&quot;scripts&quot;: {
+  &quot;build&quot;: &quot;NEXT_PUBLIC_ORIGINAL_ENV=hoge next build&quot;,
+  &quot;start&quot;: &quot;NEXT_PUBLIC_ORIGINAL_ENV=piyo next start&quot;,
+},
+</code></pre>
+<p>とビルド時と起動時で hoge, piyo という別の環境変数を渡して、コンポーネントは</p>
+<pre><code class="language-jsx:title=index.jsx">export default () =&gt; {
+  console.log(
+    &quot;&lt;component&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV: &quot;,
+    process.env.NEXT_PUBLIC_ORIGINAL_ENV
+  )
+  return &lt;div&gt;hello world!!&lt;/div&gt;
+}
+
+export const getServerSideProps = () =&gt; {
+  console.log(
+    &quot;&lt;getServerSideProps&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV: &quot;,
+    process.env.NEXT_PUBLIC_ORIGINAL_ENV
+  )
+  return {}
+}
+</code></pre>
+<p>とします。</p>
+<p>ここで、</p>
+<pre><code class="language-sh">$ npx next build
+</code></pre>
+<p>とすると、</p>
+<pre><code class="language-sh">$ npx next build
+&lt;getServerSideProps&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV:  hoge
+</code></pre>
+<p>と表示されます。</p>
+<p>そして、</p>
+<pre><code class="language-sh">$ npx next start
+</code></pre>
+<p>とすると、</p>
+<pre><code class="language-sh">$ npx next start
+&lt;getServerSideProps&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV:  piyo
+</code></pre>
+<p>と表示されます。</p>
+<p>しかしこの状態でそのページにアクセスすると、</p>
+<pre><code class="language-sh">$ npx next start
+&lt;getServerSideProps&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV:  hoge
+&lt;component&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV:  hoge
+</code></pre>
+<p>と表示されます。</p>
+<p>そしてブラウザでは</p>
+<pre><code class="language-sh">&lt;component&gt; process.env.NEXT_PUBLIC_ORIGINAL_ENV:  hoge
+</code></pre>
+<p>としてログが出ます。</p>
+<p>つまり、ビルド時・起動時・アクセス時で環境変数が異なります。
+ビルド時と起動時で環境変数を揃えておかないと、ビルド時・起動時・アクセス時で挙動が異なるようになるので双方に同じ値を設定するようにしておきましょう。</p>
+<h3>Runtime Configuration を使って値を渡す</h3>
+<p>さて、さきほどはアクセス時には起動時の環境変数ではなくビルド時の環境変数が使われました。
+実はこの挙動を変えることもできます。
+そのための機能が <a href="https://nextjs.org/docs/api-reference/next.config.js/runtime-configuration">Runtime Configuration</a>です。</p>
+<p>この仕組みを使うと <code>config()</code> から事前設定した値をサーバー・クライアントのランタイムに持ち込めます。</p>
+<pre><code class="language-js:title=next.config.js">module.exports = {
+  serverRuntimeConfig: {
+    // Will only be available on the server side
+    mySecret: &quot;secret&quot;,
+    secondSecret: process.env.SECOND_SECRET, // Pass through env variables
+  },
+  publicRuntimeConfig: {
+    // Will be available on both server and client
+    staticFolder: &quot;/static&quot;,
+  },
+}
+</code></pre>
+<pre><code class="language-jsx:title=index.jsx">import getConfig from &quot;next/config&quot;
+
+// Only holds serverRuntimeConfig and publicRuntimeConfig
+const { serverRuntimeConfig, publicRuntimeConfig } = getConfig()
+// Will only be available on the server-side
+console.log(serverRuntimeConfig.mySecret)
+// Will be available on both server-side and client-side
+console.log(publicRuntimeConfig.staticFolder)
+
+function MyImage() {
+  return (
+    &lt;div&gt;
+      &lt;img src={`${publicRuntimeConfig.staticFolder}/logo.png`} alt=&quot;logo&quot; /&gt;
+    &lt;/div&gt;
+  )
+}
+
+export default MyImage
+</code></pre>
+<p>これを使えば 環境変数のようにある決まった値を NextJS に渡すことができます。</p>
+<p>しかし公式もこのように言及している通り、</p>
+<blockquote>
+<p>Generally you'll want to use build-time environment variables to provide your configuration. The reason for this is that runtime configuration adds rendering / initialization overhead and is incompatible with Automatic Static Optimization.</p>
+</blockquote>
+<p>ビルド時と違う値をランタイムで使うことによって最適化が効きにくくなります。
+もし環境変数を使いたいだけならお勧めの方法ではないです。
+(next.config.js の env 越しに環境変数を伝える方法もこの一種と言えるだろう。)
+もっともアプリケーション共通の値を配布する方法としては使えるかもしれず、サーバー・クライアントそれぞれのランタイムの変数をスコープごとに定義できるのは便利かもしれません。</p>
+<h2>起動方法による環境変数の分岐</h2>
+<p>さて、NextJS は起動時に <code>process.env.NODE_ENV</code> に production や development が渡っています。
+これは next start か next dev かによって切り替わります。（もちろん起動時に <code>NODE_ENV</code> を渡せば上書けますが！（それでもランタイムでは適切な値に戻される））
+これを利用してクライアント側に next.config.js 経由で いま production か development かをビルド 時に判断することができます。
+それができるのであれば、あらかじめクライアント側に環境変数をハードコードしておけば起動方法によって環境変数を出し分けることが可能となります。
+もっとも秘匿情報などでやってはいけないですが、Firebase の API_KEY（漏れても良い！）たちはこの方法で読み込むことも可能です。</p>
+<p>FYI: <a href="https://shiodaifuku.io/articles/txEgArhm4Z2BOzrd0IKJ">Firebase の API キーは公開しても大丈夫だよ（2020 年夏）</a></p>
+<p>ちなみにこれをやるためには、ランタイムでは<code>NODE_ENV</code> は本来の値に戻されるので、next.config.js 越しに別の環境変数に詰めてランタイムまで引き回す必要があります。</p>
+<p><a href="https://blog.ojisan.io/vercel-env#preview-%E7%94%A8%E3%81%AB%E5%88%86%E5%B2%90%E3%81%95%E3%81%9B%E3%82%8B%E7%89%A9%E8%87%AA%E4%BD%93%E3%82%92%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0%E3%81%AB%E3%82%BB%E3%83%83%E3%83%88%E3%81%97%E3%82%88%E3%81%86">vercel での環境変数の扱いが便利になった(preview-用に分岐させる物自体を環境変数にセットしよう)</a>を読むとイメージが付くと思います。</p>
+<h2>本番環境での設定</h2>
+<p>環境変数の埋め込みではなく、そもそも NextJS にどうやって渡すかという話です。
+おそらく開発時は .env を使うのが良いですが、デプロイ時・本番での起動時には他にもやり方があります。</p>
+<h3>Vercel</h3>
+<p>昔に <a href="https://blog.ojisan.io/vercel-env">vercel での環境変数の扱いが便利になった</a> に書いたので参照してみてください。
+GUI をぽちぽちするだけで環境変数を設定できます。</p>
+<h3>それ以外</h3>
+<p>インフラが自由にできるのであれば立ち上げ時に .env を作ったり、起動スクリプトに渡せば良いです。
+IaaS 系サービスならそれぞれが提供する秘匿情報を管理するプラクティスから NextJS に連携すると良いです。</p>
+<h2>結局どうすればいいか</h2>
+<p>お勧めは、NextJS 9.4 以上を使って、.env.local を定義し、クライアントで使う環境変数には <code>NEXT_PUBLIC_</code> をつけておくことです。
+このようにしておけば少なくとも開発では困ることはないはずです。
+本番環境での環境変数は Vercel なら GUI でぽちぽちしてください。</p>
+<h2>サンプルコード</h2>
+<p>環境変数を npm scripts から渡す実験をしていました。
+<code>NODE_ENV</code> もオリジナルの環境変数もビルド時・起動時には設定されますが、ランタイムでは <code>NODE_ENV</code> は prodcution, development に上書かれます。
+そしてランタイムで受け取れたオリジナルの環境変数もクライアントサイドでは受け取れません。
+受け取るためには next.config.js を跨いだ環境変数渡しが必要です。</p>
+<p>https://github.com/ojisan-toybox/nextjs-env-sample</p>
+<h2>おわりに</h2>
+<p>.env も git で管理して CI/CD に載せれたら一番楽なんだけどなぁ・・・（ぼそっ</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

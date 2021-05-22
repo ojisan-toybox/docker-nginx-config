@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ESLint の Plugin と Extend の違い</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="ESLint の Plugin と Extend の違いを説明できますか？違いを知っている人からすれば（というかそもそも全然違うものなので）、「え、それ悩む？」となるところなのですが、ユーザー向けドキュメントには Plugin の定義が書かれておらず、Extend の説明も不十分で、さらに Plugin の設定をする Extend なんてものがあるお陰で、慣れないうちは混乱すると思います。">
+    <meta property="og:title" content="ESLint の Plugin と Extend の違い">
+    <meta property="og:image" content="https://blog.ojisan.io//eslint-plugin-and-extend/visual.png">
+    <meta property="og:description" content="ESLint の Plugin と Extend の違いを説明できますか？違いを知っている人からすれば（というかそもそも全然違うものなので）、「え、それ悩む？」となるところなのですが、ユーザー向けドキュメントには Plugin の定義が書かれておらず、Extend の説明も不十分で、さらに Plugin の設定をする Extend なんてものがあるお陰で、慣れないうちは混乱すると思います。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ESLint の Plugin と Extend の違い">
+    <meta name="twitter:description" content="ESLint の Plugin と Extend の違いを説明できますか？違いを知っている人からすれば（というかそもそも全然違うものなので）、「え、それ悩む？」となるところなのですが、ユーザー向けドキュメントには Plugin の定義が書かれておらず、Extend の説明も不十分で、さらに Plugin の設定をする Extend なんてものがあるお陰で、慣れないうちは混乱すると思います。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-06-15</time>
+      <h1>ESLint の Plugin と Extend の違い</h1>
+    </div>
+    <div class="post-contents"><hr />
+<p>ESLint の Plugin と Extend の違いを説明できますか？
+違いを知っている人からすれば（というかそもそも全然違うものなので）、「え、それ悩む？」となるところなのですが、ユーザー向けドキュメントには Plugin の定義が書かれておらず、Extend の説明も不十分で、さらに Plugin の設定をする Extend なんてものがあるお陰で、慣れないうちは混乱すると思います。
+特に最後の事象は個人的には印象的で、「Plugin の設定をしていないのに Plugin が設定されている。Plugin って何？」といった混乱の原因になっていました。
+この混乱は ESLint の全体感を掴むと混乱しなくなるのでそういう話を書きたいと思います。</p>
+<p>実際に混乱してた人も多そうです（6/24 更新)
+<img src="eslint-config-plugin.png" alt="eslintのextendとpluginの混乱" /></p>
+<p>結論を言うと、<strong>Extend は Extend です。設定を Extend する役割を持っています。Plugin は Plugin です。設定を Plug する役割を持っています。</strong></p>
+<h2>ESLint はルールを用いてコードを静的検証する</h2>
+<p>ESLint の役割はソースコードの静的検査です。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+    ...,
+    rules: {
+        &quot;quotes&quot;: [2, &quot;double&quot;],
+        ...
+    }
+}
+</code></pre>
+<p>こういう感じで 設定ファイルに rule を書いておけば、linter がソースコードを検証してくれます。
+ここでルールに反したものは report するというのが ESLint の大きな仕組みです。
+設定ファイルにはたくさんの項目がありますが、それらは rule(その実体はコードを検証して結果を report する関数)の実行を支えるものです。
+rule を中心に考えると ESLint の理解はしやすくなります。(は言い過ぎかもしれない)</p>
+<p><img src="./eslint-round.png" alt="ESLintの全体感" /></p>
+<p>FYI: https://eslint.org/docs/developer-guide/architecture</p>
+<p>なぜ Extend と Plugin の説明で rule の話から始めたかと言うと、それらは共に rule を制御する機能だからです。
+<strong>Plugin は rule(つまり静的検証する関数そのもの) を追加でき、Extend は rule の setting を設定できます。</strong></p>
+<h2>Plugin はルールを追加する</h2>
+<p>Plugin が何か、ユーザーガイドの <a href="https://eslint.org/docs/user-guide/configuring#configuring-plugins">configuring-plugins</a> を見てみましょう。</p>
+<blockquote>
+<p>ESLint supports the use of third-party plugins. Before using the plugin, you have to install it using npm. To configure plugins inside of a configuration file, use the plugins key, which contains a list of plugin names. The eslint-plugin- prefix can be omitted from the plugin name.</p>
+</blockquote>
+<p>うーん、「plugin とは何か・何ができるか」が書かれていなさそうです。（本当？私が見つけられていないだけ？）
+適当にググると非公式ですが「ルールセットを持つ」みたいな説明はヒットします。
+また、プラグイン開発者向けドキュメントの<a href="https://eslint.org/docs/developer-guide/working-with-plugins">working-with-plugins</a> をみると、</p>
+<ul>
+<li>Plugins can expose additional rules for use in ESLint.</li>
+<li>Plugins can expose additional environments for use in ESLint.</li>
+<li>You can also create plugins that would tell ESLint how to process files other than JavaScript.</li>
+</ul>
+<p>といった説明は見つかります。
+どうやら plugin は rules, environments, processors の実装や設定を提供できるようです。
+一般的に plugin は何かを注入する機構なので、ここでもそれらを注入してくれるものだと考えておきましょう。
+実際 plugin の実装を読む限りはルールを注入しており、そのような使われた方が多いと言う点は合意が得られると思います。</p>
+<h2>Extend の役割について</h2>
+<p>Extend の説明を公式ドキュメントで見てみましょう。</p>
+<p>Configuring ESLint というドキュメントの<a href="https://eslint.org/docs/user-guide/configuring#extending-configuration-files">Extending Configuration Files</a>には A configuration file can extend the set of enabled rules from base configurations.とあり、どうやらルールを拡張できる機能と説明しています。</p>
+<h3>Extend はルールの setting をする</h3>
+<p>たとえばこのような設定ファイルがあるとします。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: &quot;eslint:recommended&quot;,
+  ...
+  rules: {},
+}
+</code></pre>
+<p>この extends は<code>eslint --init</code>から生成される値とも同じなので見覚えもあるかもしれません。
+これは ESLint のルールの<a href="https://eslint.org/docs/rules/">推奨設定</a>(チェックマークが付いているもの)を ON にする役割を持っています。</p>
+<p>recommended だけが一人歩きしている感じもあるのですが、all といった設定もありそれを使うと全 rule を ON にすることだってできます。
+この recommended や all は config として extends 開発者は定義できます。</p>
+<p>つまり、Extends はルールの ON/OFF 設定などルール自体に対する設定をするのが役割のようです。
+eslint 本体の <a href="https://github.com/eslint/eslint/blob/be833229b355eafb90f3e0bbc29bb106e100bed0/conf/eslint-recommended.js">recommeded</a>の実装をみる限りもそのような雰囲気があります。</p>
+<pre><code class="language-javascript:title=eslint-recommended.js">module.exports = {
+  rules: Object.assign(
+    {},
+    ...Object.keys(builtInRules)
+      .filter(ruleId =&gt; builtInRules[ruleId].meta.docs.recommended)
+      .map(ruleId =&gt; ({ [ruleId]: &quot;error&quot; }))
+  ),
+}
+</code></pre>
+<p>あくまでも rule の設定を切り出しているかのように見えます。
+ただし、実際には rule の追加以外のこともでき、実際にやっている例もあります。
+それが Extend と Plugin の混乱にもつながってきます。</p>
+<h3>Extends はルールの setting 以外もする</h3>
+<p>Extends はルールを拡張できる機能として説明されてはいますが、私は extends を使った経験からしてこの説明は不十分だと感じました。</p>
+<p>そこでプラグイン開発者向けのページも確認してみましょう。
+<a href="https://eslint.org/docs/developer-guide/shareable-configs#using-a-shareable-config">Using a Shareable Config</a> には Shareable configs are designed to work with the <code>extends</code> feature of <code>.eslintrc</code> files. とあり、どうやら <strong>shareable config は extends と協調する機能</strong> のようです。
+ユーザー向けドキュメントの<a href="https://eslint.org/docs/user-guide/configuring#extending-configuration-files">Extending Configuration Files</a>を再度確認すると、</p>
+<blockquote>
+<p>The extends property value is a string that specifies a configuration (either a path to a config file, the name of a shareable config, eslint:recommended, or eslint:all)</p>
+</blockquote>
+<p>(↑ 原文と比べ少しだけ説明を端折っています)</p>
+<p>とあり、Extends は config file の path もしくは shareable config の名前を受け取ることができます。
+どうやら、<strong>extends で指定されているものは shareable config</strong>です。</p>
+<h3>shareable config とは何か</h3>
+<p>では shareable config とは何かを探ってみましょう。
+ドキュメントには Shareable configs are simply npm packages that export a configuration object. とあります。
+つまり設定を object として export しているライブラリを指すようです。</p>
+<p>さらに読み進めると Make sure the module name begins with eslint-config-, such as eslint-config-myconfig. ともあります。
+皆さんも経験あると思うのですが、ESLint の設定をする時に入れる eslint-config-xxxx のようなライブラリが shareable config のようです。</p>
+<p>では次の疑問はこの shareable config は何をしているかということです。
+extends は rule の拡張を行うものという説明もありましたが、はたしてそれは正しい説明なのでしょうか。</p>
+<h3>shareable config は rule 以外も追加している</h3>
+<p>先ほどの開発者向けドキュメントを読むと、設定ファイルの例として</p>
+<pre><code class="language-javascript">module.exports = {
+  globals: {
+    MyGlobal: true,
+  },
+  rules: {
+    semi: [2, &quot;always&quot;],
+  },
+}
+</code></pre>
+<p>と言うのが出てきます。
+ここには globals ともあり、<strong>rules 以外も設定されています。</strong></p>
+<p>また、別の開発者向けドキュメントに <a href="https://eslint.org/docs/developer-guide/working-with-plugins#configs-in-plugins">working-with-plugins</a> というものがあるのですが、ここでは plugins, env の追加もしています。</p>
+<pre><code class="language-javascript">module.exports = {
+  configs: {
+    myConfig: {
+      plugins: [&quot;myPlugin&quot;],
+      env: [&quot;browser&quot;],
+      rules: {
+        semi: &quot;error&quot;,
+        &quot;myPlugin/my-rule&quot;: &quot;error&quot;,
+        &quot;eslint-plugin-myPlugin/another-rule&quot;: &quot;error&quot;,
+      },
+    },
+  },
+}
+</code></pre>
+<p>どうやら、plugin は shareable config に含めることができるようです。</p>
+<h3>shareable config は plugin にも定義できる</h3>
+<p>plugin と shareable config の関係はそれだけではありません。</p>
+<p>extends の指定で、</p>
+<pre><code class="language-javascript">&quot;extends&quot;: [
+  &quot;plugin:react/recommended&quot;,
+  &quot;plugin:@typescript-eslint/eslint-recommended&quot;
+],
+</code></pre>
+<p>といった 設定をみたことがあると思います。
+extends の項目に plugin という言葉が出てきています。</p>
+<p>これは plugin に含まれている config を extends に持ってきているためです。
+つまり、extends は eslint-config-xxx <strong>以外</strong>からも設定できることに注意しましょう。
+<strong>shareable config のパッケージ名は eslint-config-xxx という名前を付ける慣習になっていますが、そもそも plugin に config を混ぜれるので必ずしも全ての extends がそのような命名でセットされるとは限りません。</strong>
+その気になればローカルファイルに config を書いて、それを extends にロードすることも可能です。
+config を自作するときやルールを一部書き換えたい時に使えるテクニックです。</p>
+<p>FYI: https://eslint.org/docs/developer-guide/shareable-configs#local-config-file-resolution</p>
+<h3>つまり Extend の挙動をまとめると</h3>
+<ul>
+<li>.eslintrc.js の extends に指定する値は shareable config(名前もしくは path)</li>
+<li>plugin は shareable config の提供もできる</li>
+<li>shareable config では使用 plugin の設定も行える</li>
+</ul>
+<p>その結果、extends には eslint-config-xxx の xxx だけでなく plugin:hoge といった指定が可能で、その hoge plugin の extends には hoge plugin の指定が書かれており、hoge plugin を入れて extends を書けば 、hoge plugin の指定をせずとも hoge plugin が利用可能になっていたわけです。
+序盤に書いた私の混乱の「Plugin の設定をしていないのに Plugin が設定されている。Plugin って何？」といった疑問はこの挙動が原因です。</p>
+<h2>plugin をセットする extends を読む</h2>
+<p>plugin をセットする extends の例として、<a href="https://github.com/mysticatea/eslint-plugin-node">eslint-plugin-node</a> があります。
+この plugin の面白いところは plugin を設定ファイルに書かなくても plugin が使えることです。
+ただし、plugin 自体は install する必要があります。</p>
+<p>簡単な実験をしてみましょう。
+まず実験に使うライブラリを入れます。</p>
+<pre><code class="language-sh">npm i -D eslint eslint-plugin-node
+</code></pre>
+<p>そしてこのような設定ファイルを用意します。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:node/recommended&quot;],
+}
+</code></pre>
+<p>lint 対象としてこのようなファイルを作ります。</p>
+<pre><code class="language-javascript:title=index.js">exports = {
+  foo: 1,
+}
+</code></pre>
+<p>これは eslint-plugin-node の<code>plugin:node/recommended</code> に含まれる<a href="https://github.com/mysticatea/eslint-plugin-node/blob/master/docs/rules/no-exports-assign.md">node/no-exports-assign</a>に弾かれるコードです。</p>
+<p>実際弾かれることを確認してみましょう。</p>
+<pre><code class="language-sh">$ npx eslint index.js
+
+  1:1  error  Unexpected assignment to 'exports' variable. Use 'module.exports' instead  node/no-exports-assign
+</code></pre>
+<p>ちゃんと動いています。
+<strong>設定ファイルに plugin や rule の設定をしていない</strong>のに、動いています。</p>
+<p>その謎はこの extends にあります。
+extends が読み込んでいるファイルに<code>recommended-module.js</code> というファイルがあります。
+この中を読んでみると、</p>
+<pre><code class="language-javascript:title=recommended-module.js">&quot;use strict&quot;
+
+const { commonGlobals, commonRules } = require(&quot;./_commons&quot;)
+
+module.exports = {
+  globals: {
+    ...commonGlobals,
+    __dirname: &quot;off&quot;,
+    __filename: &quot;off&quot;,
+    exports: &quot;off&quot;,
+    module: &quot;off&quot;,
+    require: &quot;off&quot;,
+  },
+  parserOptions: {
+    ecmaFeatures: { globalReturn: false },
+    ecmaVersion: 2019,
+    sourceType: &quot;module&quot;,
+  },
+  // 注目!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  plugins: [&quot;node&quot;],
+  rules: {
+    ...commonRules,
+    &quot;node/no-unsupported-features/es-syntax&quot;: [
+      &quot;error&quot;,
+      { ignores: [&quot;modules&quot;] },
+    ],
+  },
+}
+</code></pre>
+<p>このに plugins として node が書かれています。
+そしてこの module は plugin のエントリポイントで読み込まれています。</p>
+<pre><code class="language-javascript:title=index.js">&quot;use strict&quot;
+
+module.exports = {
+  configs: {
+    &quot;recommended-module&quot;: require(&quot;./configs/recommended-module&quot;),
+    &quot;recommended-script&quot;: require(&quot;./configs/recommended-script&quot;),
+    get recommended() {
+      return require(&quot;./configs/recommended&quot;)()
+    },
+  },
+  rules: {
+    ...
+  },
+}
+</code></pre>
+<p>ということは、<code>plugins: [&quot;node&quot;]</code>をコメントアウトすれば rule の実行に失敗するのではないでしょうか。</p>
+<p>と言うわけで実験してみました。</p>
+<p><img src="./ex1.png" alt="例1: plugin node をコメントアウトする例1" /></p>
+<p><img src="./ex2.png" alt="例1: plugin node をコメントアウトする例2" /></p>
+<p>そして先ほどと同じように eslint コマンドを実行してみよう。</p>
+<pre><code class="language-sh">&gt; npx eslint index.js
+
+  1:1  error  Definition for rule 'node/no-deprecated-api' was not found                      node/no-deprecated-api
+  1:1  error  Definition for rule 'node/no-extraneous-import' was not found                   node/no-extraneous-import
+  1:1  error  Definition for rule 'node/no-extraneous-require' was not found                  node/no-extraneous-require
+  1:1  error  Definition for rule 'node/no-exports-assign' was not found                      node/no-exports-assign
+  1:1  error  Definition for rule 'node/no-missing-import' was not found                      node/no-missing-import
+  1:1  error  Definition for rule 'node/no-missing-require' was not found                     node/no-missing-require
+  1:1  error  Definition for rule 'node/no-unpublished-bin' was not found                     node/no-unpublished-bin
+  1:1  error  Definition for rule 'node/no-unpublished-import' was not found                  node/no-unpublished-import
+  1:1  error  Definition for rule 'node/no-unpublished-require' was not found                 node/no-unpublished-require
+  1:1  error  Definition for rule 'node/no-unsupported-features/es-builtins' was not found    node/no-unsupported-features/es-builtins
+  1:1  error  Definition for rule 'node/no-unsupported-features/es-syntax' was not found      node/no-unsupported-features/es-syntax
+  1:1  error  Definition for rule 'node/no-unsupported-features/node-builtins' was not found  node/no-unsupported-features/node-builtins
+  1:1  error  Definition for rule 'node/process-exit-as-throw' was not found                  node/process-exit-as-throw
+  1:1  error  Definition for rule 'node/shebang' was not found
+</code></pre>
+<p>はい、このようにエラーが出ました。</p>
+<p>つまり、<strong>eslint-plugin-node は plugin の設定をしていないにもかかわらず、extends の設定をしておけば extends の config が plugin を読み込んでくれるので、plugin に何も書かなくても plugin が使えた</strong>というわけです。</p>
+<p>実際この plugin はこれらのルールを読み込んでいます。(index.js)</p>
+<p><img src="./rules.png" alt="pluginが読み込むルールたち" /></p>
+<p>FYI: https://github.com/ojisan-toybox/eslint-plugin-node-config　(実験に使ったコード)</p>
+<p>私個人の意見ですが、この plugin に extends を入れるという挙動で一番悩まされるのは <strong>ESLint と Prettier の設定を共存させるときの設定</strong>です。
+共存設定に悩む人は多くいると思いますが、あれの混乱も plugin &amp; extends の切り分けが原因でして、eslint-plugin-node と同じく plugin の config が plugin をセットしていることを知った上で設定する必要があります。
+ただ、eslint-plugin-node の場合は plugin に含まれている extends を使うため、その plugin を入れて extends に plugin に含まれてる config を書くだけで済んでいたものが、prettier の設定の場合はそもそも plugin と config のライブラリが分かれていて、<strong>extends に plugin の config を書くだけで設定ファイルの設定は済むが、その中で呼び出す plugin は別ライブラリなので、そのライブラリは別途 DL しておく必要がある</strong>という落とし穴があります。</p>
+<h2>結論</h2>
+<p>**Extend は Extend, その名の通り設定ファイルを拡張するものです。Plugin は Plugin, その名の通り機能を追加するものです。Plugin を使うという設定を内部で Extend できるため、ユーザーは Plugin の設定を書かなくても済んでいる場合があった（そしてそのケースが多い）**というのがことの顛末です。
+ユーザー向けドキュメントからは読み取りにくいところはありますが、プラグインや ESLint そのものの開発者向けドキュメントにはヒントがあったりするので、ESLint で何か詰まったときは開発者向けドキュメントも読んでみると良いかもしれません。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

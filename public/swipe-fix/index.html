@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>CSS スワイプ 固定 横スクロール</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="これは「要素のスワイプ機能作りたいなー、そういや Slick とか Swiper とかが実現してる、スワイプした時にピタッって固定する機能が CSS だけで作れるようになったらしいんだけど、あのプロパティ名ってなんだっけ？」ってなった時に読む記事です。">
+    <meta property="og:title" content="CSS スワイプ 固定 横スクロール">
+    <meta property="og:image" content="https://blog.ojisan.io//swipe-fix/visual.png">
+    <meta property="og:description" content="これは「要素のスワイプ機能作りたいなー、そういや Slick とか Swiper とかが実現してる、スワイプした時にピタッって固定する機能が CSS だけで作れるようになったらしいんだけど、あのプロパティ名ってなんだっけ？」ってなった時に読む記事です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="CSS スワイプ 固定 横スクロール">
+    <meta name="twitter:description" content="これは「要素のスワイプ機能作りたいなー、そういや Slick とか Swiper とかが実現してる、スワイプした時にピタッって固定する機能が CSS だけで作れるようになったらしいんだけど、あのプロパティ名ってなんだっけ？」ってなった時に読む記事です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-20</time>
+      <h1>CSS スワイプ 固定 横スクロール</h1>
+    </div>
+    <div class="post-contents"><p>これは「要素のスワイプ機能作りたいなー、そういや Slick とか Swiper とかが実現してる、スワイプした時にピタッって固定する機能が CSS だけで作れるようになったらしいんだけど、あのプロパティ名ってなんだっけ？」ってなった時に読む記事です。
+きっとあなたが探しているものは、<code>scroll-snap-type</code> です。
+どうしても <code>overflow: x</code> や ライブラリを使ったやり方の方がまだまだ有名で <code>scroll-snap-type</code> という単語を知らないと検索に引っかからなさそうと思ったのでこの記事を書いています。</p>
+<h2>scroll-snap-type</h2>
+<p>CSS の比較的新しい機能として <code>scroll-snap-type</code> があります。
+約 2 年前に Chrome Dev Summit 2019 の<a href="https://youtu.be/-oyeaIirVC0">Next-generation web styling</a>で取り上げられた時に一時的に盛り上がり、記憶に残っている方もいらっしゃるのではないでしょうか。（自分はこの記憶しかなかったのでこの機能を検索する時にとても苦労したという・・・）</p>
+<p>このプロパティは<a href="https://developer.mozilla.org/ja/docs/Web/CSS/scroll-snap-type">MDN</a>の説明をそのまま借りると</p>
+<blockquote>
+<p>スナップ点が存在する場合にスクロールコンテナーにどれだけ厳密にスナップ点を強制するかを設定</p>
+</blockquote>
+<p>できるものです。
+どういう挙動かは MDN に例が埋め込まれているので確かめてみてください。</p>
+<p>これまでスライドショーとかを実装しようとすると、スクロール時に慣性スクロールがきいてコンテンツを最適な位置でユーザーに見せることができなかったと言ったような問題が解決できるようになります。</p>
+<h2>使い方</h2>
+<h3>scroll-snap-type</h3>
+<p>スクロール対象の親(コンテナ)が持つプロパティです。</p>
+<pre><code class="language-css">scroll-snap-type: x mandatory;
+scroll-snap-type: y proximity;
+scroll-snap-type: both mandatory;
+</code></pre>
+<p>などを持ちます。</p>
+<p><code>x</code> は横方向、<code>y</code> は縦方向を表します。
+<code>mandatory</code> はユーザーがスクロールを終えた時に スナップ位置に固定、<code>proximity</code> はスクロールアクション終了以外のタイミング(例えば要素の追加・削除など)でも スナップ位置に固定します。</p>
+<h3>scroll-snap-align</h3>
+<p>スクロール対象(アイテム)が持つプロパティです。</p>
+<p>スクロールコンテナのどの位置で固定するか、そのスナップ位置はユーザーが指定することができます。
+そのプロパティが <code>scroll-snap-align</code> です。
+<code>start</code>, <code>end</code>, <code>center</code> を指定できます。</p>
+<p>たとえばカードをスワイプさせるだけなら左固定でもいいかもしれませんが、スライドショーとかだと真ん中で固定したいというニーズもあるのではないでしょうか。
+それを実現するプロパティです。</p>
+<h3>scroll-margin</h3>
+<p>スクロール対象(アイテム)が持つプロパティです。</p>
+<p>scroll-margin はスクロールスナップ領域の margin を定義できます。
+<code>scroll-margin-top</code>, <code>scroll-margin-right</code> といった指定ができます。
+つまり 固定位置からどれだけずらして固定するか を指定できます。
+これがあると隣の要素をちらみせすることでユーザーにスワイプ可能であることを示すことができます。</p>
+<p>例えばこのブログもスマホで見た時はページ下部が Swipable な領域になるのですが、次のアイテムがちょっと見えているはずでスクロール可能であることが分かるはずです。
+それを実現できるプロパティです。
+また、ページ全体でレイアウトが決まっていてカードの位置を固定する時にそのレイアウトに揃えたい(たとえばスクロールコンテナの親が padding を持つ)時のレイアウト調整でも私は使っています。</p>
+<h2>まとめ</h2>
+<p>昔は Snap 位置を固定する Swipable エリアを作るためには Slick や Swiper などのライブラリが必要だったが、scroll-snap-type を使えば今は CSS だけでも実現できるので覚えておこう！</p>
+<h2>参考資料</h2>
+<ul>
+<li>https://triple-underscore.github.io/css-scroll-snap-ja.html</li>
+<li>https://youtu.be/-oyeaIirVC0</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

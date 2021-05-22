@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Ajaxでコンテンツ取得するとページ内スクロールされなかった話（全面的に俺が悪かった編）</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="HTML の a タグではページ内リンクが使えます。このブログでも右についてるタイトル（SP だと右下についてるオープナー）をクリックすると、その記事の該当箇所にジャンプできます。">
+    <meta property="og:title" content="Ajaxでコンテンツ取得するとページ内スクロールされなかった話（全面的に俺が悪かった編）">
+    <meta property="og:image" content="https://blog.ojisan.io//react-next-anchor-link-scroll/visual.png">
+    <meta property="og:description" content="HTML の a タグではページ内リンクが使えます。このブログでも右についてるタイトル（SP だと右下についてるオープナー）をクリックすると、その記事の該当箇所にジャンプできます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Ajaxでコンテンツ取得するとページ内スクロールされなかった話（全面的に俺が悪かった編）">
+    <meta name="twitter:description" content="HTML の a タグではページ内リンクが使えます。このブログでも右についてるタイトル（SP だと右下についてるオープナー）をクリックすると、その記事の該当箇所にジャンプできます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-02</time>
+      <h1>Ajaxでコンテンツ取得するとページ内スクロールされなかった話（全面的に俺が悪かった編）</h1>
+    </div>
+    <div class="post-contents"><p>HTML の a タグではページ内リンクが使えます。
+このブログでも右についてるタイトル（SP だと右下についてるオープナー）をクリックすると、その記事の該当箇所にジャンプできます。
+これは、遷移先に id を付けて 遷移先 URL に #{id} をつけると実現できます。(昔は id の代わりに name でもよかった！)</p>
+<p>ただ、それが NextJS では動かないという状況に陥ったのでそのときに行ったデバッグの記録を下に書いていきます。</p>
+<p><strong>結論から言うと動かなかった理由は Ajax でコンテンツを取得していたから</strong>です。
+React・Next が原因ではなかったのですが、それらの技術スタックを採用していると <strong>取得したデータで SSR しない限りは出会う問題</strong>なのでそれ前提の解決策を書いていきます。</p>
+<p>また、解決した方法はかなり泥臭いやり方なので、もしもっと良い方法がありましたら Issue や PR などでご教示いただきたいです。</p>
+<p>デバッグ用に作ったサイトはこれです。
+https://next-link-id.vercel.app/</p>
+<h2>考える要件</h2>
+<p>いまこのような要件を考えます。</p>
+<p><img src="trans.png" alt="遷移の例" /></p>
+<p>該当の id をもった要素をクリックしたら、遷移後のページでその要素が一番上にくるように遷移させます。</p>
+<p>これを</p>
+<ul>
+<li><code>&lt;a&gt;&lt;/a&gt;</code>(NextJS 上では<code>&lt;Link&gt;&lt;/Link&gt;</code>)で遷移した場合</li>
+<li><code>router.push()</code>など JS で遷移した場合</li>
+<li>遷移後のページが Ajax でデータを取得していた場合</li>
+</ul>
+<p>でどういう挙動になるのかみていきます。</p>
+<p>ちなみに動かなかったときのコードはこのようなコードです。</p>
+<pre><code class="language-js:title=遷移元">import React, { useState } from &quot;react&quot;
+import Link from &quot;next/link&quot;
+import { useRouter } from &quot;next/router&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  const router = useRouter()
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; {
+        return (
+          &lt;div
+            onClick={() =&gt; {
+              router.push(`/遷移先#${id}`)
+            }}
+          &gt;
+            {id}へJUMP
+          &lt;/div&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="language-js:title=遷移先">import React, { useState, useEffect } from &quot;react&quot;
+
+export default () =&gt; {
+  const [cards, setCards] = useState([])
+
+  useEffect(() =&gt; {
+    fetch(&quot;/api&quot;)
+      .then(res =&gt; res.json())
+      .then(d =&gt; setCards(d))
+  }, [])
+
+  return cards ? (
+    &lt;div&gt;
+      {cards.map(id =&gt; (
+        &lt;div
+          id={id}
+          style={{
+            width: &quot;300px&quot;,
+            height: &quot;300px&quot;,
+            background: &quot;gray&quot;,
+            margin: &quot;12px&quot;,
+          }}
+        &gt;&lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  ) : (
+    &quot;loading&quot;
+  )
+}
+</code></pre>
+<h2>a タグで遷移した場合(Ajax 使っていない)</h2>
+<p>a タグで遷移した場合、動きました。</p>
+<pre><code class="language-js:title=遷移元">import React, { useState } from &quot;react&quot;
+import Link from &quot;next/link&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; {
+        return (
+          &lt;Link href={`cards#${id}`}&gt;
+            &lt;a&gt;{id}へJUMP&lt;/a&gt;
+          &lt;/Link&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="language-js:title=遷移先">import React, { useState } from &quot;react&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; (
+        &lt;div
+          id={id}
+          style={{
+            width: &quot;300px&quot;,
+            height: &quot;300px&quot;,
+            background: &quot;gray&quot;,
+            margin: &quot;12px&quot;,
+          }}
+        &gt;&lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p><img src="success.png" alt="成功" /></p>
+<p>これが動いたということは、動かない原因は、a タグではなく<code>router.push()</code> などで JS を使って遷移したからかもしれないと考えました。
+そこで検証してみました。
+(NextJS を使っている以上は Link でラップした a タグの遷移も JS の実行なのですが、ちょっとだけ目を瞑って欲しいです...)</p>
+<h2>router.push() で遷移した場合(Ajax 使っていない)</h2>
+<p><code>router</code> は NextJS の useRouter Hooks から作れます。
+その <code>router</code>を使って <code>router.push(/cards#${id})</code> を実行して遷移します。</p>
+<pre><code class="language-js:title=遷移元">import React, { useState } from &quot;react&quot;
+import { useRouter } from &quot;next/router&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  const router = useRouter()
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; {
+        return (
+          &lt;div
+            onClick={() =&gt; {
+              // aタグの代わりにrouter.push
+              router.push(`/cards#${id}`)
+            }}
+          &gt;
+            {id}へJUMP
+          &lt;/div&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="language-js:title=遷移先">import React, { useState } from &quot;react&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; (
+        &lt;div
+          id={id}
+          style={{
+            width: &quot;300px&quot;,
+            height: &quot;300px&quot;,
+            background: &quot;gray&quot;,
+            margin: &quot;12px&quot;,
+          }}
+        &gt;&lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p><img src="success.png" alt="成功" /></p>
+<p>この例でも成功しました。
+<code>router.push()</code> は 第二引数、第三引数にいろいろオプションを取れるので、それを使って解決するのかなとも考えていたのですが、どうやら違ったようです。</p>
+<h2>遷移後のページが Ajax でデータを取得していた場合</h2>
+<p>それだと、もしかして動かなかった理由は、遷移後のページが Ajax でデータを取得していたことにあるのかもしれません。</p>
+<p>それが最初の例にあったこのようなコードです。</p>
+<pre><code class="language-js:title=遷移元">import React, { useState } from &quot;react&quot;
+import Link from &quot;next/link&quot;
+import { useRouter } from &quot;next/router&quot;
+
+export default () =&gt; {
+  const [ids] = useState([1, 2, 3, 4, 5, 6, 7, 8])
+  const router = useRouter()
+  return (
+    &lt;div&gt;
+      {ids.map(id =&gt; {
+        return (
+          &lt;div
+            onClick={() =&gt; {
+              router.push(`/遷移先#${id}`)
+            }}
+          &gt;
+            {id}へJUMP
+          &lt;/div&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="language-js:title=遷移先">import React, { useState, useEffect } from &quot;react&quot;
+
+export default () =&gt; {
+  const [cards, setCards] = useState([])
+
+  // もしかしてこれが犯人？？？
+  useEffect(() =&gt; {
+    fetch(&quot;/api&quot;)
+      .then(res =&gt; res.json())
+      .then(d =&gt; setCards(d))
+  }, [])
+
+  return cards ? (
+    &lt;div&gt;
+      {cards.map(id =&gt; (
+        &lt;div
+          id={id}
+          style={{
+            width: &quot;300px&quot;,
+            height: &quot;300px&quot;,
+            background: &quot;gray&quot;,
+            margin: &quot;12px&quot;,
+          }}
+        &gt;&lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  ) : (
+    // もしかしてこれが犯人？？？
+    &quot;loading&quot;
+  )
+}
+</code></pre>
+<p>遷移先が叩いている API はこのようなものです</p>
+<pre><code class="language-js">export default (req, res) =&gt; {
+  res.statusCode = 200
+  res.setHeader(&quot;Content-Type&quot;, &quot;application/json&quot;)
+  res.end(JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8]))
+}
+</code></pre>
+<p>失敗しました。</p>
+<p><img src="fail.png" alt="失敗" /></p>
+<p>このコードが失敗するのはよくよく考えたらそんな気もするのですが、<strong>遷移時はコンテンツがないのでその場所に遷移することはできません</strong>。
+<strong>SPA だからだとか、NextJS だからだとか、JS を使った遷移をしたからだとかとかではありません。</strong>
+<strong>ただ、Ajax でデータを取得すると遷移直後はデータがないからそこにページ内遷移ができない</strong>ということです。</p>
+<p>そのため Ajax を使ってデータを動的に追加するようなサイトであれば、ページ内スクロールができないのかと思いました。
+仮にそうだとすれば、SSR しない限りは React を採用するとページ内スクロールができないことになるわけですが、果たしてそうでしょうか。
+さすがにそんなわけはないと思うのでいろいろ試行錯誤してみました。</p>
+<h2>ref を割り振り hash と一致する component 上で ref 経由の scrollIntoView を実行する</h2>
+<p>先ほどの問題を解決するためには、<strong>API からのデータを取得しそれに対応するコンポーネントを描画した後に hash で指定された id へジャンプする</strong>必要があります。</p>
+<p>そのために、<strong>スクロールする処理は各コンポーネントに任せ、そのコンポーネントが自分がスクロール対象かどうかを判定しスクロールする</strong>という戦略を取ります。</p>
+<h3>window.locasion.hash</h3>
+<p>自分がスクロール対象かどうかを判定するために URL からスクロール対象の id を取り出します。
+http://hogehoge.com#99999 のような URL から 99999 を取り出すためには window.locasion.hash が使えます。
+ただこれが抽出するものは #99999 です。
+そのため、<code>window.locasion.hash.replace(&quot;#&quot;,&quot;&quot;)</code> などして取り出してください。
+また、NextJS 下では関数内トップレベルでは window が使えない（SSR されるかどうかわからない）ので、<code>useEffect(()=&gt;{},[])</code>などの window が必ずある環境下で実行してください。</p>
+<p>たとえばこのようなコードになります。</p>
+<pre><code class="language-js">useEffect(() =&gt; {
+  setId(window.location.hash.replace(&quot;#&quot;, &quot;&quot;))
+}, [])
+</code></pre>
+<p>そして各コンポーネントに</p>
+<pre><code class="language-js">&lt;div&gt;
+  {cards.map(id =&gt; (
+    &lt;Child id={id} isScroll={id === hashId}&gt;&lt;/Child&gt;
+  ))}
+&lt;/div&gt;
+</code></pre>
+<p>といった <code>isScroll</code> という props を渡し、そのコンポーネント自体がスクロール対象かどうかを教えてあげる仕組みを作ります。</p>
+<h3>scrollIntoView</h3>
+<p>そのコンポーネント自体がスクロール対象かどうかわかれば、その対象が自分がマウントされたときにそこまでスクロールする仕組みを作ります。
+そのために <code>scrollIntoView</code> を利用します。</p>
+<p>MDN の説明を借りると、<a href="https://developer.mozilla.org/ja/docs/Web/API/Element/scrollIntoView">scrollIntoView</a>は、<strong>scrollIntoView() が呼び出された要素がユーザーに見えるところまで、要素の親コンテナーをスクロールします。</strong></p>
+<p>これは Element インターフェースの持ち物なので ref から呼び出すことができます。</p>
+<pre><code class="language-js">const Child = ({ id, isScroll }) =&gt; {
+  const ref = useRef()
+  useEffect(() =&gt; {
+    if (isScroll) {
+      ref.current.scrollIntoView()
+    }
+  }, [])
+  return &lt;div ref={ref} id={id}&gt;&lt;/div&gt;
+}
+</code></pre>
+<p>各カードコンポーネントに、もし自分がスクロール対象であれば <code>scrollIntoView()</code>を呼び出すようにしています。
+これを呼び出すことで、このコンテンツが見える箇所まで自動でスクロールがされます。
+つまりデータを読み込みコンポーネントをマウントしたときに呼び出せば、そこまでスクロールができます。</p>
+<h2>完成したコード</h2>
+<p>遷移後のページのコードはこうなります。</p>
+<pre><code class="language-jsx">import React, { useState, useEffect, useRef } from &quot;react&quot;
+
+export default () =&gt; {
+  const [cards, setCards] = useState([])
+
+  // useEffectの中でhashIdがわかるのでそれを保存しておく変数を作る
+  const [hashId, setId] = useState(null)
+
+  useEffect(() =&gt; {
+    // NextJSだと/apiにバックエンドを生やせ、同じホストからアクセスできる
+    fetch(&quot;/api&quot;)
+      .then(res =&gt; res.json())
+      .then(d =&gt; setCards(d))
+
+    // URLの#hogeを取り出す
+    setId(window.location.hash.replace(&quot;#&quot;, &quot;&quot;))
+  }, [])
+
+  return cards ? (
+    &lt;div&gt;
+      {cards.map(id =&gt; (
+        // componentがスクロール対象かどうかを子コンポーネントは知る必要がある
+        // また各子コンポーネントがrefを持つ必要があるので別コンポーネントに切り出している
+        &lt;Child id={id} isScroll={id === hashId}&gt;&lt;/Child&gt;
+      ))}
+    &lt;/div&gt;
+  ) : (
+    &quot;loading&quot;
+  )
+}
+
+const Child = ({ id, isScroll }) =&gt; {
+  const ref = useRef()
+  useEffect(() =&gt; {
+    if (isScroll) {
+      // 自分がスクロール対象であればスクロールする
+      ref.current.scrollIntoView()
+    }
+  }, [])
+  return (
+    &lt;div
+      ref={ref}
+      id={id}
+      style={{
+        width: &quot;300px&quot;,
+        height: &quot;300px&quot;,
+        background: &quot;gray&quot;,
+        margin: &quot;12px&quot;,
+      }}
+    &gt;&lt;/div&gt;
+  )
+}
+</code></pre>
+<p>これで遷移することができました。</p>
+<p><img src="success.png" alt="成功" /></p>
+<h2>あとがき</h2>
+<p>デバッグ用に作ったサイトは Next + Vercel で構築しているのですが、 /api というフォルダ作るだけで バックエンド立てれるので、こういう簡単なデモを作るときがめちゃくちゃ楽で最高でした。
+ソースコードは<a href="https://github.com/ojisan-toybox/next-link-id">こちら</a>です。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

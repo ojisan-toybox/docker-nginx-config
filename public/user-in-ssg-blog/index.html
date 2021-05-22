@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Gastsby製の静的ブログにユーザー概念を作った</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="このブログにユーザーという概念を爆誕させました。記事に著者を紐付けたりユーザーの詳細ページを持てるようにしました。">
+    <meta property="og:title" content="Gastsby製の静的ブログにユーザー概念を作った">
+    <meta property="og:image" content="https://blog.ojisan.io//user-in-ssg-blog/visual.png">
+    <meta property="og:description" content="このブログにユーザーという概念を爆誕させました。記事に著者を紐付けたりユーザーの詳細ページを持てるようにしました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Gastsby製の静的ブログにユーザー概念を作った">
+    <meta name="twitter:description" content="このブログにユーザーという概念を爆誕させました。記事に著者を紐付けたりユーザーの詳細ページを持てるようにしました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-09 09:00</time>
+      <h1>Gastsby製の静的ブログにユーザー概念を作った</h1>
+    </div>
+    <div class="post-contents"><p>このブログにユーザーという概念を爆誕させました。
+記事に著者を紐付けたりユーザーの詳細ページを持てるようにしました。
+<strong>静的ブログかつ CMS を使わず入稿している Gatsby 環境でどうやってユーザーを保持し記事を紐付けたか</strong>というのが今回の内容です。</p>
+<p>結論からいうと、**「ユーザー情報を yml で管理して、記事に外部キーとして userId を割り振り記事とユーザーを JOIN し、また yml のデータを使って gatsby-node でユーザーページを作成した」**です。</p>
+<h2>どういう変更をしたのか</h2>
+<p>今回の改修により、ブログの上部にこのようなリンクが生まれ</p>
+<p><img src="./blogheader.png" alt="ブログの上部" /></p>
+<p>これをクリックすると、</p>
+<p><img src="./mypage.png" alt="ユーザーページ" /></p>
+<p>といったユーザーページに遷移するようになりました。
+（Follow ボタンは僕の Twitter へ遷移するだけです。）</p>
+<h2>ユーザー情報を yml で管理する</h2>
+<p>ユーザーのページを作るに当たってはどのような構造であれ、gatsby-node から読める形式であればなんでもマスタとして使えます。
+そこでユーザー情報を管理する形式として yml で、</p>
+<pre><code class="language-yml">- id: &quot;sadnessOjisan&quot;
+  name: &quot;sadnessOjisan&quot;
+  image: &quot;sadnessOjisan&quot;
+  description: &quot;都内在住のフリーランスエンジニアです。フロントエンドとNode.js(ビルドツールチェイン+バックエンド)とFirebaseが得意です。プログラミング修行中のため仕事は引き受けておりませんが、技術的な挑戦がある仕事なら引き受けたいのでTwitterDMで連絡をいただけると幸いです。&quot;
+  twitterId: &quot;sadnessOjisan&quot;
+  gitHubId: &quot;sadnessOjisan&quot;
+</code></pre>
+<p>といった形式で定義しました。</p>
+<p>そしてこれを gatsby-node 内から <a href="https://www.npmjs.com/package/js-yaml">js-yml</a>で読み込みます。</p>
+<pre><code class="language-js:title=gatsby-node.js">const yaml = require(&quot;js-yaml&quot;)
+
+const ymlDoc = yaml.safeLoad(
+  fs.readFileSync(&quot;./src/contents/user.yaml&quot;, &quot;utf-8&quot;)
+)
+</code></pre>
+<p>これで、ymlDoc としてユーザー情報の配列を入手しました。
+あとはこの配列を回しながら <code>createPage</code> を実行すればユーザーページを作成できます。</p>
+<pre><code class="language-js:title=gatsby-node.js">ymlDoc.forEach(element =&gt; {
+  createPage({
+    path: `/users/${element.id}`,
+    component: userTemplate,
+    context: { userId: element.id, ...element },
+  })
+})
+</code></pre>
+<h2>記事ページと ユーザー情報を紐づける</h2>
+<p>各種記事ページでユーザー情報を使うので、記事とユーザーの紐付けを行います。</p>
+<p>先ほどの yml の user 情報の中に id を入れてあるので、それを外部キーとして記事側にデータを持たせます。
+そのために frontmatter に userId を追加し、これを執筆者とします。</p>
+<pre><code class="language-md">---
+path: /user-in-ssg-blog
+created: &quot;2020-08-09 09:00&quot;
+title: 静的ブログにユーザー概念を作った
+visual: &quot;./visual.png&quot;
+tags: [Gatsby]
+userId: sadnessOjisan
+isProtect: false
+---
+</code></pre>
+<p>ここでの userId は gatsby-node.js を実行するときにビルドシステム側に伝えることができるので、この id を使ってビルド時に user 情報を取得、それを記事に埋め込みます。</p>
+<pre><code class="language-js:title=gatsby-node.js">// 記事ページ生成
+contentsResult.data.posts.edges.forEach(({ node }) =&gt; {
+  // HINT: もしwriteUserが存在しなければ例外が発生してビルドが落ちるはず =&gt; 記事とユーザーが紐づいていない。
+  const writeUser = ymlDoc.filter(
+    item =&gt; item.id === node.frontmatter.userId
+  )[0]
+  createPage({
+    path: node.frontmatter.path,
+    component: blogPostTemplate,
+    context: { userId: writeUser.id, ...writeUser },
+  })
+})
+</code></pre>
+<p>writeUser を作っているところが記事の userId と user yml を突合しているところです。
+本当は GraphQL 実行するときに JOIN なんてことができたら良かったのですが、それは調べた限り難しそうだったので、このように filter で無理やり特定して user 情報を取得しています。</p>
+<p>取得したユーザー情報は記事情報と JOIN します。
+それを行っているのが、</p>
+<pre><code class="language-js:title=gatsby-node.js">createPage({
+  path: node.frontmatter.path,
+  component: blogPostTemplate,
+  context: { userId: writeUser.id, ...writeUser },
+})
+</code></pre>
+<p>の context です。
+context は生成されたページ側で <code>pageContext</code> という props 経由で取得できます。
+そのためここに描画に必要なユーザー情報を全部含めておけば、記事ページ側で表示できます。</p>
+<p>この方式の良いところは <strong>重たい処理は全部ビルド時に行いランタイムでは JOIN が発生しないのでパフォーマンスが犠牲になっていない</strong>ところです。
+このように<code>gatsby-node.js</code> や <code>context</code>を使い倒していきましょう。</p>
+<h2>ユーザーページを作る</h2>
+<p>ユーザーページを作ります。
+ユーザー情報だけであれば yml の情報だけで作れるので序盤に紹介した方法のみで済みますが、それに加えてユーザーが投稿した記事の一覧も表示させようと思います。</p>
+<p>そのためにユーザーに紐づく記事をクエリで取得しましょう。</p>
+<pre><code class="language-js">export const pageQuery = graphql`
+  query AllPostsByUserId($userId: String!) {
+    postsByUserId: allMarkdownRemark(
+      filter: { frontmatter: { userId: { eq: $userId } } }
+    ) {
+      nodes {
+        timeToRead
+        frontmatter {
+          title
+          path
+          visual {
+            childImageSharp {
+              fluid(maxWidth: 800) {
+                ...GatsbyImageSharpFluid
+              }
+            }
+          }
+          created(formatString: &quot;YYYY-MM-DD&quot;)
+          tags
+        }
+      }
+    }
+  }
+`
+</code></pre>
+<p><code>$userId</code> をキーに検索をしています。</p>
+<p>これは記事に紐づく userId の変数ですが、これが使えるのは<code>gatsby-node.js</code>の<code>context</code> で宣言しているからです。
+<code>context: { userId: element.id, ...element },</code> などとして渡しているものが GraphQL の中で変数として使えます。
+そして filter を使ってこの userId に紐づいた記事だけを抽出しました。
+その結果記事一覧が手に入ります。</p>
+<h2>何が嬉しいか</h2>
+<p>僕以外も投稿できます!!!!!!!PR Welcome!!!!!!!!!!!!!!</p>
+<h2>ソースコード</h2>
+<p>このブログのコードを読むとイメージが付くと思います。</p>
+<ul>
+<li><a href="https://github.com/sadnessOjisan/blog.ojisan.io/blob/v2.3.0/gatsby-node.js">gatsby-node</a></li>
+<li><a href="https://github.com/sadnessOjisan/blog.ojisan.io/blob/v2.3.0/src/templates/blogTemplate.tsx">blogTemplate.tsx</a></li>
+<li><a href="https://github.com/sadnessOjisan/blog.ojisan.io/blob/v2.3.0/src/templates/userTemplate.tsx">userTemplate.tsx</a></li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

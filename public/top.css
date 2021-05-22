@@ -1,0 +1,65 @@
+footer {
+  background-color: #cccccc;
+  text-align: center;
+  padding: 32px;
+}
+footer > p {
+  margin: 12px 0px;
+}
+footer a {
+  color: #0070a3;
+  text-decoration: none;
+}
+footer a:hover {
+  text-decoration: underline;
+}
+
+body {
+  background: #f9f9f9;
+  font-family: "M PLUS Rounded 1c";
+  color: #333333;
+}
+
+.blog_title {
+  text-align: center;
+  font-size: 48px;
+  padding: 32px 0px;
+}
+
+.items {
+  display: flex;
+  flex-wrap: wrap;
+  margin: auto;
+  padding-bottom: 32px;
+  justify-content: center;
+}
+.items a:hover .title {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.items a:visited {
+  color: inherit;
+}
+.items .item {
+  width: 400px;
+  height: 300px;
+  position: relative;
+}
+.items .item .visual {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background-color: #eaecef;
+}
+.items .item .title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  width: 100%;
+  height: 33%;
+  padding: 12px;
+}
+
+/*# sourceMappingURL=top.css.map */

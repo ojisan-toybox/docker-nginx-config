@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Babelの変換処理と向き合う</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="そういえば Babel をちゃんと勉強したことなかったなと思ってちゃんと勉強してみたって言う話です。">
+    <meta property="og:title" content="Babelの変換処理と向き合う">
+    <meta property="og:image" content="https://blog.ojisan.io//babel-parse-traverse-generate/visual.png">
+    <meta property="og:description" content="そういえば Babel をちゃんと勉強したことなかったなと思ってちゃんと勉強してみたって言う話です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Babelの変換処理と向き合う">
+    <meta name="twitter:description" content="そういえば Babel をちゃんと勉強したことなかったなと思ってちゃんと勉強してみたって言う話です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-06-12</time>
+      <h1>Babelの変換処理と向き合う</h1>
+    </div>
+    <div class="post-contents"><p>そういえば Babel をちゃんと勉強したことなかったなと思ってちゃんと勉強してみたって言う話です。
+つまり Babel をノリで使ってたことになるのですが、自分がプログラミングを始めたときは <a href="https://babeljs.io/docs/en/babel-preset-env">@babel/preset-env</a> がすでに存在しており、それを使っているだけで全てを倒せていたので勉強する必要がなかったという事情があります。</p>
+<p>ただ、流石に知らないと言ってもネットサーフィンしているとなんらかの情報のインプットはされるので、</p>
+<ul>
+<li>Babel は ES6 -&gt; ES5 に変換する（これは間違った理解）</li>
+<li>Babel は AST 操作によって変換する</li>
+<li>Babel は parse -&gt; traverse -&gt; generate して変換する</li>
+</ul>
+<p>みたいな順番で少しずつ解像度を上げながら理解はしていました。
+最後の、「Babel が parse -&gt; traverse -&gt; generate して変換している」と言うことに関しては、 <a href="https://lihautan.com/step-by-step-guide-for-writing-a-babel-transformation/">Step-by-step guide for writing a custom babel transformation</a> などで知っていました。
+しかし「ほんとうにそうなのだろうか？」と確証が持てませんでした。
+なぜなら<strong>公式ドキュメントから parse -&gt; traverse -&gt; generate している解説を見つけられなかった</strong>からです。
+というわけで、とりあえずコードを読んでみることにしました。</p>
+<p>何かの正解と照らし合わせられた訳ではないのでもし間違っているところがありましたら Issue や Twitter でご指摘いただけると幸いです。</p>
+<h2>Babel のエントリポイント</h2>
+<p>@babel/cli から実行する babel コマンドは</p>
+<pre><code class="language-javascript:title=index.js">import parseArgv from &quot;./options&quot;
+import dirCommand from &quot;./dir&quot;
+import fileCommand from &quot;./file&quot;
+
+const opts = parseArgv(process.argv)
+
+if (opts) {
+  // 注目: ここから先に進んでいく
+  const fn = opts.cliOptions.outDir ? dirCommand : fileCommand
+  fn(opts).catch(err =&gt; {
+    console.error(err)
+    process.exitCode = 1
+  })
+} else {
+  process.exitCode = 2
+}
+</code></pre>
+<p>を実行します。
+便宜上 bin/babel のトランスパイル前のファイルを選んでいますが、実際にはトランスパイルされたファイルが実行されます。
+これは src/babel/index.js に入っています。</p>
+<p>引数にファイルを指定したと仮定して、fileCommand を読んでいきます。
+そしてその関数は次の通りです。</p>
+<pre><code class="language-javascript:title=file.js">export default async function({
+  cliOptions,
+  babelOptions,
+}: CmdOptions): Promise&lt;void&gt; {
+  // トランスパイル後の結果を出力
+  function output(fileResults: Array&lt;string&gt;): void {
+    ...
+    if (cliOptions.outFile) {
+      ...
+      fs.writeFileSync(mapLoc, JSON.stringify(result.map));
+      ...
+    } else {
+      ...
+      process.stdout.write(result.code + &quot;\n&quot;);
+    }
+  }
+
+  async function walk(filenames: Array&lt;string&gt;): Promise&lt;void&gt; {
+    ...
+    const results = await Promise.all(
+      _filenames.map(async function(filename: string): Promise&lt;Object&gt; {
+        ...
+
+        try {
+          // 注目: ここから先に進んでいく
+          return await util.compile(
+            filename,
+            defaults(
+              {
+                sourceFileName: sourceFilename,
+                sourceMaps:
+                  babelOptions.sourceMaps === &quot;inline&quot;
+                    ? true
+                    : babelOptions.sourceMaps,
+              },
+              babelOptions,
+            ),
+          );
+        } catch (err) {
+          ...
+      }),
+    );
+
+    output(results);
+  }
+
+
+  async function files(filenames: Array&lt;string&gt;): Promise&lt;void&gt; {
+    ...
+    await walk(filenames);
+    ...
+  }
+
+  // 実行される処理
+  if (cliOptions.filenames.length) {
+    await files(cliOptions.filenames);
+  } else {
+    await stdin();
+  }
+}
+
+</code></pre>
+<p>つまりは 各ファイルを walk して compile した結果を出力しています。
+その compile を担当している関数が <code>util.compile(fileName, ...)</code> です。
+変換処理を追いたいのでこの関数を見てみます。</p>
+<pre><code class="language-javascript:title=util.js">import * as babel from &quot;@babel/core&quot;;
+
+export function compile(
+  filename: string,
+  opts: Object | Function,
+): Promise&lt;Object&gt; {
+  ...
+  return new Promise((resolve, reject) =&gt; {
+    // 注目: ここから先に進んでいく、@babel/core側に処理が移る
+    babel.transformFile(filename, opts, (err, result) =&gt; {
+      ...
+    });
+  });
+}
+</code></pre>
+<p><a href="https://www.npmjs.com/package/@babel/core">@babel/core</a> の <code>babel.transformFile()</code> を実行しています。
+どうやら@babel/core の transformFile が変換処理のエントリポイントにになるようです。</p>
+<h2>babel/core の transformFile の全体像</h2>
+<p><a href="https://www.npmjs.com/package/@babel/core">@babel/core</a> の transformFile を読み進めると <strong>run</strong> と言う関数に出会います。</p>
+<pre><code class="language-javascript:title=transform-file.js">// @flow
+import {
+  run,
+  type FileResult,
+  type FileResultCallback,
+} from &quot;./transformation&quot;;
+...
+
+const transformFileRunner = gensync&lt;[string, ?InputOptions], FileResult | null&gt;(
+  function*(filename, opts) {
+    const options = { ...opts, filename };
+
+    const config: ResolvedConfig | null = yield* loadConfig(options);
+    if (config === null) return null;
+
+    const code = yield* fs.readFile(filename, &quot;utf8&quot;);
+    // 注目: ここから先に進んでいく
+    return yield* run(config, code);
+  },
+);
+
+export const transformFile: TransformFile = transformFileRunner.errback;
+...
+</code></pre>
+<p>この run を読んでみましょう。
+ここには、normalizeFile と transformFile と generateCode という処理があります。</p>
+<pre><code class="language-javascript:title=index.js">export function* run(
+  config: ResolvedConfig,
+  code: string,
+  ast: ?(BabelNodeFile | BabelNodeProgram)
+): Handler&lt;FileResult&gt; {
+  // 注目
+  const file = yield* normalizeFile(
+    config.passes,
+    normalizeOptions(config),
+    code,
+    ast
+  )
+
+  try {
+    // 注目
+    yield* transformFile(file, config.passes)
+  } catch (e) {
+    ...
+  }
+
+  try {
+    if (opts.code !== false) {
+      // 注目
+      ;({ outputCode, outputMap } = generateCode(config.passes, file))
+    }
+  } catch (e) {
+    ...
+  }
+
+  return result // ast や code
+}
+</code></pre>
+<p>結果から言うと、これがそれぞれ parse, traverse, generate にあたります。</p>
+<h3>parse</h3>
+<p>normalizeFile を覗くと File を返しています。</p>
+<pre><code class="language-javascript:title=index.js">export default function* normalizeFile(
+  pluginPasses: PluginPasses,
+  options: Object,
+  code: string,
+  ast: ?(BabelNodeFile | BabelNodeProgram)
+): Handler&lt;File&gt; {
+  code = `${code || &quot;&quot;}`
+
+  if (ast) {
+    if (ast.type === &quot;Program&quot;) {
+      ast = t.file(ast, [], [])
+    }
+    ...
+  } else {
+    // 注目
+    ast = yield* parser(pluginPasses, options, code)
+  }
+
+  ...
+
+  // 注目
+  return new File(options, {
+    code,
+    ast,
+    inputMap,
+  })
+}
+</code></pre>
+<p>ここで返される File は次のようなフィールドを持つ class です。</p>
+<pre><code class="language-js">export default class File {
+  _map: Map&lt;any, any&gt; = new Map();
+  opts: Object;
+  declarations: Object = {};
+  path: NodePath = null;
+  ast: Object = {};
+  scope: Scope;
+  metadata: {} = {};
+  code: string = &quot;&quot;;
+  inputMap: Object | null = null;
+
+  ...
+}
+</code></pre>
+<p>ast 情報を含めて返しています。
+つまり parse をしています。
+実際 normalize の中にある parser 関数は次の通りです。</p>
+<pre><code class="language-js">...
+import { parse } from &quot;@babel/parser&quot;
+
+...
+
+export default function* parser(
+  pluginPasses: PluginPasses,
+  { parserOpts, highlightCode = true, filename = &quot;unknown&quot; }: Object,
+  code: string
+): Handler&lt;ParseResult&gt; {
+  try {
+    ...
+    const ast = parserOverride(code, parserOpts, parse)
+    ...
+    if (results.length === 0) {
+      // 注目
+      return parse(code, parserOpts)
+    } else if (results.length === 1) {
+      ...
+  } catch (err) {
+    ...
+  }
+}
+</code></pre>
+<p><a href="https://github.com/babel/babel/tree/master/packages/babel-parser">@babel/parser</a> を使って parse していることが分かります。</p>
+<h3>traverse</h3>
+<p>さらに run を読み進めていくと, <code>yield* transformFile(file, config.passes)</code> というコードがあります。
+traverse してそうな雰囲気があるので読んでみましょう。
+transformFile はこのような関数です。</p>
+<pre><code class="language-javascript:title=transformation/index.js">function* transformFile(file: File, pluginPasses: PluginPasses): Handler&lt;void&gt; {
+  ...
+  const visitors = [];
+  for (const plugin of pluginPairs.concat([loadBlockHoistPlugin()])) {
+    ...
+    visitors.push(plugin.visitor);
+  }
+  ...
+
+  const visitor = traverse.visitors.merge(
+    visitors,
+    passes,
+    file.opts.wrapPluginVisitorMethod
+  )
+  traverse(file.ast, visitor, file.scope)
+
+  for (const [plugin, pass] of passPairs) {
+    const fn = plugin.post
+    if (fn) {
+      const result = fn.call(pass, file)
+      ...
+    }
+  }
+}
+</code></pre>
+<p>いました <code>traverse(file.ast, visitor, file.scope);</code>.
+先ほど作った File クラスのインスタンスの ast を使っています。
+この traverse の関数は <a href="https://babeljs.io/docs/en/babel-traverse">@babel/traverse</a> から import した関数です。
+traverse 関数に ast と plugin(visitors という配列に詰め込まれている)を渡して実行していることがわかりました。
+つまり Babel が traverse していることを確認できました。</p>
+<h3>generate</h3>
+<p>さらに run を読み進めていくと, <code>generateCode(config.passes, file))</code> というコードがあります。</p>
+<pre><code class="language-javascript:title=transformation/file/generate.js">import generate from &quot;@babel/generator&quot;;
+
+export default function generateCode(
+  pluginPasses: PluginPasses,
+  file: File
+): {
+  outputCode: string,
+  outputMap: SourceMap | null,
+} {
+  ...
+  let result;
+  if (results.length === 0) {
+    result = generate(ast, opts.generatorOpts, code);
+  } else if (results.length === 1) {
+    ...
+  }
+
+  return { outputCode, outputMap };
+}
+</code></pre>
+<p>generate は <a href="https://github.com/babel/babel/tree/master/packages/babel-generator">@babel/generator</a> の関数です。
+これは 'Turns an AST into code.' とあり、AST を Code に戻す関数です。
+つまり AST -&gt; Code をしていることを確認できました。</p>
+<h2>検証結果</h2>
+<p>いかがでしたか。噂通り parse =&gt; traverse =&gt; generate していました。
+Babel は各パッケージに分けてそれらの処理を行っているようです。
+<a href="https://babeljs.io/docs/en/babel-cli">@babel/cli</a> -&gt; <a href="https://www.npmjs.com/package/@babel/core">@babel/core</a> -&gt; <a href="https://github.com/babel/babel/tree/master/packages/babel-parser">@babel/parser</a> -&gt; <a href="https://babeljs.io/docs/en/babel-traverse">@babel/traverse</a> -&gt; <a href="https://github.com/babel/babel/tree/master/packages/babel-generator">@babel/generator</a> という順番で呼び出しています。
+そのため Babel は parse -&gt; traverse -&gt; generate して変換していると言えることがわかりました。</p>
+<p><img src="tree.png" alt="Babelの変換の仕組み" /></p>
+<h2>小さいコードで検証してみる</h2>
+<p>それぞれライブラリを使って parse -&gt; traverse -&gt; generate していることが確認できました。
+しかしこれだとイマイチ実感が湧かないと思いますので、より詳細に小さいコードで実践したいと思います。</p>
+<p>このようなコードを用意します。</p>
+<pre><code class="language-js">const parser = require(&quot;@babel/parser&quot;)
+const traverse = require(&quot;@babel/traverse&quot;)
+const generate = require(&quot;@babel/generator&quot;)
+
+const code = &quot;const n = 1&quot;
+
+// parse the code -&gt; ast
+const ast = parser.parse(code)
+
+// transform the ast
+traverse.default(ast, {
+  enter(path) {
+    // in this example change all the variable `n` to `x`
+    if (path.isIdentifier({ name: &quot;n&quot; })) {
+      path.node.name = &quot;x&quot;
+    }
+  },
+})
+
+// generate code &lt;- ast
+const output = generate.default(ast, code)
+console.log(output.code) // 'const x = 1;'
+</code></pre>
+<p>このコードは序盤で紹介した <a href="https://lihautan.com/step-by-step-guide-for-writing-a-babel-transformation/">Step-by-step guide for writing a custom babel transformation</a> にあるものです。
+これは n を x で置き換える処理を babel で実行したものです。
+いわば @babel/core の中を小さく切り出してきたものです。
+この処理をライブラリの中を追いながら確認してみましょう。</p>
+<h3>parse</h3>
+<p><code>parser.parse</code> の中身はこのような関数です。</p>
+<pre><code class="language-javascript:title=index.js">export function parse(input: string, options?: Options): File {
+  if (options?.sourceType === &quot;unambiguous&quot;) {
+    ...
+    try {
+      options.sourceType = &quot;module&quot;;
+      const parser = getParser(options, input);
+      const ast = parser.parse();
+      ...
+      return ast;
+    } catch (moduleError) {
+      ...
+  } else {
+    return getParser(options, input).parse();
+  }
+}
+</code></pre>
+<p>getParser の先を追っていくと nextToken や lookahead といった処理がみられると思います。</p>
+<pre><code class="language-javascript:title=tokenizer/index.js">lookahead(): State {
+  const old = this.state;
+  this.state = old.clone(true);
+
+  this.isLookahead = true;
+  this.next();
+  this.isLookahead = false;
+
+  const curr = this.state;
+  this.state = old;
+  return curr;
+}
+
+nextTokenStart(): number {
+  const thisTokEnd = this.state.pos;
+  skipWhiteSpace.lastIndex = thisTokEnd;
+  const skip = skipWhiteSpace.exec(this.input);
+  // $FlowIgnore: The skipWhiteSpace ensures to match any string
+  return thisTokEnd + skip[0].length;
+}
+</code></pre>
+<p>現在トークンを読み進めている位置、次のトークンの位置、先読みした文字を管理しながら実行といった処理が見えるので、字句解析している雰囲気が確認できます。</p>
+<p>また</p>
+<pre><code class="language-js">parseBlockOrModuleBlockBody(body, directives, topLevel, end, afterBlockParse) {
+  ...
+  const stmt = this.parseStatement(null, topLevel);
+  ...
+  body.push(stmt);
+}
+</code></pre>
+<p>などのように文を parse して構築対象に push するなど構文解析している雰囲気も感じられます。</p>
+<p>実際 このように logger をしかけて</p>
+<pre><code class="language-js">const ast = parser.parse(code)
+console.log(ast)
+</code></pre>
+<p>parse の結果を出力すると</p>
+<pre><code class="language-sh">&gt; node index.js
+Node {
+  type: 'File',
+  start: 0,
+  end: 11,
+  loc: SourceLocation {
+    start: Position { line: 1, column: 0 },
+    end: Position { line: 1, column: 11 }
+  },
+  errors: [],
+  program: Node {
+    type: 'Program',
+    start: 0,
+    end: 11,
+    loc: SourceLocation { start: [Position], end: [Position] },
+    sourceType: 'script',
+    interpreter: null,
+    body: [ [Node] ],
+    directives: []
+  },
+  comments: []
+}
+</code></pre>
+<p>と言う風に AST が構築されているのがわかります。</p>
+<h3>traverse</h3>
+<p>@babel/traverse はこのように説明されています。</p>
+<blockquote>
+<p>The Babel Traverse module maintains the overall tree state, and is responsible for replacing, removing, and adding nodes.</p>
+<p>FYI: https://github.com/jamiebuilds/babel-handbook/blob/master/translations/en/plugin-handbook.md#babel-traverse</p>
+</blockquote>
+<p>言わば AST ノードを操作するパッケージです。
+この traverse 関数がどのように実行されるかみていきましょう。</p>
+<pre><code class="language-js">export default function traverse(
+  parent: Object | Array&lt;Object&gt;,
+  opts?: Object,
+  scope?: Object,
+  state: Object,
+  parentPath: Object,
+) {
+  ...
+  traverse.node(parent, opts, scope, state, parentPath);
+}
+
+...
+
+traverse.node = function(
+  node: Object,
+  opts: Object,
+  scope: Object,
+  state: Object,
+  parentPath: Object,
+  skipKeys?,
+) {
+  ...
+  const context = new TraversalContext(scope, opts, state, parentPath);
+  for (const key of keys) {
+    if (skipKeys &amp;&amp; skipKeys[key]) continue;
+    // NOTE: ここから読み進める
+    if (context.visit(node, key)) return;
+  }
+};
+</code></pre>
+<p>explode と node という関数を実行しています。</p>
+<p>この <code>context.visit(node, key)</code> が AST を辿って処理をする本体です。
+さらにそこから追っていくと context を実行しています。</p>
+<pre><code class="language-js">visitQueue(queue: Array&lt;NodePath&gt;) {
+    ...
+
+    // visit the queue
+    for (const path of queue) {
+      ...
+
+      // NOTE: ここから読み進める
+      if (path.visit()) {
+        stop = true;
+        break;
+      }
+      ...
+    }
+
+    return stop;
+  }
+</code></pre>
+<p>実際には AST を辿りながら NodePath という形式に変換したオブジェクトを queue に詰め込んでいき、その queue を管理しながら AST を辿ります。</p>
+<p>この <code>path.visit()</code> は Mixin された NodePath_context の持ち物です。
+<strong>Editor のコードジャンプでは見つけられないので注意しましょう。</strong></p>
+<pre><code class="language-js">Object.assign(
+  NodePath.prototype,
+  NodePath_ancestry,
+  NodePath_inference,
+  NodePath_replacement,
+  NodePath_evaluation,
+  NodePath_conversion,
+  NodePath_introspection,
+  NodePath_context,
+  NodePath_removal,
+  NodePath_modification,
+  NodePath_family,
+  NodePath_comments
+)
+</code></pre>
+<p>さあゴールは近づいてきました。
+visit の中はこうなっています。</p>
+<pre><code class="language-javascript:title=lib/context.js">export function visit(): boolean {
+  ...
+
+  // NOTE: ここから読み進める
+  if (this.shouldSkip || this.call(&quot;enter&quot;) || this.shouldSkip) {
+    this.debug(&quot;Skip...&quot;);
+    return this.shouldStop;
+  }
+
+  ...
+
+  this.call(&quot;exit&quot;);
+
+  return this.shouldStop;
+}
+</code></pre>
+<p><code>this.call(&quot;enter&quot;)</code> と <code>this.call(&quot;exit&quot;)</code> は enter と exit 関数を call している雰囲気があります。
+まるで AST ノードに入った時と出ていく時に実行する関数のように・・・
+追ってみましょう！</p>
+<pre><code class="language-js">export function call(key): boolean {
+  ...
+  if (this.node) {
+    // NOTE: ここから読み進める
+    if (this._call(opts[key])) return true;
+  }
+ ...
+  return false;
+}
+
+export function _call(fns?: Array&lt;Function&gt;): boolean {
+  ...
+  const ret = fn.call(this.state, this, this.state);
+  ...
+}
+</code></pre>
+<p>はい呼んでいました。</p>
+<p>ここで検証に使ったコードに注目してください。</p>
+<pre><code class="language-javascript:title=index.js">// transform the ast
+traverse.default(ast, {
+  enter(path) {
+    // in this example change all the variable `n` to `x`
+    if (path.isIdentifier({ name: &quot;n&quot; })) {
+      path.node.name = &quot;x&quot;
+    }
+  },
+})
+</code></pre>
+<p>call される関数は <code>this._call(opts[key])</code>として呼ばれていたわけですが、この opts には検証コード上だと <code>enter(path) {}</code>に該当します。</p>
+<p>そしてこれは <code>babel-plugin</code> の処理を流し込める仕組みでもあります。
+実は <code>traverse</code> 関数の第二引数はこの plugin に書いた処理の塊です。
+この中で AST を書き換える処理を入れます。
+先の例だと <code>path.node.name = &quot;x&quot;</code> という風に変数名を x に書き換えています。
+つまり <strong>traverse は AST を操作しているのではなく、AST を操作する関数を実行していた</strong>訳です。
+@babel/traverse を全部読みきったわけではないので確証は持てないところもあるのですが、今のところはそのような理解です。</p>
+<h3>generate</h3>
+<p>@babel/generate のエントリポイントはこのように実装されています。</p>
+<pre><code class="language-js">import SourceMap from &quot;./source-map&quot;;
+import Printer, { type Format } from &quot;./printer&quot;;
+
+class Generator extends Printer {
+  ...
+
+  constructor(ast, opts = {}, code) {
+    ...
+    this.ast = ast;
+  }
+
+  generate() {
+    return super.generate(this.ast);
+  }
+}
+
+...
+
+export default function(ast: Object, opts: Object, code: string): Object {
+  const gen = new Generator(ast, opts, code);
+  return gen.generate();
+}
+</code></pre>
+<p><code>return super.generate(this.ast);</code> とあるので super class である Printer を確認してみましょう。</p>
+<pre><code class="language-javascript:title=printer.js">generate(ast) {
+  this.print(ast);
+  this._maybeAddAuxComment();
+
+  return this._buf.get();
+}
+</code></pre>
+<p>この print <code>token</code> や <code>printMethod</code> などを実行しています。</p>
+<pre><code class="language-js">print(node, parent) {
+    ...
+    if (needsParens) this.token(&quot;(&quot;);
+
+    this._printLeadingComments(node);
+
+    const loc = t.isProgram(node) || t.isFile(node) ? null : node.loc;
+    this.withSource(&quot;start&quot;, loc, () =&gt; {
+      printMethod.call(this, node, parent);
+    });
+
+    this._printTrailingComments(node);
+
+    if (needsParens) this.token(&quot;)&quot;);
+
+    ...
+  }
+
+   token(str: string): void {
+   ...
+    this._append(str);
+  }
+</code></pre>
+<p>printMethod は、AST Node の種類に応じて、indent, dedent, semicolon, rightBrace, ... といった処理を実行していきます。
+どういう処理がされるかは Printer クラスのメソッドとして定義されています。</p>
+<pre><code class="language-js">indent(): void {
+  if (this.format.compact || this.format.concise) return;
+  this._indent++;
+}
+
+dedent(): void {
+  if (this.format.compact || this.format.concise) return;
+  this._indent--;
+}
+</code></pre>
+<p>そしてこれらの関数は _append という処理を呼び出し、処理結果を <code>this._buf.append(str);</code> で buffer に 入れていきます。
+そしてこの buffer が printer.js で <code>return this._buf.get();</code> されて出力されます。</p>
+<p>実験用のコードでは、generate に AST 以外にも code を渡していますが、</p>
+<pre><code class="language-javascript:title=index.js">const code = &quot;const n = 1&quot;
+
+...
+
+// generate code &lt;- ast
+const output = generate.default(ast, code)
+</code></pre>
+<p>これは source map 用に渡しているだけで、code の生成は AST の情報だけあれば可能です。
+この時点で traverse によって AST を変換しているはずなので、AST だけ渡せば変換後のコードを出力できます。</p>
+<h2>Babel は ES6 =&gt; ES5 に変換するという誤解</h2>
+<p>さてさて、最初に僕は ES6 =&gt; ES5 に変換する魔法の箱と勘違いしていると書いていました。
+僕の周りにも同じ勘違いしている人に出会ったことがあるのでついでに言及したいなと思います。</p>
+<p>例えば</p>
+<pre><code class="language-javascript:title=index.js">const hoge = () =&gt; {}
+</code></pre>
+<p>という関数を babel で変換してみましょう。</p>
+<pre><code class="language-sh">npm i @babel/core @babel/cli
+</code></pre>
+<p>この変換結果はどうなるでしょうか？
+ES5 になるはずですよね！・・・なりません 😭</p>
+<pre><code class="language-bash">$ npx babel index.js
+&gt; const hoge = () =&gt; {};
+</code></pre>
+<p>こうなります。</p>
+<p>つまり何も AST 操作がされていません。ここで traverse を思い出してください。
+traverse のためには enter と exit が定義された何かが必要なんですよね。
+それは自作関数だったり babel-plugin だったりします。</p>
+<p>例えば、<a href="https://github.com/babel/babel/tree/master/packages/babel-plugin-transform-arrow-functions">@babel/plugin-transform-arrow-functions</a>などが必要です。</p>
+<p>試しにこの plugin を入れて babel を実行してみましょう。</p>
+<pre><code class="language-bash">$ npm i -D @babel/plugin-transform-arrow-functions
+
+$ echo '{ &quot;plugins&quot;: [&quot;@babel/plugin-transform-arrow-functions&quot;] }' &gt; .babelrc
+
+$ &gt; npx babel index.js
+const hoge = function () {};
+</code></pre>
+<p>きちんと function に変換されていることが確認できました。</p>
+<p>@babel/plugin-transform-arrow-functions の中はこうなっています。</p>
+<pre><code class="language-javascript:title=index.js">import { declare } from &quot;@babel/helper-plugin-utils&quot;
+import type NodePath from &quot;@babel/traverse&quot;
+
+export default declare((api, options) =&gt; {
+  api.assertVersion(7)
+
+  const { spec } = options
+  return {
+    name: &quot;transform-arrow-functions&quot;,
+
+    visitor: {
+      ArrowFunctionExpression(
+        path: NodePath&lt;BabelNodeArrowFunctionExpression&gt;
+      ) {
+        if (!path.isArrowFunctionExpression()) return
+
+        path.arrowFunctionToExpression({
+          allowInsertArrow: false,
+          specCompliant: !!spec,
+        })
+      },
+    },
+  }
+})
+</code></pre>
+<p>ここでは visitor とあり enter も exit も出てきてないのですが、@babel/traverse が内部で enter などを持つように変換しているため大丈夫です。
+enter と exit を持つことは travese の explode が確証してくれて、その中には ensureEntranceObjects(visitor) という関数があります。</p>
+<p>この関数は</p>
+<pre><code class="language-javascript:title=visitors.js">function ensureEntranceObjects(obj) {
+  for (const key of Object.keys(obj)) {
+    if (shouldIgnoreKey(key)) continue
+
+    const fns = obj[key]
+    if (typeof fns === &quot;function&quot;) {
+      obj[key] = { enter: fns }
+    }
+  }
+}
+</code></pre>
+<p>とあり、visitor 関数を <code>obj[key] = { enter: fns }</code> と定義し直してくれます。
+explode 関数は他にもいろんな形のオブジェクトを traverse 内で扱えるような正規化をしてくれています。
+関数にはこのようにドキュメンテーションされています。</p>
+<pre><code>/**
+ * explode() will take a visitor object with all of the various shorthands
+ * that we support, and validates &amp; normalizes it into a common format, ready
+ * to be used in traversal
+ *
+ * The various shorthands are:
+ * * `Identifier() { ... }` -&gt; `Identifier: { enter() { ... } }`
+ * * `&quot;Identifier|NumericLiteral&quot;: { ... }` -&gt; `Identifier: { ... }, NumericLiteral: { ... }`
+ * * Aliases in `@babel/types`: e.g. `Property: { ... }` -&gt; `ObjectProperty: { ... }, ClassProperty: { ... }`
+ *
+ * Other normalizations are:
+ * * Visitors of virtual types are wrapped, so that they are only visited when
+ *   their dynamic check passes
+ * * `enter` and `exit` functions are wrapped in arrays, to ease merging of
+ *   visitors
+ */
+</code></pre>
+<p>つまり plugin に visitor を書いておけば、enter として traverse が実行してくれます。</p>
+<p>@babel/plugin-transform-arrow-functions を使えば traverse できることがわかりました。
+実際のところ@babel/plugin-transform-arrow-functions を先に読み進めていくと</p>
+<pre><code class="language-javascript:title=conversion.js">export function arrowFunctionToExpression({
+  allowInsertArrow = true,
+  specCompliant = false,
+} = {}) {
+  ..
+
+  const thisBinding = hoistFunctionEnvironment(
+    this,
+    specCompliant,
+    allowInsertArrow
+  )
+
+  this.ensureBlock()
+  this.node.type = &quot;FunctionExpression&quot;
+  ...
+    this.get(&quot;body&quot;).unshiftContainer(
+      &quot;body&quot;,
+      t.expressionStatement(
+        t.callExpression(this.hub.addHelper(&quot;newArrowCheck&quot;), [
+          t.thisExpression(),
+          checkBinding
+            ? t.identifier(checkBinding.name)
+            : t.identifier(thisBinding),
+        ])
+      )
+    )
+
+    this.replaceWith(
+      t.callExpression(
+        t.memberExpression(
+          nameFunction(this, true) || this.node,
+          t.identifier(&quot;bind&quot;)
+        ),
+        [checkBinding ? t.identifier(checkBinding.name) : t.thisExpression()]
+      )
+    )
+  }
+}
+</code></pre>
+<p>が呼ばれており、arrow 関数の特徴である this の bind を変換している雰囲気は感じられます。
+つまりこのプラグインを入れておくと arrow 関数の変換ができるわけです。</p>
+<p><strong>このように traverse は plugin を適用しており、逆にこの plugin がなければ何も AST 操作がされないということであり、ただ babel を実行するだけでは ES6 の構文を ES5 の構文にすることはできないということです。</strong></p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

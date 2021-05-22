@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>柔軟に firebase admin を初期化する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="毎回やり方を調べている気がするシリーズです。firebase-admin を初期化する際、">
+    <meta property="og:title" content="柔軟に firebase admin を初期化する">
+    <meta property="og:image" content="https://blog.ojisan.io//firebase-admin-init/visual.png">
+    <meta property="og:description" content="毎回やり方を調べている気がするシリーズです。firebase-admin を初期化する際、">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="柔軟に firebase admin を初期化する">
+    <meta name="twitter:description" content="毎回やり方を調べている気がするシリーズです。firebase-admin を初期化する際、">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-25</time>
+      <h1>柔軟に firebase admin を初期化する</h1>
+    </div>
+    <div class="post-contents"><p>毎回やり方を調べている気がするシリーズです。</p>
+<p><a href="https://www.npmjs.com/package/firebase-admin">firebase-admin</a> を初期化する際、<a href="https://firebase.google.com/docs/admin/setup">サーバーに Firebase Admin SDK を追加する</a> を見ると、</p>
+<pre><code class="language-js">var admin = require(&quot;firebase-admin&quot;)
+var app = admin.initializeApp()
+</code></pre>
+<p>や、</p>
+<pre><code class="language-js">admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+  databaseURL: &quot;https://&lt;DATABASE_NAME&gt;.firebaseio.com&quot;,
+})
+</code></pre>
+<p>として初期化されています。</p>
+<p>しかし、この初期化方法だと困ることがあります。</p>
+<p>例えば前者では、initializeApp の引数がなくこれは<a href="https://cloud.google.com/docs/authentication/production">default service account</a>が読み込まれる GCP 上でしか動作しないコードです。
+そして後者は予め環境変数<code>GOOGLE_APPLICATION_CREDENTIALS</code>にサービスアカウント情報を持った json ファイルへのパスを指定しておく必要があり、GitHub への PUSH をトリガーに Vercel などにデプロイする時には実現しづらい方法だったりします。(使用する PaaS によっては credential 情報を.git で管理する必要があるから)</p>
+<h2>initializeApp に認証情報を渡すことで初期化する。</h2>
+<p>そこで GCP 以外の PaaS にデプロイする方法を紹介します。</p>
+<p><code>admin.initializeApp</code> に <a href="https://firebase.google.com/docs/reference/admin/node/admin.credential.Credential-1?hl=en">Credential</a> を渡せば初期化できるので、それを作って渡すと認証を通せます。
+つまりサービスアカウント情報が書かれた json ファイルに書かれている内容をそのまま渡せば良いです。</p>
+<p>そして、その Credential は <a href="https://firebase.google.com/docs/reference/admin/node/admin.credential?hl=en#cert">cert</a>から作れます。</p>
+<pre><code class="language-js">const cert = {
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, &quot;\n&quot;),
+}
+admin.initializeApp({
+  credential: admin.credential.cert(cert),
+})
+</code></pre>
+<p>firebase のサービスアカウントの認証情報は projectId, clientEmail, privateKey 以外にもたくさんありますが、 cert が受け取る <a href="https://firebase.google.com/docs/reference/admin/node/admin.ServiceAccount">ServiceAccount</a>は、projectId, clientEmail, privateKey で構成されているのでこの 3 つだけ渡してください。</p>
+<p>replace 以下はエスケープ避けを回避するための処理です。</p>
+<p>FYI: https://stackoverflow.com/questions/50299329/node-js-firebase-service-account-private-key-wont-parse</p>
+<h2>まとめ</h2>
+<ul>
+<li>firebase admin を使うためには <code>admin.initializeApp()</code> を実行する必要がある</li>
+<li>GCP 以外にデプロイ・key file をデプロイ環境に含めない場合は、<code>Credential</code> を <code>initializeApp</code> に渡して初期化</li>
+<li><code>Credential</code> は <code>admin.credential.cert</code> に projectId, clientEmail, privateKey を渡すと作れる。</li>
+</ul>
+<h2>参考文献</h2>
+<ul>
+<li>https://firebase.google.com/docs/reference/admin/node/admin?hl=en#initializeapp</li>
+<li>https://firebase.google.com/docs/reference/admin/node/admin.AppOptions?hl=en</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

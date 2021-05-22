@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>どうしてJSXを使ってもエラーにならないのか？</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="一般的に JSX と言えばimport React from "react"
+
+export const Hoge = () => {
+  return <div>Hello World</div>
+}
+">
+    <meta property="og:title" content="どうしてJSXを使ってもエラーにならないのか？">
+    <meta property="og:image" content="https://blog.ojisan.io//jsx-to-js/visual.png">
+    <meta property="og:description" content="一般的に JSX と言えばimport React from "react"
+
+export const Hoge = () => {
+  return <div>Hello World</div>
+}
+">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="どうしてJSXを使ってもエラーにならないのか？">
+    <meta name="twitter:description" content="一般的に JSX と言えばimport React from "react"
+
+export const Hoge = () => {
+  return <div>Hello World</div>
+}
+">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-19</time>
+      <h1>どうしてJSXを使ってもエラーにならないのか？</h1>
+    </div>
+    <div class="post-contents"><p>一般的に JSX と言えば</p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+
+export const Hoge = () =&gt; {
+  return &lt;div&gt;Hello World&lt;/div&gt;
+}
+</code></pre>
+<p>の return 以下の部分を指しますが、どうしてこれが実行できるのでしょうか。</p>
+<p>これが <code>createElement</code> 相当であることは知っていましたが、どうやってその変換をしているのだっけというのがきちんと説明できる自信がなかったので調べてみました。</p>
+<h2>JSX は createElement の糖衣構文</h2>
+<p>JSX は <code>createElement</code> の糖衣構文であることは、React 公式の<a href="https://ja.reactjs.org/docs/react-without-jsx.html">JSX なしで React を使う</a> という節に詳しく書かれています。
+コンポーネントが返す UI のブロックは普段は <code>&lt;div&gt;&lt;/div&gt;</code> などで書いていましたが、それらは <code>createElement('div')</code> としても書けるというわけです。</p>
+<p>ところで公式の例には</p>
+<pre><code class="language-jsx">class Hello extends React.Component {
+  render() {
+    return &lt;div&gt;Hello {this.props.toWhat}&lt;/div&gt;
+  }
+}
+
+ReactDOM.render(&lt;Hello toWhat=&quot;World&quot; /&gt;, document.getElementById(&quot;root&quot;))
+</code></pre>
+<p>は</p>
+<pre><code class="language-jsx">class Hello extends React.Component {
+  render() {
+    return React.createElement(&quot;div&quot;, null, `Hello ${this.props.toWhat}`)
+  }
+}
+
+ReactDOM.render(
+  React.createElement(Hello, { toWhat: &quot;World&quot; }, null),
+  document.getElementById(&quot;root&quot;)
+)
+</code></pre>
+<p>とありますが、普段 JSX が使えているのはどうしてでしょうか？
+誰が <code>createElement</code> への変換をになっているのでしょうか？</p>
+<h2>React の外にあるものが createElement へ変換する</h2>
+<p>React そのものには JSX 用の機能があるわけでは無いので React の外側にあるものがその責務をになっているはずです。</p>
+<h3>Babel</h3>
+<p>Babel を使っている場合、それは <a href="https://babeljs.io/docs/en/babel-plugin-transform-react-jsx">@babel/plugin-transform-react-jsx</a>で実現できます。</p>
+<p>必要なライブラリをインストールします。</p>
+<pre><code class="language-sh">$ npm i react
+
+$ npm i -D @babel/core @babel/cli @babel/plugin-transform-react-jsx
+</code></pre>
+<p>このファイルをトランスパイルしてみましょう。</p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+
+const Component = () =&gt; {
+  return &lt;div&gt;hello world&lt;/div&gt;
+}
+</code></pre>
+<p>上のプラグインを使うための config を書き、</p>
+<pre><code class="language-js">{
+  &quot;plugins&quot;: [&quot;@babel/plugin-transform-react-jsx&quot;]
+}
+</code></pre>
+<p>ビルドします。</p>
+<pre><code class="language-sh">$ npx babel src -d dist
+</code></pre>
+<p>そしてこの吐き出したファイルを見ます。</p>
+<pre><code class="language-js:title=dist/index.js">import React from &quot;react&quot;
+
+const Component = () =&gt; {
+  return /*#__PURE__*/ React.createElement(&quot;div&quot;, null, &quot;hello world&quot;)
+}
+</code></pre>
+<p>と、このように <code>React.createElement</code> が生成されており Babel がその役割をになっていることがわかりました。</p>
+<p>とはいえ最近は TypeScript でビルドすることも増えていると思います。
+その場合はどうなっているのか見てみましょう。</p>
+<h3>TypeScript</h3>
+<p>TypeScript には @babel/plugin-transform-react-jsx のようなプラグインはありませんが、どのようにして JSX の変換をしたらいいのでしょうか。
+はい、そこで <code>--jsx</code> オプションです。
+とりあえず実験してみましょう。</p>
+<p>必要なライブラリをインストールします。</p>
+<pre><code class="language-sh">$ npm i react
+
+$ npm i -D typescript @types/react
+</code></pre>
+<p>このファイルをトランスパイルしてみましょう。</p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+
+const Component = () =&gt; {
+  return &lt;div&gt;hello world&lt;/div&gt;
+}
+</code></pre>
+<p>上のプラグインを使うための config を書き、</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;target&quot;: &quot;es6&quot;,
+    &quot;module&quot;: &quot;commonjs&quot;,
+    &quot;jsx&quot;: &quot;react&quot;,
+    &quot;outDir&quot;: &quot;./dist&quot;,
+    &quot;strict&quot;: true,
+    &quot;esModuleInterop&quot;: true,
+    &quot;skipLibCheck&quot;: true,
+    &quot;forceConsistentCasingInFileNames&quot;: true
+  }
+}
+</code></pre>
+<p>ビルドします。</p>
+<pre><code class="language-sh">$ npx tsc
+</code></pre>
+<p>そしてこの吐き出したファイルを見ます。</p>
+<pre><code class="language-js:title=dist/index.js">&quot;use strict&quot;;
+var __createBinding =
+  (this &amp;&amp; this.__createBinding) ||
+  (Object.create
+    ? function (o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        Object.defineProperty(o, k2, {
+          enumerable: true,
+          get: function () {
+            return m[k];
+          },
+        });
+      }
+    : function (o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        o[k2] = m[k];
+      });
+var __setModuleDefault =
+  (this &amp;&amp; this.__setModuleDefault) ||
+  (Object.create
+    ? function (o, v) {
+        Object.defineProperty(o, &quot;default&quot;, { enumerable: true, value: v });
+      }
+    : function (o, v) {
+        o[&quot;default&quot;] = v;
+      });
+var __importStar =
+  (this &amp;&amp; this.__importStar) ||
+  function (mod) {
+    if (mod &amp;&amp; mod.__esModule) return mod;
+    var result = {};
+    if (mod != null)
+      for (var k in mod)
+        if (k !== &quot;default&quot; &amp;&amp; Object.prototype.hasOwnProperty.call(mod, k))
+          __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+  };
+Object.defineProperty(exports, &quot;__esModule&quot;, { value: true });
+const React = __importStar(require(&quot;react&quot;));
+const Component = () =&gt; {
+  return React.createElement(&quot;div&quot;, null, &quot;hello world&quot;);
+};
+PURE__*/ React.createElement(&quot;div&quot;, null, &quot;hello world&quot;)
+}
+</code></pre>
+<p>と、このように <code>React.createElement</code> が生成されており tsc でも同様のことができることがわかりました。</p>
+<h2>import React from 'react' というおまじない</h2>
+<p>ところで 関数コンポーネントを使うときに</p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+
+const Component = () =&gt; {
+  return &lt;div&gt;hello world&lt;/div&gt;
+}
+</code></pre>
+<p>と言った風に、React という文字をどこにも使っていないのに、<code>import React from &quot;react&quot;</code> と書かないとコンパイルが通らないといった現象に出逢った経験があるはずです。
+そのときに書く <code>import React from &quot;react&quot;</code> は JSX が <code>React.createElement</code> と変換されることを見越してのことです。
+昔は Editor や Linter が強くなく未定義変数として警告が出ていたりもしていたのですが、いまではそれもなくなっているので以前ほどのおまじない感は無くなってきているとは思いますが、<code>import React from &quot;react&quot;</code>を忘れずに書きましょう。</p>
+<p>ちなみに preact では <code>createElement</code> 相当なものは h 関数という別の名前になっていたりするのですが、それは<code>jsxFactory</code>という設定で制御可能です。詳しくは <a href="https://blog.ojisan.io/how-to-create-preact-app-2020">Preact の環境構築 of 2020</a>をご覧ください。</p>
+<h2>サンプルコード</h2>
+<p>もともと styled-components 製のコンポーネントをビルドしたときの中身を読むために作っていたプロジェクトなので styled とついていますが、その辺りは置き換えながら読んでいたでければと思います。</p>
+<ul>
+<li>https://github.com/ojisan-toybox/styled-babel</li>
+<li>https://github.com/ojisan-toybox/styled-tsc</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

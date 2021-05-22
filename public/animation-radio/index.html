@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>おしゃれなラジオボタンをちゃんと作る</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Aaptiv の登録導線のラジオボタンを見てて、「これどうやって実装するんだろう？」って気になったので調べてみた + 実装してみました。">
+    <meta property="og:title" content="おしゃれなラジオボタンをちゃんと作る">
+    <meta property="og:image" content="https://blog.ojisan.io//animation-radio/visual.png">
+    <meta property="og:description" content="Aaptiv の登録導線のラジオボタンを見てて、「これどうやって実装するんだろう？」って気になったので調べてみた + 実装してみました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="おしゃれなラジオボタンをちゃんと作る">
+    <meta name="twitter:description" content="Aaptiv の登録導線のラジオボタンを見てて、「これどうやって実装するんだろう？」って気になったので調べてみた + 実装してみました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-11</time>
+      <h1>おしゃれなラジオボタンをちゃんと作る</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://aaptiv.com/fitness-evaluation">Aaptiv</a> の登録導線のラジオボタンを見てて、「これどうやって実装するんだろう？」って気になったので調べてみた + 実装してみました。</p>
+<p><img src="./tweet.png" alt="tweet" />
+(https://twitter.com/sadnessOjisan/status/1320284047482875904)</p>
+<p>こういうラジオボタンを作りたいっていう話です。（アニメーションもつきます）</p>
+<p><img src="./aaptiv.png" alt="tweet" /></p>
+<p>このようなデザインを実現するにあたっては、ブラウザネイティブなラジオボタンにはスタイルをあてにくいためボタン自体を再実装することになると思うのですが、その辺をどうしたらいいかの注意点について述べます。</p>
+<h2>アニメーション</h2>
+<p>box-shadow を transiton にすると良い感じになります。</p>
+<pre><code class="language-css">&amp;::before {
+    position: absolute;
+    content: &quot;&quot;;
+    display: inline-block;
+    transition: all 0.2s ease-in;
+    height: 22px;
+    width: 22px;
+    top: 20px;
+    left: 24px;
+    background-color: #f6f8fa;
+    border: 2px solid #c8c9cc;
+    border-color: ${props =&gt; (props.isSelected ? &quot;#05f&quot; : &quot;#c8c9cc&quot;)};
+    border-radius: 50%;
+    box-shadow: ${props =&gt;
+      props.isSelected ? &quot;0 0 0 4px rgba(0,85,255,.32)&quot; : undefined};
+  }
+</code></pre>
+<h2>ラジオボタンのパーツは label 要素で作る</h2>
+<p>スタイルを当てる箱を作ればいいので <code>div</code> で作ってもいいかもしれませんが、ラベルをクリックしたときでもラジオボタン本体にフォーカスを当てるためにユーザーにクリックさせる要素は label 要素で作ります。
+昔からラジオボタンを独自に作る例はよく見かけていて、それらが label で実装されていることはずっと疑問に思っていたのですがどうやらこのような背景があるようです。</p>
+<pre><code class="language-jsx">&lt;label className={props.className} onClick={props.handleClick} id={props.value}&gt;
+  {props.value}
+&lt;/label&gt;
+</code></pre>
+<p>（この辺を教えてくださった <a href="https://twitter.com/L_e_k_o">@L_e_k_o</a>さんありがとうございます。）</p>
+<h2>ラジオボタンのデザインは擬似要素で作る</h2>
+<p>スタイルを当てる箱自体は label の疑似要素で作ります。</p>
+<p><img src="./radio.png" alt="ラジオボタン" /></p>
+<p>この外側の半透明の青色は before, 中の濃い青色は after で作ります。
+こうすると選択状態にある時だけ after を付与するだけでボタンの切り替えができます。</p>
+<pre><code class="language-css">&amp;::before {
+    position: absolute;
+    content: &quot;&quot;;
+    display: inline-block;
+    transition: all 0.2s ease-in;
+    height: 22px;
+    width: 22px;
+    top: 20px;
+    left: 24px;
+    background-color: #f6f8fa;
+    border: 2px solid #c8c9cc;
+    border-color: ${props =&gt; (props.isSelected ? &quot;#05f&quot; : &quot;#c8c9cc&quot;)};
+    border-radius: 50%;
+    box-shadow: ${props =&gt;
+      props.isSelected ? &quot;0 0 0 4px rgba(0,85,255,.32)&quot; : undefined};
+  }
+
+  &amp;::after {
+    ${props =&gt;
+      props.isSelected
+        ? `
+        content: &quot;&quot;;
+        height: 16px;
+        width: 16px;
+        left: 27px;
+        top: 23px;
+        background-color: #05f;
+        border-radius: 50%;
+        position: absolute;
+        content: &quot;&quot;;
+        display: inline-block;
+    `
+        : undefined}
+  }
+</code></pre>
+<p>このように作れば label 要素の中に選択時のスタイル用 div を入れなくて済みます。
+選択状態に応じてそうすれば要素の表出を管理しなくて済むのでアニメーションを付けやすくなります。</p>
+<p>たとえば、</p>
+<pre><code class="language-tsx">{
+  isSelected &amp;&amp; &lt;DivStyleForSelected&gt;&lt;/DivStyleForSelected&gt;
+}
+</code></pre>
+<p>みたいなコードだと解除時はアニメーションは付けにくいです。</p>
+<h2>input 要素も使う</h2>
+<p>ここまでで要件を満たせますが、もう一頑張りします。
+<code>label</code> の中に <code>&lt;input type='radio' /&gt;</code> を入れます。
+こうすることでユーザーにキーボードでの操作を可能にします。
+もちろん見えると変なので <code>opacity: 0</code> で見えなくします。
+ここで注意すべきは <strong><code>visibility: hidden</code>にしない</strong> ことです。
+visibility や display を使ってスタイルを見えなくするとキーボード操作はできなくなります。
+（この辺を教えてくださった <a href="https://twitter.com/ymrl">@ymrl</a>さんありがとうございます。）</p>
+<p>そして、もうすこし踏み込んで input 要素に name, value, for, label 要素に id も振ります。
+こうすることで開発者が独自に作ったラジオボタンであっても スクリーンリーダーでも読ませることができます。</p>
+<p>(for は振らなくても手元のスクリーンリーダーでは動くのですが Windows’ Narrator だと完璧に動かないらしい(?)(https://a11y-101.com/development/radio-buttons))</p>
+<h3>余談: (p)react でも label は必要</h3>
+<p>最初の例で「label が必要なのはラベルクリックでも選択をハンドリングできるようにするため」ということを述べましたが、これは (p)react 環境であれば label は不要です。
+なぜなら onClick で選択情報を state に保持できるからです。
+しかし、このような a11y を考慮すると label があることでスクリーンリーダーに認識させられるので、label 要素を使って作った方が良いと思います。</p>
+<h2>まとめ</h2>
+<p>ブラウザ にある要素を再実装したくない。</p>
+<h2>サンプルコード</h2>
+<p>というわけでこんな感じで実装しました。</p>
+<pre><code class="language-tsx">import { Fragment, h } from &quot;preact&quot;
+import { css, styled } from &quot;goober&quot;
+
+interface PassedProps {
+  name: string
+  value: string
+  isSelected: boolean
+  handleClick: () =&gt; void
+  children?: preact.ComponentChildren
+}
+
+interface Props extends PassedProps {
+  className?: string
+}
+
+const Component = (props: Props) =&gt; (
+  &lt;Fragment&gt;
+    &lt;label
+      className={props.className}
+      onClick={props.handleClick}
+      id={props.value}
+    &gt;
+      &lt;input
+        type=&quot;radio&quot;
+        name={props.name}
+        value={props.value}
+        for={props.value}
+      &gt;&lt;/input&gt;
+      {props.value}
+    &lt;/label&gt;
+  &lt;/Fragment&gt;
+)
+
+const StyledComponent = styled(Component)`
+  position: relative;
+  display: inline-block;
+  padding: 24px 16px 24px 64px;
+  width: 100%;
+  font-size: 16px;
+  &amp; &gt; input {
+    opacity: 0;
+  }
+  &amp;::before {
+    position: absolute;
+    content: &quot;&quot;;
+    display: inline-block;
+    transition: all 0.2s ease-in;
+    height: 22px;
+    width: 22px;
+    top: 20px;
+    left: 24px;
+    background-color: #f6f8fa;
+    border: 2px solid #c8c9cc;
+    border-color: ${props =&gt; (props.isSelected ? &quot;#05f&quot; : &quot;#c8c9cc&quot;)};
+    border-radius: 50%;
+    box-shadow: ${props =&gt;
+      props.isSelected ? &quot;0 0 0 4px rgba(0,85,255,.32)&quot; : undefined};
+  }
+
+  &amp;::after {
+    ${props =&gt;
+      props.isSelected
+        ? `
+        content: &quot;&quot;;
+        height: 16px;
+        width: 16px;
+        left: 27px;
+        top: 23px;
+        background-color: #05f;
+        border-radius: 50%;
+        position: absolute;
+        content: &quot;&quot;;
+        display: inline-block;
+    `
+        : undefined}
+  }
+`
+
+const ContainerComponent = (props: PassedProps) =&gt; {
+  return &lt;StyledComponent {...props}&gt;&lt;/StyledComponent&gt;
+}
+
+export const RadioButton = ContainerComponent
+</code></pre>
+<p>https://github.com/ui-impl-training/radio-animation</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

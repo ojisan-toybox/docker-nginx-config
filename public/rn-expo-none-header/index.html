@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Expoから生成したアプリのヘッダーを消す</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="最近 React Native をはじめたので詰まったことを雑多にメモしていこうと思います！">
+    <meta property="og:title" content="Expoから生成したアプリのヘッダーを消す">
+    <meta property="og:image" content="https://blog.ojisan.io//rn-expo-none-header/visual.png">
+    <meta property="og:description" content="最近 React Native をはじめたので詰まったことを雑多にメモしていこうと思います！">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Expoから生成したアプリのヘッダーを消す">
+    <meta name="twitter:description" content="最近 React Native をはじめたので詰まったことを雑多にメモしていこうと思います！">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-12 09:00</time>
+      <h1>Expoから生成したアプリのヘッダーを消す</h1>
+    </div>
+    <div class="post-contents"><p>最近 React Native をはじめたので詰まったことを雑多にメモしていこうと思います！
+「react-native header hide」 などで検索すればいくらでも情報が出てくるとは思いますが、情報がふるかったり、expo で作ったアプリケーションにはそのまま適用できなかったりしたので、メモします。</p>
+<h2>header を出しているのは誰か</h2>
+<p>expo-cli で作ったアプリの場合、header を表出しているのは react-navigation の StackNavigator です。
+おそらく検索結果には StackNavigator で navigator を作るときのオプション指定で header を消すように言われるのではないでしょうか。</p>
+<pre><code class="language-js">const MainNavigation = StackNavigator(
+  {
+    otp: { screen: OTPlogin },
+    otpverify: { screen: OTPverification },
+    userVerified: {
+      screen: TabNavigator({
+        List: { screen: List },
+        Settings: { screen: Settings },
+      }),
+    },
+  },
+  {
+    headerMode: &quot;none&quot;,
+    navigationOptions: {
+      headerVisible: false,
+    },
+  }
+)
+</code></pre>
+<p>しかし <a href="https://stackoverflow.com/questions/44701245/hide-header-in-stack-navigator-react-navigation">Hide header in stack navigator React navigation</a>を読む限り、 version 2.0.0-alpha.36 (2019-11-07) 以前の書き方らしく今は使いません。</p>
+<p>事実 expo-cli が生成しているコードは</p>
+<pre><code class="language-js">const Stack = createStackNavigator&lt;RootStackParamList&gt;();
+
+function RootNavigator() {
+  return (
+    &lt;Stack.Navigator screenOptions={{ headerShown: false }}&gt;
+      &lt;Stack.Screen name=&quot;Root&quot; component={BottomTabNavigator} /&gt;
+      &lt;Stack.Screen name=&quot;NotFound&quot; component={NotFoundScreen} options={{ title: 'Oops!' }} /&gt;
+    &lt;/Stack.Navigator&gt;
+  );
+}
+</code></pre>
+<p>といった形で、<code>StackNavigator()</code>ではなく<code>createStackNavigator()</code>を実行しており、オプションを渡す口がありません。</p>
+<h2>Navigator の props のオプションで Navigator の表出を管理する</h2>
+<p>API リファレンスの<a href="https://reactnavigation.org/docs/stack-navigator">createStackNavigator</a>には headerMode と headerShown というオプションについての記述があります。
+これらは header の表出を制御できるオプションですが<a href="https://reactnavigation.org/docs/stack-navigator#headermode">headerMode</a>を読むと表出を細かく管理するために <a href="https://reactnavigation.org/docs/stack-navigator#headershown">headerShown</a>を使った方が良さそうなので、この headerShown を使っていきます。</p>
+<p>で、これをセットすれば header が出なくなるはずなのですが、expo-cli が生成したコードにはそれが含まれていて、その上で header が表出されています。</p>
+<p><img src="./header.png" alt="headerがある" /></p>
+<pre><code class="language-js">const Stack = createStackNavigator&lt;RootStackParamList&gt;();
+
+function RootNavigator() {
+  return (
+    &lt;Stack.Navigator screenOptions={{ headerShown: false }}&gt;
+      &lt;Stack.Screen name=&quot;Root&quot; component={BottomTabNavigator} /&gt;
+      &lt;Stack.Screen name=&quot;NotFound&quot; component={NotFoundScreen} options={{ title: 'Oops!' }} /&gt;
+    &lt;/Stack.Navigator&gt;
+  );
+}
+</code></pre>
+<p>ではどうして header が表出しているのでしょうか。</p>
+<h2>Navigator を入れ子にすると header の設定を上書ける</h2>
+<p>header が出ている原因は、expo-cli が生成するコードが Navigator を入れ子にしているところにあります。
+<code>&lt;Stack.Screen name=&quot;Root&quot; component={BottomTabNavigator} /&gt;</code> の BottomTabNavigator から先を読んでいくと、</p>
+<pre><code class="language-jsx">const BottomTab = createBottomTabNavigator&lt;BottomTabParamList&gt;();
+
+export default function BottomTabNavigator() {
+  const colorScheme = useColorScheme();
+
+  return (
+    &lt;BottomTab.Navigator
+      initialRouteName=&quot;TabOne&quot;
+      tabBarOptions={{ activeTintColor: Colors[colorScheme].tint }}
+    &gt;
+      &lt;BottomTab.Screen
+        name=&quot;TabOne&quot;
+        component={TabOneNavigator}
+        options={{
+          tabBarIcon: ({ color }) =&gt; (
+            &lt;TabBarIcon name=&quot;ios-code&quot; color={color} /&gt;
+          ),
+        }}
+      /&gt;
+      &lt;BottomTab.Screen
+        name=&quot;TabTwo&quot;
+        component={TabTwoNavigator}
+        options={{
+          tabBarIcon: ({ color }) =&gt; (
+            &lt;TabBarIcon name=&quot;ios-code&quot; color={color} /&gt;
+          ),
+        }}
+      /&gt;
+    &lt;/BottomTab.Navigator&gt;
+  );
+}
+
+function TabBarIcon(props: { name: string; color: string }) {
+  return &lt;Ionicons size={30} style={{ marginBottom: -3 }} {...props} /&gt;;
+}
+
+const TabOneStack = createStackNavigator&lt;TabOneParamList&gt;();
+
+function TabOneNavigator() {
+  return (
+    &lt;TabOneStack.Navigator&gt;
+      &lt;TabOneStack.Screen
+        name=&quot;TabOneScreen&quot;
+        component={TabOneScreen}
+        options={{ headerTitle: &quot;Tab One Title&quot; }}
+      /&gt;
+    &lt;/TabOneStack.Navigator&gt;
+  );
+}
+
+const TabTwoStack = createStackNavigator&lt;TabTwoParamList&gt;();
+
+function TabTwoNavigator() {
+  return (
+    &lt;TabTwoStack.Navigator&gt;
+      &lt;TabTwoStack.Screen
+        name=&quot;TabTwoScreen&quot;
+        component={TabTwoScreen}
+        options={{ headerTitle: &quot;Tab Two Title&quot; }}
+      /&gt;
+    &lt;/TabTwoStack.Navigator&gt;
+  );
+}
+
+</code></pre>
+<p>というファイルがあります。</p>
+<p>ここで各スクリーンに紐づく Navigation を定義していますが、</p>
+<pre><code class="language-js">const TabOneStack = createStackNavigator&lt;TabOneParamList&gt;();
+
+function TabOneNavigator() {
+  return (
+    &lt;TabOneStack.Navigator&gt;
+      &lt;TabOneStack.Screen
+        name=&quot;TabOneScreen&quot;
+        component={TabOneScreen}
+        options={{ headerTitle: &quot;Tab One Title&quot; }}
+      /&gt;
+    &lt;/TabOneStack.Navigator&gt;
+  );
+}
+</code></pre>
+<p>とあるとおり、StackNavigator を入れ子にしていたことがわかります。
+<strong>header を消すためにはここにも headerShown の props を書いてあげる必要があります。</strong></p>
+<pre><code class="language-js">function TabOneNavigator() {
+  return (
+    &lt;TabOneStack.Navigator screenOptions={{ headerShown: false }}&gt;
+      &lt;TabOneStack.Screen
+        name=&quot;TabOneScreen&quot;
+        component={TabOneScreen}
+        options={{ headerTitle: &quot;Tab One Title&quot; }}
+      /&gt;
+    &lt;/TabOneStack.Navigator&gt;
+  );
+</code></pre>
+<p>とすれば無事 header を消すことができます。</p>
+<p><img src="./headless.png" alt="headerがない" /></p>
+<h2>Navigator を入れ子にしたときの挙動</h2>
+<p>expo-cli が生成したコードに似たコードが 公式 Docs の Guides の<a href="">Nesting navigators</a>にあります。
+<a href="https://reactnavigation.org/docs/nesting-navigators/#nesting-multiple-stack-navigators">Nesting multiple stack navigators</a>がまさしくそうで、</p>
+<blockquote>
+<p>When nesting multiple stacks, React Navigation will automatically hide the header from the child stack navigator in order to avoid showing duplicate headers. However, depending on the scenario, it might be more useful to show the header in the child stack navigator instead and hide the header in the parent stack navigator.</p>
+</blockquote>
+<p>とあるように入れ子の親の header 名を隠す方法として紹介されています。</p>
+<p>そして <a href="https://reactnavigation.org/docs/nesting-navigators/#each-screen-in-a-navigator-has-its-own-params">Each screen in a navigator has its own params</a>とあるとおり、子の screen は独立して header の設定を持つので、header は表出されます。なぜなら headershown の設定は</p>
+<blockquote>
+<p>Whether to show the header. The header is shown by default unless <code>headerMode</code> was set to <code>none</code>.</p>
+</blockquote>
+<p>とある通り明示的に false にしないと隠せないからです。</p>
+<p>そのため header を隠すために隠したい Screen は明示的に false を設定する必要がありました。</p>
+<h2>まとめ</h2>
+<ul>
+<li>react-native で header を隠す方法が v4 と v5 で違うので検索結果がそのまま使えないかも</li>
+<li>expo-cli の生成するコードは Navigator を nest しているので v5 の書き方を採用しても header は書き換わらない(というより隠す設定が標準でされているが隠れない)</li>
+<li>入れ子の内側にも headerShown を設定すると隠せる</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

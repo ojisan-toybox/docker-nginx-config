@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ピンタレストっぽいMasonryレイアウトをCSSだけで簡易的に実現する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="タイトルを見てめちゃくちゃなタイトルと思われるかもしれませんが、言いたいことは伝わると思います。">
+    <meta property="og:title" content="ピンタレストっぽいMasonryレイアウトをCSSだけで簡易的に実現する">
+    <meta property="og:image" content="https://blog.ojisan.io//masonry-style-css/visual.png">
+    <meta property="og:description" content="タイトルを見てめちゃくちゃなタイトルと思われるかもしれませんが、言いたいことは伝わると思います。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ピンタレストっぽいMasonryレイアウトをCSSだけで簡易的に実現する">
+    <meta name="twitter:description" content="タイトルを見てめちゃくちゃなタイトルと思われるかもしれませんが、言いたいことは伝わると思います。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-02 09:00</time>
+      <h1>ピンタレストっぽいMasonryレイアウトをCSSだけで簡易的に実現する</h1>
+    </div>
+    <div class="post-contents"><p>タイトルを見てめちゃくちゃなタイトルと思われるかもしれませんが、言いたいことは伝わると思います。
+こういうレイアウトを作ってみましょうって話です。</p>
+<p><img src="./pintarest.png" alt="ピンタレストのトップページ" /></p>
+<p>実は筆者はこういうデザインなんといえばいいのか分かってなくてそういう表現になっています。
+とはいえこれに正式な名称がありそうでもなく、ググっても pintarest like, Masonry like などといった言葉が出てきます。
+ちなみに <a href="https://masonry.desandro.com/">Masonry</a> はこれを実現する jQuery プラグインです。</p>
+<p>この UI はこのブログのトップページでも使われています。</p>
+<p><img src="./blogtop.png" alt="blogのトップページ" /></p>
+<p>この実装って正攻法でやると結構大変なのですが、簡易的な方法を知ったので紹介します。
+<code>column-count</code> を使ったマルチカラム段組みで簡単に Masonry レイアウトができます！</p>
+<h2>何気に難しいピンタレスト UI</h2>
+<p>ピンタレストのトップページって画像を並べているだけなので簡単そうに見えるのですが、作ってみるとそうでもないことがわかります。
+要素の高さが全部異なっています。
+これをそのまま並べると縦幅に空白ができた状態で要素が並びます。</p>
+<h2>よくある解決策</h2>
+<h3>Masonry のようなライブラリを使う</h3>
+<p>古典的な方法としては <a href="https://masonry.desandro.com/">Masonry</a> という jQuery プラグインがあげられます。
+この UI が流行ったときはこのプラグインがよく利用されていたらしいです。（自分はその世代ではないので伝聞ですが）
+jQuery プラグインということは jQuery 環境を強いられるかというとそうでもなく、Vue や React の世界から jQuery を使うことも可能なので、jQuery 環境でなくても無理やり使える方法です。
+ちなみに僕の初めての仕事はそれでした。
+実現可能ではあるのですが、バンドルサイズを増やしたくない・依存を増やしたくなかったのでこのブログでの実装は見送りました。</p>
+<h3>flexbox を使った実装</h3>
+<p>縦に並べることが一つの方法として挙げられます。
+高さを固定し要素をすべて 1 列に並べ(<code>flex-direction: column</code>)、溢れたら横の列に並べるとすれば良いです。
+そしてその横幅は 100/列数 %(たとえば 3 列なら 33.3%など)とすれば定められた列数で masonry レイアウトが実現できます。
+しかし高さを溢れさせて折り返すので、高さの制限をする必要があります。
+その制限はスクロール領域を産むことにつながるので将来的にスクロール周りで困ることありそうだなと思ってこのブログでの実装は見送りました。</p>
+<p>FYI: https://digipress.info/tech/pure-css-flexbox-masonry-sample/</p>
+<h3>grid を使う</h3>
+<p>その悩みは grid を使えば解決します。</p>
+<p>FYI: https://w3bits.com/css-masonry/</p>
+<p>ただしこのブログは Grid に対応されていないブラウザからも見られており、その環境での動作確認ができないこともあり、さらにはポリフィルも大変そうだったので実装は見送りました。</p>
+<p>FYI: https://ics.media/entry/17403/</p>
+<h2>一番簡単な Masonry 対応</h2>
+<p>マルチカラムにすることです。
+CSS3 には <code>column-count</code> というプロパティがあり、これを使うことで断組みレイアウトが簡単に実現できます。
+マルチカラムの段組みにすることで自然と Masonry になります。</p>
+<p>しかしこのままでは中途半端に折り返しが起きるみたいなトラブルも起きるはずなので（おそらくこのブログだと左から 2 列目の先頭が半分途切れてずれる）、それを防ぐ <code>break-inside: avoid;</code>を追加します。
+この<a href="https://developer.mozilla.org/ja/docs/Web/CSS/break-inside">break-inside</a>は生成されたボックスの途中でどう領域を区切るかを指定できます。
+ここでは折り返しが起こらない <code>avoid</code>を指定します。</p>
+<p>またこのブログでもあったのですがこのままでは最下段の余白が潰れると言ったことが起きます。
+それはマルチカラム内部の要素を <code>display: inline-block;</code> にしたら解消します。</p>
+<p>FYI: https://www.bricoleur.co.jp/blog/archives/4336</p>
+<p>このブログでも同様の問題が起きていたのは <a href="https://twitter.com/y_temp4">@y_temp4</a> さんに修正してもらいました。
+元のデザインがどうなっていてどう修正されたかはこの <a href="https://github.com/sadnessOjisan/blog.ojisan.io/pull/83">PR</a> にまとまっているのでご覧ください。
+<a href="https://twitter.com/y_temp4">@y_temp4</a>さんありがとうございました。</p>
+<p>最終的にはブログのトップページではこのような CSS になりました。</p>
+<pre><code class="language-css">.cards {
+  margin: 0 auto;
+  padding: 5px;
+  width: 90%;
+  column-count: 4;
+  column-gap: 0;
+}
+
+.card {
+  margin: 16px;
+  margin-top: 0;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  box-shadow: 8px 12px 10px -6px rgba(0, 0, 0, 0.3);
+  display: inline-block;
+}
+</code></pre>
+<h2>マルチカラムで実現した場合の欠点</h2>
+<p>残念ながら上から下に要素が並んでいきます。
+そのため時系列に左から右に並べるなんていったことはできません。
+このブログでもそうなっています。</p>
+<p>これは grid を使えば解決できます。</p>
+<p>FYI: https://codepen.io/andybarefoot/pen/XVgmxZ?editors=0100</p>
+<p>ただ この例の HTML を見比べると高さが足りず実は見切レていることがわかると思います。それは動的に位置計算を JS で行って調整する必要もあります。</p>
+<p>FYI: https://medium.com/@andybarefoot/a-masonry-style-layout-using-css-grid-8c663d355ebb</p>
+<p>そのため Grid を使えばマルチカラムで実現したときのデメリットである、並び順問題を解決できます。</p>
+<h2>まとめ</h2>
+<p>そのために本当に完璧な Masonry を作るなら Grid + JS の組み合わせになると思います。
+とはいえ大変なのでただ並べたいだけといったような用途であればマルチカラムを使うのが一番楽だと思います。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

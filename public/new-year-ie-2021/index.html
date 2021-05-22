@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>☆謹賀新年☆IE対応2021</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="明けましておめでとうございます。早速ですが私はつい昨日 "IE 始め" を行いました。">
+    <meta property="og:title" content="☆謹賀新年☆IE対応2021">
+    <meta property="og:image" content="https://blog.ojisan.io//new-year-ie-2021/visual.png">
+    <meta property="og:description" content="明けましておめでとうございます。早速ですが私はつい昨日 "IE 始め" を行いました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="☆謹賀新年☆IE対応2021">
+    <meta name="twitter:description" content="明けましておめでとうございます。早速ですが私はつい昨日 "IE 始め" を行いました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-01-05</time>
+      <h1>☆謹賀新年☆IE対応2021</h1>
+    </div>
+    <div class="post-contents"><p>明けましておめでとうございます。
+早速ですが私はつい昨日 &quot;IE 始め&quot; を行いました。
+久々の IE 対応で様々な箇所でハマった、また babel を使わずに tsc のみという普段の IE 対応とは異なるやり方で色々迷ったので、備忘録としてやったことを残したいと思います。</p>
+<h2>なにを IE 対応したか</h2>
+<p>TypeScript + preact 製のアプリケーションで、何らかのデータを取ってきて、それに対してユーザーの何らかの入力を保存する、よくみる現代的なアプリケーションを IE 対応しました（具体的な内容は伏せます）。
+さらにサードパーティスクリプトとしても埋め込めるように、バンドルサイズ削減を目的に preact, goober にしか依存を持たず、諸々のライブラリは自作しました。
+ビルドは webpack + ts-loader で行われており、ES5 を target に吐き出しています。</p>
+<p>このようなコードを IE 対応していくことになりました。
+こう書くとまるで後出しジャンケンで PM に負けたみたいな言いぶりですが、IE 対応の要件があるのは初めから知っていての開発です。
+「preact は標準で IE 対応されているから依存ライブラリを減らせば余裕で IE 対応できる、IE 対応は後回しにするか」と舐めてかかった罰が降ったという話です。</p>
+<h2>webpack5 の出力は必ず arrow function を含む</h2>
+<p>つい最近作り始めたものなので Webpack のバージョンは v5.9.0 です。
+さて、webpack5 はそのまま使うと IE 対応できません。</p>
+<p>webpack4 でビルドした際、そのバンドルは</p>
+<pre><code class="language-js">/ ******/ (function(modules){
+/ ******/ // module cache
+/ ******/ var installeddModules = {};
+/ ******/
+...
+})
+</code></pre>
+<p>と出力されるのに対して、webpack5 では、</p>
+<pre><code class="language-js">/ ******/(() =&gt; {
+/ ******/ &quot;use strict&quot;;
+/ *!******************!*\
+...
+})
+</code></pre>
+<p>として出力されます。</p>
+<p>つまり、必ず arrow function が含まれます。</p>
+<p>ts-loader や babel-loader を通した後のコードを出力する webpack の出力そのものなので、loader で tsc や babel でコントロールできるものではありません。</p>
+<p>このコードを IE に読み込むと syntax error として扱われます。
+そのため function に戻したいです。</p>
+<p>そこで、webpack の target オプションを指定します。</p>
+<p>FYI: https://webpack.js.org/configuration/target/</p>
+<p>ここに</p>
+<pre><code class="language-js:title=webpack.config.js">{
+    ...
+    target: [&quot;web&quot;, &quot;es5&quot;]
+}
+</code></pre>
+<p>を指定します。</p>
+<p>そうすれば、arrow ではなく function で出力できます。</p>
+<p>これの対処法を教えてくださった、<a href="https://twitter.com/about_hiroppy">@about_hiroppy</a>さん、ありがとうございました。</p>
+<h2>IE 対応されていないライブラリに loader で対処する</h2>
+<p>多くのライブラリはすでに ES5 向けにビルド済みなので、webpack でビルドする際に tsc や babel を通さないやり方があります。
+そうすればビルド時間を短縮できるメリットがあります。</p>
+<p>そのオプションが exclude で、</p>
+<pre><code class="language-js:title=webpack.config.js">module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.(js|ts|tsx)$/,
+        use: [
+          {
+            loader: &quot;ts-loader&quot;,
+          },
+        ],
+        exclude: /node_modules/,
+      },
+    ],
+  },
+}
+</code></pre>
+<p>として、<code>node_modules</code> を loader の対象外にします。</p>
+<p>このようにすれば自分が書いたアプリケーションコードのみを ts-loader の対象にできます。</p>
+<p>しかし IE 対応が必要な場合は話が変わってきます。
+たとえばライブラリにある JS のコードが IE 対応されていない（たとえば arrow が含まれている）場合は、そのコードも loader に通して IE 向けのコードに変換しなければいけません。</p>
+<p>たとえば goober のビルド済みファイルには <code>=&gt;</code> が 13 箇所含まれており、そのままバンドルに含めるとランタイムでこけます。</p>
+<pre><code class="language-js">let e={data:&quot;&quot;},t=t=&gt;{try{let e=t?t.querySelector(&quot;#_goober&quot;):self._goober;return e||(e=(t||document.head).appendChild(document.createElement(&quot;style&quot;)),e.innerHTML=&quot; &quot;,e.id=&quot;_goober&quot;),e.firstChild}catch(e){}return t||e},r=e=&gt;{let r=t(e),a=r.data;return r.data=&quot;&quot;,a},a=/(?:([A-Z0-9-%@]+) *:? *([^{;]+?);|([^;}{]*?) *{)|(})/gi,l=/\/\*[\s\S]*?\*\/|\s{2,}|\n/gm,o=(e,t)=&gt;{let r,a=&quot;&quot;,l...
+</code></pre>
+<p>このコードを IE 対応するにはライブラリのコードも loader に読み込ませます。
+tsc でも babel で target を指定していれば (polyfill の都合が抜け落ちているので不完全ではあるものの)IE 向けのコードを出力できるためです。
+しかし先ほど <code>node_modules</code>を exclude したため、loader に通すことはできないわけです。
+「じゃあ exclude を剥がしなよ」となるのでそうしましょう。
+ただ全て exclude するのはやりすぎなので、IE 対応が必要なライブラリだけ include します。</p>
+<pre><code class="language-js">module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.(js|ts|tsx)$/,
+        use: [
+          {
+            loader: &quot;ts-loader&quot;,
+          },
+        ],
+        include: [
+          path.resolve(__dirname, &quot;src&quot;),
+          path.resolve(__dirname, &quot;node_modules/goober&quot;),
+        ],
+      },
+    ],
+  },
+}
+</code></pre>
+<p>いま IE 対応が必要なので goober だけなので、ライブラリからは goober だけを loader に読ませます。</p>
+<p>さて、これで一件解決したように見えますがそうは行きません。</p>
+<h2>ビルドにライブラリを含めるとビルドが落ちる</h2>
+<p>さきほどのコードをビルドすると、goober から import したモジュールが <code>undefined</code> となります。
+そのためそのコードを関数として呼び出すと、「関数でないものを関数として呼び出そうとするな」と怒られてランタイムでエラーが起きます。
+この時 tsc の型検査はちゃんと通っています。</p>
+<p>何故でしょうか、それは tsconfig.json の <code>allowJS</code> に理由があります。
+exclude しないということは、つまりライブラリ側のコードを tsc のビルド対象に含めることなので、tsc の設定で <code>allowJS: true</code> にする必要がありました。
+なのでここが初期値の false だとビルドは通りません。</p>
+<p>ちなみにこれまで <code>allowJS: false</code> にしてビルドを通せていたのは webpack.config.js で <code>exclude: /node_modules/</code> していたからで、そもそもライブラリにある JS をビルド対象に含めていなかったためです。
+それが IE 対応するためにビルド対象に <code>node_modules</code> を含める必要が出てきて顕在化した問題だったという訳です。</p>
+<p>これの原因を教えてくださった、<a href="https://twitter.com/Shinyaigeek">@Shinyaigeek</a>さん、ありがとうございました。</p>
+<h2>Object.assign の polyfill</h2>
+<p>自分のコードは状態管理部分を ContextAPI + useReducer で行っており、state を作るための計算で spread 演算子を使用します。</p>
+<pre><code class="language-js">export const reducer = (state: State, action: ActionType): State =&gt; {
+  switch (action.type) {
+    case START_FETCH_DATA:
+      return {
+        ...state,
+        isLoading: true,
+        data: undefined,
+        error: undefined,
+      }
+    case SUCCESS_FETCH_DATA:
+      return {
+        ...state,
+        isLoading: false,
+        data: action.payload,
+        error: undefined,
+      }
+    case FAIL_FETCH_DATA:
+      return {
+        ...state,
+        isLoading: false,
+        data: undefined,
+        error: action.payload,
+      }
+    default:
+      return state
+  }
+}
+</code></pre>
+<p>さて、この spread 演算子は ES6 の機能の一つですが、ES5 へと出力するとこのように<code>Object.assign</code> を使ったものへとなります。</p>
+<p>before</p>
+<pre><code class="language-js">const old = { k: &quot;v&quot; }
+
+const newObj = { ...old, k: &quot;v2&quot; }
+</code></pre>
+<p>after</p>
+<pre><code class="language-js">&quot;use strict&quot;
+const old = { k: &quot;v&quot; }
+const newObj = Object.assign(Object.assign({}, old), { k: &quot;v2&quot; })
+</code></pre>
+<p>さて、この <code>Object.assign</code> は IE11 では動作しません。</p>
+<p>FYI: https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/Object/assign</p>
+<p>なので、IE でも使えるようにするために polyfill を入れましょう。
+polyfill の入れ方は CDN 経由でヘッダに差し込んだり、node_moudles として import したり色々ありますが、私は自前で src 配下に polyfill コードを入れました。</p>
+<p>その理由としては、</p>
+<ul>
+<li>1 ファイルで完結する有名なコードがあるので依存をわざわざ増やさなくて良い</li>
+<li>手元にあるコードはバンドラにまとめさせられるので最適化を効かせられるようになる</li>
+</ul>
+<p>ためです。（最適化のくだりは loader に <code>node_modules</code> を含めることができる今の構成ならば、<code>node_modules</code> 経由でも同じ効果が得られる。）</p>
+<p>私はこのようなコードを配置し、</p>
+<pre><code class="language-js">// @ts-nocheck
+/* eslint-disable */
+
+if (!Object.assign) {
+  Object.defineProperty(Object, &quot;assign&quot;, {
+    enumerable: false,
+    configurable: true,
+    writable: true,
+    value: function (target) {
+      &quot;use strict&quot;
+      if (target === undefined || target === null) {
+        throw new TypeError(&quot;Cannot convert first argument to object&quot;)
+      }
+
+      var to = Object(target)
+      for (var i = 1; i &lt; arguments.length; i++) {
+        var nextSource = arguments[i]
+        if (nextSource === undefined || nextSource === null) {
+          continue
+        }
+        nextSource = Object(nextSource)
+
+        var keysArray = Object.keys(Object(nextSource))
+        for (
+          var nextIndex = 0, len = keysArray.length;
+          nextIndex &lt; len;
+          nextIndex++
+        ) {
+          var nextKey = keysArray[nextIndex]
+          var desc = Object.getOwnPropertyDescriptor(nextSource, nextKey)
+          if (desc !== undefined &amp;&amp; desc.enumerable) {
+            to[nextKey] = nextSource[nextKey]
+          }
+        }
+      }
+      return to
+    },
+  })
+}
+</code></pre>
+<p><a href="https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Statements/import#Import_a_module_for_its_side_effects_only">副作用として root で import</a> しました。</p>
+<pre><code class="language-js">import &quot;./lib/object-assign-polyfil&quot;
+</code></pre>
+<p>参考にした（丸パクリした）コードはこれです。</p>
+<p>FYI: https://gist.github.com/spiralx/68cf40d7010d829340cb#file-object-assign-js</p>
+<p>このコードを使わなくても MDN のページにも似た Polyfill があります。</p>
+<h2>fetch polyfill</h2>
+<p>さてアプリケーションでは fetch メソッドを使っています。
+その fetch メソッドは IE サポートされていませんので、これも何かしらの手を考える必要があります。</p>
+<p>一番楽なのは最初から axios などの IE サポートがある fetch ライブラリを使っていることです。
+axios は「fetch を標準で使えるのだからバンドルサイズ的にも採用する理由ないじゃん w」などと言われたりしていますが、IE サポートができたり、isomorphic に fetch できたり、バンドルサイズ相応のメリットはあります。
+というより fetch を使っていても結局その fetch を IE や NodeJS で動かすためのあれやこれやをすれば結局バンドルサイズが膨らんでしまうので同じ話になります。</p>
+<p>ただ後から IE サポートすることになったという場合だと axios に置き換えるなんてことはすこし手間がかかるので別の方法を考えたくなるでしょう。
+というわけで polyfill を入れましょう。</p>
+<h3>fetch の代用、whatwg-fetch</h3>
+<p>まず fetch そのものの代用手段として whatwg-fetch というものがあります。
+（ソースコード自体は Github 本家の直下にありますが、誰がどういう経緯で作ったものなのかやなぜ whatwg の名を冠しているかは知りません。）</p>
+<p>FYI: https://github.github.io/fetch/</p>
+<p>これは fetch というメソッド名ではあるものの、内部では XMLHttpRequest を使うコードです。</p>
+<pre><code class="language-js">export function fetch(input, init) {
+  return new Promise(function (resolve, reject) {
+    var request = new Request(input, init)
+
+    if (request.signal &amp;&amp; request.signal.aborted) {
+      return reject(new DOMException(&quot;Aborted&quot;, &quot;AbortError&quot;))
+    }
+
+    var xhr = new XMLHttpRequest()
+
+    ...
+  })
+}
+</code></pre>
+<p>FYI: https://github.com/github/fetch/blob/master/fetch.js#L508</p>
+<p>つまりこの fetch メソッドは IE11 でも動くコードです。</p>
+<h3>whatwg-fetch を使うために</h3>
+<p>whatwg-fetch の polyfill を import するだけでもいいのですが、これを IE 環境だけで使うようにしたい、つまり Chrome などの環境と IE 環境で出し分けることができます。</p>
+<p>それを実現するスニペットとして<a href="https://dev.to/adrianbdesigns/how-to-polyfill-javascript-fetch-function-for-internet-explorer-g46">How to polyfill JavaScript fetch function for Internet Explorer</a>にはこういうものがあります。</p>
+<pre><code class="language-js">var isIE = !!window.MSInputMethodContext &amp;&amp; !!document.documentMode
+
+if (isIE) {
+  // Create Promise polyfill script tag
+  var promiseScript = document.createElement(&quot;script&quot;)
+  promiseScript.type = &quot;text/javascript&quot;
+  promiseScript.src =
+    &quot;https://cdn.jsdelivr.net/npm/promise-polyfill@8.1.3/dist/polyfill.min.js&quot;
+
+  // Create Fetch polyfill script tag
+  var fetchScript = document.createElement(&quot;script&quot;)
+  fetchScript.type = &quot;text/javascript&quot;
+  fetchScript.src =
+    &quot;https://cdn.jsdelivr.net/npm/whatwg-fetch@3.4.0/dist/fetch.umd.min.js&quot;
+
+  // Add polyfills to head element
+  document.head.appendChild(promiseScript)
+  document.head.appendChild(fetchScript)
+
+  // Wait for the polyfills to load and run the function.
+  // We could have done this differently,
+  // but I've found it to work well for my use-cases
+  setTimeout(function () {
+    window
+      .fetch(&quot;https://path/to/api.endpoint&quot;)
+      .then(handleResponse)
+      .catch(handleErrors)
+  }, 1000)
+} else {
+  // If fetch is supported, just run the fetch function
+  fetch(&quot;https://path/to/api.endpoint&quot;).then(handleResponse).catch(handleErrors)
+}
+</code></pre>
+<p>上記のコードでは IE のときだけ whatwg-http を CDN 経由で取得して、そこで得た fetch メソッドを window.fetch から呼び出しています。
+どうして window から呼べるのかというと、whatwg-http が global に 中身が XMLHttpRequest の fetch メソッドを登録しているからです。</p>
+<p>CDN で読み込んでいる whatwg-http を確認してみると、(解説のため minify 前のライブラリを利用)</p>
+<pre><code class="language-js">if (!global.fetch) {
+  global.fetch = fetch
+  global.Headers = Headers
+  global.Request = Request
+  global.Response = Response
+}
+</code></pre>
+<p>と、しています。</p>
+<p>そのため先ほどのコードを fetch メソッドとしてユーザーが呼び出せば、IE のときでもうまく動くようになります。</p>
+<p>この手法のメリットは IE 用のコードを動的に引っ張ってくる必要はあるものの、IE ユーザー以外にはバンドルサイズを増やさずに機能を提供できるところにあります。</p>
+<h2>その他 polyfill</h2>
+<p>さて、もろもろ対処したのでこれで動くかと思いきや「error: TypeError: このオブジェクトではサポートされていない操作です」とだけ表示され、トレースに現れないエラーが現れました。
+まあ何かしらのメソッドが足りてないのだろうなと思い、とりあえず babel-polyfill を入れて動かしました。
+そうすると動きましたので、今はそのようにしています。
+何が足りていないのかは把握できていないので見つけ次第、必要な polyfill だけをピンポイントで入れ替える予定です。</p>
+<p>この手の polyfill は core-js を入れるべきかと思ったのですが、いまは tsc でビルドしており、tsc も lib を入れてくれるので、そこである程度カバーできると思い、core-js より古くてバンドルサイズが小さい babel-polyfill を入れました。</p>
+<p>polyfill 周りの import を手抜きしているのは正直 tsc だけを使う場合に polyfill をどうすればいいか分かっていないためです。
+そのため誰か教えて下さると助かります。
+個人的には必要な polyfill を差し込む仕組みは@babel/preset-env 経由の方がやりやすいなと感じました。
+@babel/preset-env を噛ませるために多段ビルドする話も聞いたことがあり、そういうのも面白そうだなぁと思っています。</p>
+<p>ちなみに polyfill を入れていくとバンドルサイズは 200kb を超えました。
+なんのために preact を採用したのやら :angel:</p>
+<h2>flex-box 周りの修正</h2>
+<p>よくある話ですが、flex-box 周りは色々崩れました。
+flex-box のバグだけを集めたレポジトリがあるので、これを見ながら適宜直しました。</p>
+<p>FYI: https://github.com/philipwalton/flexbugs</p>
+<h2>おわりに</h2>
+<p>2021 年こそは IE 対応を卒業したいです・・・</p>
+<h3>ソースコード</h3>
+<p>流石にプロダクションコードは出せないので、実験で使った断片のみ公開します。</p>
+<p>FYI: https://github.com/ojisan-toybox/preact-ie11</p>
+<h3>P.S.</h3>
+<p>IE で動作確認してエラー出たときに、そのまま IE でググって MDN に飛ぶと、MDN に「IE サポートしていません」「Error: Promise」と出てフリーズして、「IE ユーザーの気持ちを考えろ！IE 対応ちゃんとして！！」という気持ちになりました。</p>
+<p>って、不幸な人の水準に合わせろっていう思考は良くないですね、皆さん一緒に幸せになりましょう。IE 対応を卒業するぞ 2021！！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

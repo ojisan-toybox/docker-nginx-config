@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>firestore の入出力に型をつける</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="firestore の SDK に withConverter というメソッドがあるのですが、その宣伝です。">
+    <meta property="og:title" content="firestore の入出力に型をつける">
+    <meta property="og:image" content="https://blog.ojisan.io//typed-firestore/visual.png">
+    <meta property="og:description" content="firestore の SDK に withConverter というメソッドがあるのですが、その宣伝です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="firestore の入出力に型をつける">
+    <meta name="twitter:description" content="firestore の SDK に withConverter というメソッドがあるのですが、その宣伝です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-02</time>
+      <h1>firestore の入出力に型をつける</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://firebase.google.com/docs/reference/js/firebase.firestore">firestore の SDK</a> に withConverter というメソッドがあるのですが、その宣伝です。</p>
+<h2>型が欲しいってどういうこと？</h2>
+<p>たとえば firestore 上のあるドキュメントが name と age というフィールドを持っているとして、それをクライアントが取得したときそのデータに name と age が存在する保証はあるのでしょうか。</p>
+<pre><code class="language-ts">db.collection(&quot;user&quot;)
+  .withConverter(converter)
+  .get()
+  .then(result =&gt; {
+    const data = result.docs.map(d =&gt; ({
+      // 本当にnameがある？
+      name: d.data().name,
+      // 本当にageがある？
+      age: d.data().age,
+    }))
+    setState(data)
+  })
+</code></pre>
+<p><code>d.data()</code> はクライアントバリデーションを通った訳でも型がついている訳ではないので、<code>d.data().name</code> が本当に name(string)が入っているかはクライアントサイドからすれば分からないことです。</p>
+<p>この問題を解決するのが <code>withConverter</code> です。</p>
+<h2>withConverter とは</h2>
+<p><a href="https://firebase.google.com/docs/reference/js/firebase.firestore.FirestoreDataConverter?hl=ja">withConverter</a> は CollectionReference が持っている関数で、firestore と クライアントでデータをやり取りするときの変換層を実装できるものです。</p>
+<p>公式の例をあげると</p>
+<pre><code class="language-ts">class Post {
+  constructor(readonly title: string, readonly author: string) {}
+
+  toString(): string {
+    return this.title + &quot;, by &quot; + this.author
+  }
+}
+
+const postConverter = {
+  toFirestore(post: Post): firebase.firestore.DocumentData {
+    return { title: post.title, author: post.author }
+  },
+  fromFirestore(
+    snapshot: firebase.firestore.QueryDocumentSnapshot,
+    options: firebase.firestore.SnapshotOptions
+  ): Post {
+    const data = snapshot.data(options)!
+    return new Post(data.title, data.author)
+  },
+}
+
+const postSnap = await firebase
+  .firestore()
+  .collection(&quot;posts&quot;)
+  .withConverter(postConverter)
+  .doc()
+  .get()
+const post = postSnap.data()
+if (post !== undefined) {
+  post.title // string
+  post.toString() // Should be defined
+  post.someNonExistentProperty // TS error
+}
+</code></pre>
+<p>こういうことができる訳です。</p>
+<p>つまり、firestore とやり取りするときに converter を通して、型をつけることができます。
+では、この withConverter を効果的に使う方法を紹介します。</p>
+<h2>自分の withConverter の使い方</h2>
+<h3>ランタイムバリデーション</h3>
+<p>取得したデータは firestore 上での型が決まっていても、クライアントからすれば unknown なので型をつけたいです。
+そのためには バリデーションと is を使った <a href="https://www.typescriptlang.org/docs/handbook/advanced-types.html">user-defined type guard</a>が効果的です。</p>
+<pre><code class="language-ts">const converter = {
+  toFirestore(user: DataItemType): firebase.firestore.DocumentData {
+    return {
+      name: user.name,
+      age: user.age,
+    }
+  },
+  fromFirestore(
+    snapshot: firebase.firestore.QueryDocumentSnapshot,
+    options: firebase.firestore.SnapshotOptions
+  ): DataItemType {
+    const data = snapshot.data(options)!
+    if (!isValid(data)) {
+      console.error(data)
+      alert(&quot;invalid data&quot;)
+      throw new Error(&quot;invalid data&quot;)
+    }
+    return {
+      name: data.name,
+      age: data.age,
+    }
+  },
+}
+
+const isValid = (data: any): data is DataItemType =&gt; {
+  if (!(data.name &amp;&amp; typeof data.name === &quot;string&quot;)) {
+    return false
+  }
+  if (!(data.age &amp;&amp; typeof data.age === &quot;number&quot;)) {
+    return false
+  }
+  return true
+}
+</code></pre>
+<p>こうすることで data に不正な値が含まれていたら検知することができ、その検査に通ったことの保証を型を通じて後続処理に伝えることができます。</p>
+<h3>DB に対する共通処理を実行する</h3>
+<p>converter には共通処理を挟むこともできます。
+たとえば投稿日時を保存するコードなんかを共通で挟むことができます。</p>
+<pre><code class="language-ts">const converter = {
+  toFirestore(user: DataItemType): firebase.firestore.DocumentData {
+    return {
+      name: user.name,
+      age: user.age,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }
+  },
+  ...
+}
+</code></pre>
+<h3>必ずしもクラスを使わない</h3>
+<p>公式の例はクラスで実装されていますが、自分は React を使うことが多く UI 側では全部オブジェクトでデータを持ち回っており、そのクラス =&gt; オブジェクトの変換がめんどくさいのでクラスは最初から使わないようにしています。
+「変換すればいいじゃん」と思うかもしれませんが、collection 間に親子関係があってクライアントサイドジョインをしないといけない場合はこの変換の回数も増えていき、見通しが悪くなっていった経験があるので最初からクラスを使わないようにしています。</p>
+<h2>サンプルコード</h2>
+<p>https://github.com/ojisan-toybox/typed-firestore</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

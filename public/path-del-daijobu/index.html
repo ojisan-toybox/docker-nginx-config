@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>環境変数PATHを消すだけなら復活するから大丈夫</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="PATH のことちゃんと理解していなかったのでちょっと勉強したって話です。">
+    <meta property="og:title" content="環境変数PATHを消すだけなら復活するから大丈夫">
+    <meta property="og:image" content="https://blog.ojisan.io//path-del-daijobu/visual.png">
+    <meta property="og:description" content="PATH のことちゃんと理解していなかったのでちょっと勉強したって話です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="環境変数PATHを消すだけなら復活するから大丈夫">
+    <meta name="twitter:description" content="PATH のことちゃんと理解していなかったのでちょっと勉強したって話です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-21 15:00</time>
+      <h1>環境変数PATHを消すだけなら復活するから大丈夫</h1>
+    </div>
+    <div class="post-contents"><p>PATH のことちゃんと理解していなかったのでちょっと勉強したって話です。</p>
+<h2>PATH を消すとどうなるか</h2>
+<p>PATH を消します。</p>
+<pre><code class="language-sh"># bash/zsh
+unset PATH
+
+# fish
+set -e PATH
+</code></pre>
+<p>消えたことを確認しましょう。</p>
+<pre><code class="language-sh">$ echo $PATH
+&gt;
+</code></pre>
+<p>そしてコマンドを叩いてみると、これまで使えていたコマンドが使えなくなっていることも確認できます。</p>
+<pre><code class="language-sh">% ls
+zsh: command not found: ls
+
+% bash
+zsh: command not found: bash
+</code></pre>
+<p>それもそのはず、これらのコマンドは /bin に含まれており、そのコマンドへの PATH を消してしまったからです。</p>
+<p>なので、</p>
+<pre><code class="language-sh">export PATH=&quot;/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin&quot;
+</code></pre>
+<p>などとして PATH を通せば動くようになります。</p>
+<h2>shell を切り替えると元に戻る</h2>
+<p>ところで PATH を消した後、実行ファイルを直接指定して他のシェルを開くと元に戻ります。</p>
+<pre><code class="language-sh">% unset PATH
+
+% bash
+zsh: command not found: bash
+
+% /bin/bash
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+
+bash-3.2$ ls
+LICENSE  gatsby-browser.js gatsby-node.js  netlify.toml...
+</code></pre>
+<p>この理由を僕はよく分かっていませんでした。
+なぜなら PATH などの設定は .bashrc や .zshrc やら .eshenv から読まれるはずで、そこで環境変数をセットしていたはずだからです。
+そしてそれらのファイルに bin への PATH は通してなかったからです。
+「勝手に PATH が作られるならこれまで 設定ファイルに書いていた設定はなんだったんだ」という気持ちになりました。</p>
+<p>ただこれも冷静に考えるとそもそも bash コマンドとかが使えているので、ユーザーが設定している PATH 以外にもデフォルトで使う PATH を設定している場所があるはずです。
+そこでこの初期 PATH はどこで作られるか調べました。</p>
+<h3>etc の設定</h3>
+<p>「PATH 消す 復活」やら「PATH 読み込み 仕組み 初期」とかでググっていたら、 /etc 配下にある設定が使われていることがわかりました。</p>
+<p><a href="http://pocketstudio.jp/linux/?%A5%D1%A5%B9(PATH)%A4%CE%B3%CE%C7%A7%A4%C8%C0%DF%C4%EA%CA%FD%CB%A1%A4%CF%A1%A9">Pocketstudio.jp Linux Wiki</a>をみていると</p>
+<blockquote>
+<p>各ユーザの .bash_profile の中には、ログイン後に /etc/profile ファイルを読み込むような記述があるからです。</p>
+</blockquote>
+<p>とあり、etc 配下に設定があるようです。</p>
+<p>etc, なんか UNIX が云々みたいな話で出てくるやつだったなと思いながら<a href="https://www.wdic.org/w/TECH//etc">電算用語の基礎知識</a>などで調べていると、</p>
+<blockquote>
+<p>UNIX や POSIX 準拠 OS(Linux 等)で、もっぱら、そのコンピューター用のシステム設定ファイルなどを格納するために使われるディレクトリ。</p>
+</blockquote>
+<p>とあり、どうやらここにシェルの標準が入ってそうなことがわかりました。
+ここを漁ると <code>/etc/profile</code>と<code>/etc/bashrc</code> といういかにも怪しいファイルがありました。</p>
+<p>これらはログインシェル・インタラクティブシェルの初期読み込みファイルです。
+shell を立ち上げるとまずは/etc/profile が読まれるとのことで、このコードを見てみましょう。
+こういった設定の読み込み順序については <a href="https://blog1.mammb.com/entry/2019/12/01/090000">A Memorandum</a> がわかりやすかったです。</p>
+<pre><code class="language-sh:title=profile"># System-wide .profile for sh(1)
+
+if [ -x /usr/libexec/path_helper ]; then
+        eval `/usr/libexec/path_helper -s`
+fi
+
+if [ &quot;${BASH-no}&quot; != &quot;no&quot; ]; then
+        [ -r /etc/bashrc ] &amp;&amp; . /etc/bashrc
+fi
+</code></pre>
+<p>これをみる限り、私の環境では <code>/usr/libexec/path_helper -s</code> が実行されているようです。</p>
+<p>このファイルを見てみると</p>
+<pre><code class="language-sh">$ less /usr/libexec/path_helper
+@^@^@^@^@^@^@^@^@^@^@^@^@^A^@^@^
+@^@^P^@^@^@^@^@^@^@^@^@^@^@^@^@^
+@^@^P^@^@^@^@^@^@^E^@^@^@^E^@^@^
+@^F^@^@^@^@^@^@^@__text^@^@^@^@^
+@^@^@^@^@^@__TEXT^@^@^@^@^@^@^@^
+@^@^@^@^A^@^@^@&lt;B2&gt;^D^@^@^@^@^@^
+@^@^@^@^@^@^@^@^@^@^@^@^@^@^@^@^
+</code></pre>
+<p>と、バイナリだったのでとりあえず実行してみると、</p>
+<pre><code class="language-sh">bash-3.2$ /usr/libexec/path_helper
+PATH=&quot;/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin&quot;; export PATH;
+</code></pre>
+<p>として出ました。</p>
+<p>profile ではこの文字列を <code>eval</code> として実行するので、PATH に <code>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</code> が入るという仕掛けでした。</p>
+<h2>というわけで PATH を消しても大丈夫</h2>
+<p>PATH を消しても shell を開き直すと復活するので大丈夫であることがわかりました。</p>
+<p>ただし当たり前のことですが注意は必要で、~/.bashrc などのファイルは /etc/.profile が読み込まれた後に読まれるので、その中で PATH を上書くとデフォルトの PATH が読まれなくなります。
+<code>export PATH=&quot;&lt;追加したいパス名&gt;:$PATH&quot;</code> など:をつけてお尻に追加していきましょう。
+また PATH を修正する時に /etc を直接触る行為も危険な行為です。
+ここが壊れると復旧が難しくなります。</p>
+<h2>まとめ</h2>
+<ul>
+<li>PATH は デフォルトで通っているものがある。(&quot;/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin&quot;)</li>
+<li>/etc/profile に大元の PATH 変数の定義があり、シェルのログイン時にこれが読み込まれる。</li>
+<li>shell を起動するたびに環境変数が読み込まれるので、環境変数 PATH を消しても、別タブで shell を開くなどすれば簡単に復活させられる。</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

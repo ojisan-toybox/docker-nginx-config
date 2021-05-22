@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>RustでWebSocketサーバーそのものを作ってみた！</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="WebSocket は RFC 6455 で定められた仕様で、クライアント <-> サーバ間の双方向通信を可能にします。">
+    <meta property="og:title" content="RustでWebSocketサーバーそのものを作ってみた！">
+    <meta property="og:image" content="https://blog.ojisan.io//rust-websocket/visual.png">
+    <meta property="og:description" content="WebSocket は RFC 6455 で定められた仕様で、クライアント <-> サーバ間の双方向通信を可能にします。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="RustでWebSocketサーバーそのものを作ってみた！">
+    <meta name="twitter:description" content="WebSocket は RFC 6455 で定められた仕様で、クライアント <-> サーバ間の双方向通信を可能にします。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-12-23</time>
+      <h1>RustでWebSocketサーバーそのものを作ってみた！</h1>
+    </div>
+    <div class="post-contents"><p>WebSocket は <a href="https://tools.ietf.org/html/rfc6455">RFC 6455</a> で定められた仕様で、クライアント &lt;-&gt; サーバ間の双方向通信を可能にします。
+この WebSocket で通信できるサーバーを、ライブラリを使わずに RFC にある規格をそのままコードに起こして実装してみましょう。（ハッシュ計算などの util ライブラリは使います)</p>
+<p>約 8 年ほど前に jxck さんが <a href="http://jxck.hatenablog.com/entry/20120725/1343174392">WebSocket サーバの実装とプロトコル解説</a>で同様のことをされている（というよりこれを読んで今回やろうと決意した）のですが、それを Rust でもやってみようというのが、この記事でやりたい事です。上記の記事内にある通り Node.js で実装すると標準ライブラリが勝手に行ってくれる部分があるので、あえて Rust で実装します。Rust はほぼ経験がない言語なのでもし滅茶苦茶なことを書いていたら突っ込んでいただけると助かります。（文字列の結合とかもっとうまくやれるだろと言う自覚はあります・・・）</p>
+<h2>WebSocket の概観</h2>
+<p>実装を紹介する前にどのような手続きを書くのかざっくりと紹介します。</p>
+<h3>コネクション</h3>
+<p>WebScokert 自体 は TCP 上に構築されます。
+WebSocket としての接続要求はクライアントが HTTP で行い、opening のハンドシェイクがされます。
+具体的には Sec-WebSocket-Key というトークンを載せておき、サーバー側でそのトークンを使ってハッシュを作り、それを Sec-WebSocket-Accept に詰めて返すことでハンドシェイクを行います。
+これによって HTTP から WebSocket に切り替わるので、Connection: Upgrade というのもヘッダに詰めて返しておきます。</p>
+<h3>メッセージのやりとり</h3>
+<p>Upgrade されたらクライアントは WebSocket 上でメッセージを送れます。送られたメッセージは定めらたデータフレームに格納されるのでサーバーはそれをデコードすることでメッセージを読み取れます。またクライアント側もデータフレームをデコードできるので、サーバーがエンコードした値をデータフレームに詰めて返すと、クライアント側でサーバーからのメッセージを受け取る事ができます。</p>
+<h2>実装</h2>
+<p>それではさきほどの概観通りに実装をしていきます。</p>
+<h3>クライアントの JS を返すエンドポイントを作る</h3>
+<p>まずはサーバーとしての基本的な機能を作っていきます。</p>
+<h4>クライアントコードを文字列で用意</h4>
+<p>まずはこのように /websocket に対して websocket のコネクションを張ろうとする JS コードを用意します。</p>
+<pre><code class="language-rust">let clientCode = &quot;function () {
+  const ws = new WebSocket('ws://localhost:8080/websocket', ['chat']);
+  ws.onopen = function() {
+    ws.send('test');
+    ws.onmessage = function(message) {
+      console.log(message.data);
+    };&quot;
+</code></pre>
+<h3>クライアント JS を返す口を用意</h3>
+<p>この JS をブラウザに渡せるエンドポイントを作りましょう。
+適当なサーバーを立てます。</p>
+<pre><code class="language-rust">fn main() {
+    let listener = TcpListener::bind(&quot;127.0.0.1:8080&quot;).unwrap();
+
+    // 接続ごとにthreadを作り、その中で処理を行う
+    for stream in listener.incoming() {
+        thread::spawn(move || {
+            let s = stream.unwrap();
+            handle_client(&amp;s);
+        });
+    }
+}
+</code></pre>
+<p>この handle_client の中で接続に対しての処理を書いていきます。</p>
+<pre><code class="language-rust">let mut buf = [0; 4096];
+stream.read(&amp;mut buf).unwrap();
+let mut headers = [httparse::EMPTY_HEADER; 16];
+let mut req = httparse::Request::new(&amp;mut headers);
+let res = req.parse(&amp;buf).unwrap();
+req.parse(&amp;buf).unwrap();
+let path = req.path.expect(&quot;fail&quot;);
+match path {
+  &quot;/&quot; =&gt; {
+    // クライアントJSを返すための処理
+  }
+  &quot;/websocket&quot; =&gt; {
+    // upgrade時の処理
+  }
+}
+</code></pre>
+<p>いまは「クライアント JS を返すための処理」の中で、先ほどの JS を HTTP の body に詰めて、クライアントに返します。</p>
+<pre><code class="language-rust">let mut body =
+&quot;&lt;html&gt;&lt;head&gt;&lt;title&gt;rust web socket&lt;/title&gt;&lt;script type='text/javascript'&gt;(&quot;.to_string()
+  + clientCode
+  + &quot;)()&lt;/script&gt;&lt;/head&gt;&lt;body&gt;hello world!!!!!&lt;/body&gt;&lt;/html&gt;&quot;;
+let status = &quot;HTTP/1.1 200 OK\r\n&quot;.to_string();
+let header = status + &quot;Content-Type: text/html; charset=UTF-8\r\n\r\n&quot;;
+let res = header + &amp;body + &quot;\r\n&quot;;
+let data = res.as_bytes();
+stream.write(data);
+</code></pre>
+<p>こうすることでクライアント側で先ほどの JS が実行できます。
+ここでは JS を即時関数として埋め込むことで、定義した関数をそのまま実行できるようにしています。</p>
+<p>これを読み込んだクライアントは</p>
+<pre><code class="language-js">new WebSocket(&quot;ws://localhost:8080/websocket&quot;, [&quot;chat&quot;])
+</code></pre>
+<p>を実行するので、<code>/websocket</code> にコネクション確立のためのリクエストが飛んできます。</p>
+<h3>コネクションの確立</h3>
+<p>今度は 「upgrade 時の処理」 に書いていきます。</p>
+<h4>Sec-WebSocket-Accept の生成</h4>
+<p>コネクションを確立するためにはクライアントから送られてくる Sec-WebSocket-Key からハッシュをつくりクライアントに返します。
+ハッシュは、<code>258EAFA5-E914-47DA-95CA-C5AB0DC85B11</code> という定められた文字列を結合し、その値に対して SHA1 を取り、その base64 ダイジェスト値を返さなければいけません。</p>
+<pre><code class="language-rust">let token_bytes = req
+                .headers
+                .iter()
+                .find(|&amp;&amp;x| x.name == &quot;Sec-WebSocket-Key&quot;)
+                .unwrap()
+                .value;
+let token_bytes_str = std::str::from_utf8(token_bytes).unwrap();
+let joined_token = &amp;*(token_bytes_str.to_string() + key)
+</code></pre>
+<p>そして hash をとります。
+ここでは Sha1 というクレートを使っています。</p>
+<pre><code class="language-rust">let mut hasher = Sha1::new();
+hasher.input(joined_token.as_bytes());
+let sha1_string = hasher.result_str();
+</code></pre>
+<p>そしてその文字を base64 にします。
+この base64 関数は Hex しか取らないので、先ほどの Sha1 を Hex にします。
+このとき hex というクレートを使っています。</p>
+<pre><code class="language-rust">let bytes = hex::decode(sha1_string).unwrap();
+let sha1_base64 = base64::encode(bytes)
+</code></pre>
+<p>本来 Sha1 ライブラリが base64 を吐けばいいのですが、そうはいかないのでこのような手順をふむ必要があります。
+NodeJS なら crypto で一発だったので少し苦労しました。
+このあたりは <a href="https://blog.ojisan.io/rust-buffer-from">Rust でも require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;base64&quot;) したい</a>に書きました。</p>
+<h4>レスポンスヘッダの作成</h4>
+<p>先ほど作った Sec-WebSocket-Accept を使ってレスポンスヘッダを作りましょう。</p>
+<pre><code class="language-sh">HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: hoge
+</code></pre>
+<p>といったヘッダを返すとコネクションを確立できます。</p>
+<pre><code class="language-rust">let header = status
++ &quot;Upgrade: websocket
+  Connection: Upgrade
+  Sec-WebSocket-Accept: &quot; + &amp;*sha1_base64
++ &quot;Sec-WebSocket-Protocol: chat\r\n\r\n&quot;;
+</code></pre>
+<p>そして返却します。</p>
+<pre><code class="language-rust">let data = header.as_bytes();
+stream.write(data)
+</code></pre>
+<p>これで Upgrade が完了し、WebSocket 上でデータを受け取れます。</p>
+<h3>クライアントからデータを送る</h3>
+<p>いまクライアントは</p>
+<pre><code class="language-js">function () {
+  const ws = new WebSocket('ws://localhost:8080/websocket', ['chat']);
+  ws.onopen = function() {
+    ws.send('test');
+    ws.onmessage = function(message) {
+      console.log(message.data);
+    }
+ }
+</code></pre>
+<p>を実行しました。
+コネクションに成功したので、</p>
+<pre><code class="language-js">ws.send(&quot;test&quot;)
+</code></pre>
+<p>が実行されています。
+サーバーからこの <code>test</code> を読み取ってみましょう。</p>
+<p>サーバーで dataframe を待つために</p>
+<pre><code class="language-rust">loop {
+  let mut msg_buf = [0; 1024];
+  if stream.read(&amp;mut msg_buf).is_ok() {
+    // decode
+　}
+}
+</code></pre>
+<p>としてデータを待ち受けます。
+こうすることで TCP を何度も貼り直さずにデータを双方向にやりとりできます。</p>
+<p>NodeJS で実装するとここは <code>sever.on('data')</code> みたいにして自然に待ち受けれるのですが、今はそれがないので無理やり無限ループで待ち受けています。</p>
+<h4>データフレームから opcode をみる</h4>
+<p>データフレームは、</p>
+<p><img src="./payload.png" alt="ペイロード" /></p>
+<p>という形式にしたがいます。</p>
+<p>先頭の FIN はこのフレームがデータの最後かどうかを判別します。
+いまは最後ではないので 0 です。</p>
+<p>そして次の 2-4bit 目は予約済 bit でいまは全部 0 です。
+(将来的に何か入るかも？)</p>
+<p>そして次に opcode が来ます。
+これはデータの種類を表します。</p>
+<ul>
+<li>0x0 は継続フレームを表す</li>
+<li>0x1 はテキストフレームを表す</li>
+<li>0x2 はバイナリフレームを表す</li>
+<li>0x3 〜 0x7 は追加のデータフレーム用に予約済み</li>
+<li>0x8 は接続の close を表す</li>
+<li>0x9 は ping を表す</li>
+<li>0xA は pong を表す</li>
+<li>0xB 〜 0xF は追加の制御フレーム用に予約済み</li>
+</ul>
+<p>(https://triple-underscore.github.io/RFC6455-ja.html#data-opcode)</p>
+<p>この opcode を取り出してみましょう。</p>
+<pre><code class="language-rust">let mut msg_buf = [0; 1024];
+let opcode = msg_buf[0] &amp; 0x0f;
+</code></pre>
+<p>とすれば取り出せます。
+msg_buf は u8[]　なのでその先頭はデータフレームの 8bit が含まれています。そしてそのなかのお尻 4bit が欲しいので、 0b00001111 を AND 演算すると opcode 取り出せます。(本当は 0bit があと 8 つ頭についていますが)</p>
+<h4>text を読み取る</h4>
+<p>いま 'test' という文字を送っているので、opcode は 1 であるはずです。</p>
+<pre><code class="language-rust">if opcode == 1 {
+  let payload_length = (msg_buf[1] % 128) as usize;
+  let mask: Vec&lt;u8&gt; = msg_buf[2..=5].to_vec();
+  let mut payload = Vec::&lt;u8&gt;::with_capacity(payload_length);
+  for i in 0..payload_length {
+    payload.push(msg_buf[6 + i] ^ mask[i % 4]);
+  }
+  let payload = String::from_utf8(payload).unwrap();
+  let payload = payload.trim();
+}
+</code></pre>
+<p>では text の長さを読み取りましょう。
+それは 2 つめのデータフレームの先頭 7bit に含まれています。</p>
+<pre><code class="language-rust">let payload_length = (msg_buf[1] &amp; 0b1111110 ) as usize;
+</code></pre>
+<p>次の 32bit は masking key で payload の復号に使うので取得しておきます。</p>
+<pre><code class="language-rust">let mask: Vec&lt;u8&gt; = msg_buf[2..=5].to_vec();
+</code></pre>
+<p>mask 以降、つまり 6 つ目のデータフレーム以降は全て payload です。
+ここから payload の長さ分だけ取得しましょう。
+(Extention が含まれる可能性もあるので必要なものだけを先頭から取り出す)</p>
+<pre><code class="language-rust">for i in 0..payload_length {
+  // 6は7フレーム目にデータが入っているため
+  payload.push(msg_buf[6 + i] ^ mask[i % 4]);
+}
+</code></pre>
+<p>このとき masking key を使って復号もしておきます。
+復号は次のルールに従います。</p>
+<blockquote>
+<p>Octet i of the transformed data (&quot;transformed-octet-i&quot;) is the XOR of
+octet i of the original data (&quot;original-octet-i&quot;) with octet at index
+i modulo 4 of the masking key (&quot;masking-key-octet-j&quot;):</p>
+</blockquote>
+<pre><code class="language-sh">j                   = i MOD 4
+transformed-octet-i = original-octet-i XOR masking-key-octet-j
+</code></pre>
+<p>つまり、</p>
+<pre><code>結果のデータ[i] ＝ 元のデータ[i] xor key [i mod 4]
+</code></pre>
+<p>とすることでデータを復号できます。先ほどのコードはそれを愚直に表現したものです。</p>
+<p>(https://triple-underscore.github.io/RFC6455-ja.html#section-5.3)</p>
+<p>そしてそのデータを出力します。</p>
+<pre><code class="language-rust">let payload = String::from_utf8(payload).unwrap();
+println!(&quot;{}&quot;, payload);
+</code></pre>
+<p>実際にサーバーを起動してアクセスすると</p>
+<pre><code class="language-rust">cargo run
+
+test
+</code></pre>
+<p>と出力されました。</p>
+<h3>クライアントにデータを返す</h3>
+<p>データフレームに文字を詰めてクライアントに返すだけです。
+websocket 接続が確立されていたら、ブラウザが勝手にそれを解釈して文字に(というより適切な opcode に)戻してくれます。ただしマスクはしません。</p>
+<p>そこで、</p>
+<ul>
+<li>FIN:1</li>
+<li>OPCODE: 1</li>
+<li>MASK: 0</li>
+<li>Payload Length: 5</li>
+<li>Payload: 'hello'</li>
+</ul>
+<p>としたフレームを作ります。</p>
+<p>（再掲）</p>
+<p><img src="./payload.png" alt="ペイロード" /></p>
+<h4>1 フレーム目</h4>
+<p>FIN と OPCODE です。
+0b10000001 となるので、 129 です。</p>
+<h4>2 フレーム目</h4>
+<p>MASK と Payload len です。
+MASK は今は 0 です。
+Payload len は 0b0000101 で、5 です。</p>
+<h4>3 フレーム目以降</h4>
+<p>文字がそのまま DataFrame に入ります。
+それぞれの文字は 文字コード表を照らし合わせてみてみると、Hello は、72 101 108 108 111 です。</p>
+<p>FYI: http://www.edu.i.hosei.ac.jp/~sigesada/kyouzai/mojicodehenkan.html</p>
+<h4>返すべきデータ</h4>
+<p>つまりそれらをまとめると、
+[129, 5, 72, 101, 108, 108, 111]
+となります。</p>
+<p>つまり、</p>
+<pre><code class="language-rust">stream.write(&amp;[129, 5, 72, 101, 108, 108, 111]).unwrap();
+</code></pre>
+<p>とすれば、クライアントに hello と表示されます。</p>
+<p>クライアントコードは</p>
+<pre><code class="language-js">function () {
+  const ws = new WebSocket('ws://localhost:8080/websocket', ['chat']);
+  ws.onopen = function() {
+    ws.send('test');
+    ws.onmessage = function(message) {
+      console.log(message.data);
+    };
+</code></pre>
+<p>ですので、メッセージを受け取るとコンソールに hello と文字が表示されます。</p>
+<h2>まとめ</h2>
+<p>以上が WebSocket サーバーそのものの実装です。
+opcode が 1 の場合しか扱っていないので完成系ではありませんが、基本的な箇所は実装できたと思います。</p>
+<h2>ソースコード</h2>
+<p>https://github.com/sadnessOjisan/orusocket</p>
+<h2>参考にしたもの</h2>
+<ul>
+<li>RFC6455
+<ul>
+<li>https://tools.ietf.org/html/rfc6455</li>
+</ul>
+</li>
+<li>RFC6455 の和訳. 一部説明をそのまま拝借しました。
+<ul>
+<li>https://triple-underscore.github.io/RFC6455-ja.html</li>
+</ul>
+</li>
+<li>WebSocket サーバの実装とプロトコル解説。挑戦するきっかけとなったブログです。
+<ul>
+<li>http://jxck.hatenablog.com/entry/20120725/1343174392</li>
+</ul>
+</li>
+<li><a href="https://github.com/0918nobita">@0918nobita</a> さんの実装。データフレームの解釈周りのコードを参考にしました。
+<ul>
+<li>https://github.com/0918nobita/clip-studio-remote</li>
+</ul>
+</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

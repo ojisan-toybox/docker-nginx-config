@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>microbundle で react のコードをビルドする</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="先日 microbundle というバンドラーを使って reghcss というコンポーネントライブラリを作ったのですが、ビルド体験が良かったので紹介したいです。">
+    <meta property="og:title" content="microbundle で react のコードをビルドする">
+    <meta property="og:image" content="https://blog.ojisan.io//build-react-with-microbundle/visual.png">
+    <meta property="og:description" content="先日 microbundle というバンドラーを使って reghcss というコンポーネントライブラリを作ったのですが、ビルド体験が良かったので紹介したいです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="microbundle で react のコードをビルドする">
+    <meta name="twitter:description" content="先日 microbundle というバンドラーを使って reghcss というコンポーネントライブラリを作ったのですが、ビルド体験が良かったので紹介したいです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-26</time>
+      <h1>microbundle で react のコードをビルドする</h1>
+    </div>
+    <div class="post-contents"><p>先日 microbundle というバンドラーを使って <a href="https://github.com/sadnessOjisan/reghcss">reghcss</a> というコンポーネントライブラリを作ったのですが、ビルド体験が良かったので紹介したいです。</p>
+<h2>microbundle とは</h2>
+<p><a href="https://github.com/developit/microbundle">microbundle</a>はゼロコンフィグなバンドラです。
+preact の内部で使われており、preact を読んでいる最中で見つけたので使ってみました。
+作者は preact と同じく、<a href="https://github.com/developit">developit</a>です。</p>
+<p>これは rollup のラッパーであり、もろもろの設定や最適化をコード(主に package.json)を見てよしなにしてくれます。</p>
+<h2>使い方</h2>
+<p>package.json の中身を見てバンドルを生成してくれます。</p>
+<pre><code class="language-json">{
+  &quot;source&quot;: &quot;src/index.js&quot;, // input
+  &quot;main&quot;: &quot;dist/foo.js&quot;, // CommonJS bundle
+  &quot;umd:main&quot;: &quot;dist/foo.umd.js&quot;, // UMD bundle
+  &quot;module&quot;: &quot;dist/foo.m.js&quot;, // ES Modules bundle
+  &quot;esmodule&quot;: &quot;dist/foo.modern.js&quot;, // Modern bundle
+  &quot;types&quot;: &quot;dist/foo.d.ts&quot; // TypeScript typings directory
+}
+</code></pre>
+<p>上記の通り様々なフォーマットで出力できますが、最小構成としては source と main さえあれば動かせます。</p>
+<p>この状態で、</p>
+<pre><code class="language-sh">$ npx microbundle
+</code></pre>
+<p>とすればバンドルされたコードが main などで指定したファイルに出力されています。</p>
+<h2>React と併用するときの落とし穴</h2>
+<p>作者のツイート曰く、</p>
+<blockquote>
+<p>Microbundle is actually Preact's rollup.config.js turned into a reusable tool.</p>
+</blockquote>
+<p>とのことで、microbundle は preact を前提として作られています。</p>
+<p>そのため、jsx の変換は h 関数で行われることが想定されており、そのまま React のコードをビルドすると</p>
+<pre><code class="language-sh">$ npx microbundle
+(rpt2 plugin) Error
+semantic error TS2304: Cannot find name 'h'.
+</code></pre>
+<p>とエラーが出ます。</p>
+<p>これは内部で使われている rollup-plugin-typescript2 のエラーログです。
+エラーの内容としては、h 関数相当の jsx から React 要素を作るものが見つけられないと言っているので、React 環境のその関数を tsc に伝えると良いです。
+それは tsconfig の jsxFactory です。</p>
+<p>なので、</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    ...,
+    &quot;jsxFactory&quot;: &quot;React.createElement&quot;
+  }
+}
+</code></pre>
+<p>とすれば解決します。</p>
+<p>jsxFactory は逆に preact の開発をするときには <code>h</code> を指定しないといけないので、preact を書いたことがあれば「ここが怪しそう」と気付けるし、そうでないならちょっと詰まっちゃうという落とし穴でした。</p>
+<h2>おわりに</h2>
+<p>microbundle 良い！！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

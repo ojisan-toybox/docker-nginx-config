@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Gatsby製のブログにタグ機能を追加するための方法を見直してみよう</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="このブログにタグ機能を作りました。タグって自作ブログを作ると絶対に欲しくなってしまう機能なのですが、Gatsby でそれを作るのはちょっと敷居の高さを感じていたので、噛み砕きながら解説しようと思います。">
+    <meta property="og:title" content="Gatsby製のブログにタグ機能を追加するための方法を見直してみよう">
+    <meta property="og:image" content="https://blog.ojisan.io//gatsby-create-tag/visual.png">
+    <meta property="og:description" content="このブログにタグ機能を作りました。タグって自作ブログを作ると絶対に欲しくなってしまう機能なのですが、Gatsby でそれを作るのはちょっと敷居の高さを感じていたので、噛み砕きながら解説しようと思います。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Gatsby製のブログにタグ機能を追加するための方法を見直してみよう">
+    <meta name="twitter:description" content="このブログにタグ機能を作りました。タグって自作ブログを作ると絶対に欲しくなってしまう機能なのですが、Gatsby でそれを作るのはちょっと敷居の高さを感じていたので、噛み砕きながら解説しようと思います。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-17</time>
+      <h1>Gatsby製のブログにタグ機能を追加するための方法を見直してみよう</h1>
+    </div>
+    <div class="post-contents"><p>このブログにタグ機能を作りました。
+タグって自作ブログを作ると絶対に欲しくなってしまう機能なのですが、Gatsby でそれを作るのはちょっと敷居の高さを感じていたので、噛み砕きながら解説しようと思います。
+一度わかってしまえば単純な話だとは思うものの、gatsby-node.js の使い方やビルドプロセスの知識が問われるので、<strong>Gatsby を使えるようになるかどうかの最初の関門になってそう</strong>と個人的には思っています。
+同様の知識は Gatsby から記事ページを生成するときにも問われますが、それは公式チュートリアルをやればすんなりと通れるため、実質タグ機能の実装が最初の関門になってそうです。
+そのため &quot;Gatsby を初めてみてチュートリアルやって静的サイトは作れるようになったけどよくわかってない&quot; という人にとって有用になりそうな情報も含めて、タグ機能の実装に必要な知識や考え方をつらつらと書いていきます。</p>
+<h2>記事にタグを埋め込む</h2>
+<p>どのように記事を入稿しているかにもよりますが、まずは記事データにタグのフィールドを追加しましょう。
+このブログでは <a href="https://github.com/sadnessOjisan/blog.ojisan.io/tree/master/src/contents">markdown 入稿</a> しているため、markdown にそのフィールドを追加していきます。
+（もし markdown 入稿でない場合は適宜クエリを読み替えながら読んでいってください。GraphQL のクエリとその結果の変数の掘り方だけ変えれば同じ話になると思っています。）</p>
+<h3>frontmatter を使ったメタ情報埋め込み</h3>
+<p>markdown ファイル内では <a href="https://www.gatsbyjs.org/docs/adding-markdown-pages/#frontmatter-for-metadata-in-markdown-files">frontmatter</a> というコードブロック形式でメタ情報を記述します。(frontmatter は Gatsby やその GraphQL 内に登場するものですが、Gatsby 固有のものではありません。<a href="https://jekyllrb.com/docs/front-matter/">Jykill</a>などでもサポートされている記法です。)</p>
+<p>この記事だと、</p>
+<pre><code class="language-js">---
+path: /gatsby-create-tag
+created: &quot;2020-07-17&quot;
+title: Gatsby製のブログにタグ機能を追加するための解説
+visual: &quot;./visual.png&quot;
+tags: [Gatsby]
+---
+</code></pre>
+<p>というメタ情報が markdown ファイルの一番上に書かれています。</p>
+<p>記事にタグ情報を埋め込むためには、上の例にあるように tags というフィールドに記載します。
+frontmatter は YAML がサポートされているため配列を使えます。
+そのため <code>tags: [A, B]</code> といった風に書くことができます。
+YAML 形式で書く場合、文字列は <code>&quot; &quot;</code> がなくても動くことは注意しておきましょう。</p>
+<h3>GraphQL を使ったタグ情報取得</h3>
+<p>GraphQL 上で allMarkdownRemark と markdownRemark というクエリを使えば markdown ファイルを取得できます（前者は全件取得、後者は単一取得でありデータの構造は同じ）。
+frontmatter の情報はその markdown ファイルに含まれているので、</p>
+<pre><code class="language-js">query AllBlogs {
+  blogs: allMarkdownRemark {
+    nodes {
+      frontmatter {
+        tags
+      }
+    }
+  }
+}
+</code></pre>
+<p>といったクエリや</p>
+<pre><code class="language-js">query BlogTemplate($path: String!) {
+  markdownRemark(frontmatter: { path: { eq: $path } }) {
+    frontmatter {
+      tags
+    }
+    tableOfContents(absolute: false)
+  }
+}
+</code></pre>
+<p>といったクエリで取得することができます。
+そしてクエリの結果を仮に data という変数に格納していれば、<code>data.markdownRemark.frontmatter.tags</code> とすればタグ情報が取得できます。（全件取得の場合は map や forEach などで要素にばらしてからアクセスしてください。）</p>
+<h2>タグごとのページを生成する</h2>
+<p>記事に埋め込んだ tag を取得する方法がわかりましたので、その tag を使ってページを作成していきましょう。</p>
+<p>ビルド時に動的にページを作るための仕組みは <a href="https://www.gatsbyjs.org/docs/node-apis/">gatsby-node.js</a> にあります。
+このファイル内で createPages という名前の関数を export しておけば、Gatsby がビルド時に実行してくれます。
+この API の説明 には</p>
+<blockquote>
+<p>Tell plugins to add pages. This extension point is called only after the initial sourcing and transformation of nodes plus creation of the GraphQL schema are complete so you can query your data in order to create pages.</p>
+</blockquote>
+<p>とあり、取得対象のデータを持ってきて(source 系プラグインの責務)、そのデータを Node やそのフィールドに挿入した(transformer 系プラグインの責務)後に呼ばれる処理です。
+そのためこの関数内では加工後の取得対象のデータに対して GraphQL でのデータ取得が可能（正確には GraphQL でのデータ取得が可能になるのはプラグインの恩恵ではなく<a href="https://www.gatsbyjs.org/docs/node-apis/#setFieldsOnGraphQLNodeType">setFieldsOnGraphQLNodeType API</a>の力ですがこの API を transformer 系プラグインから登録していくので、プラグインが GraphQL へのクエリを投げれるように整備してくれているようにエンドユーザーからは見えます。）になっており、この関数内でデータの取得とそのデータに基づいた動的なページ生成を行えます。</p>
+<p>例えばこの Blog では、</p>
+<pre><code class="language-js">const path = require(`path`)
+
+exports.createPages = async ({ actions, graphql, reporter }) =&gt; {
+  const { createPage } = actions
+  const blogPostTemplate = path.resolve(`src/templates/blogTemplate.tsx`)
+  const tagTemplate = path.resolve(`./src/templates/tagTemplate.tsx`)
+
+  const contentsResult = await graphql(`
+    {
+      posts: allMarkdownRemark(
+        sort: { order: DESC, fields: [frontmatter___created] }
+        filter: { fileAbsolutePath: { regex: &quot;/src/contents/&quot; } }
+        limit: 1000
+      ) {
+        edges {
+          node {
+            frontmatter {
+              path
+            }
+          }
+        }
+      }
+      tags: allMarkdownRemark(limit: 1000) {
+        group(field: frontmatter___tags) {
+          tag: fieldValue
+          totalCount
+        }
+      }
+    }
+  `)
+
+  contentsResult.data.tags.group.forEach(data =&gt; {
+    createPage({
+      path: `/tags/${data.tag}`,
+      component: tagTemplate,
+      context: {
+        tag: data.tag,
+      },
+    })
+  })
+
+  contentsResult.data.posts.edges.forEach(({ node }) =&gt; {
+    createPage({
+      path: node.frontmatter.path,
+      component: blogPostTemplate,
+      context: {},
+    })
+  })
+}
+</code></pre>
+<p>といった JS を書いています。
+Gatsby が実行する createPages 関数からは createPage というページを作成する関数が渡されるので、それを GraphQL の取得結果に対して実行することで動的なページ生成を実現しています。</p>
+<p>ということはタグに紐づくページの生成はタグ情報を GraphQL で取得してその結果に対して createPage を実行すれば良いです。</p>
+<p>タグ情報の取得は</p>
+<pre><code class="language-js">allMarkdownRemark(limit: 1000) {
+  group(field: frontmatter___tags) {
+    tag: fieldValue
+         totalCount
+    }
+}
+</code></pre>
+<p>というクエリを投げることで可能です。</p>
+<p>ここにある group は Gatsby に組み込まれた<a href="https://www.gatsbyjs.org/docs/schema-connections/">schema connections</a>という機能です。
+これを使うことでクエリ結果の集約が可能になり、そのタグが何件あるかといった情報を取得することができるようになります。
+例えば Gatsby(3)/NodeJS(5) といった表記が可能になります。
+この group 機能は GraphQL や markdown の plugin によるものではないので見落としがちですが、覚えておきましょう。</p>
+<p>ではタグ情報を取得できるようになったので、タグに紐づくページを作っていきましょう。
+仮にクエリの結果が data という変数に入っているなら、</p>
+<pre><code class="language-js">data.tags.group.forEach(d =&gt; {
+  createPage({
+    path: `/tags/${d.tag}`,
+    component: tagTemplate,
+    context: {
+      tag: d.tag,
+    },
+  })
+})
+</code></pre>
+<p>と書くことでページを作成できます。
+createPage 関数を呼ぶだけでページを作れるのは楽ですね。</p>
+<h3>tag の表記揺れへの対応をしていない理由</h3>
+<p>他の解説記事をみると</p>
+<pre><code class="language-js">const _ = require('lodash')
+
+...
+
+data.tags.group.forEach(d =&gt; {
+  createPage({
+    path: `/tags/${_.kabebCase(d.tag)}`,
+    component: tagTemplate,
+    context: {
+      tag: d.tag,
+    },
+  })
+})
+</code></pre>
+<p>といった風に tag のパスを kabab ケースに変換して表記揺れが起きないようにしているものも見られると思います。
+しかしこのブログではそれは採用しませんでした。
+ビルドは Node.js 上で手元/CI 上で行われるので、変換処理 を採用しても致命的なパフォーマンスロスにはならないとは思ったものの、よく考えるとその記事へのリンクを作るときにその表記揺れ変換処理関数を実行する必要があり、クライアントサイドでのコードサイズの肥大化・クライアントサイドでの実行パフォーマンスの低下が起きるのが見えたからです。
+表記揺れはタグ一覧などを作っておき、そのタグをアルファベット順に並べておけば気付けるはずだし、万が一表記揺れを修正する場合もタグページでブックマークしてる人はおらんやろと思ったので、タグの表記揺れへの対応はしていません。</p>
+<h2>各種 Index ページからタグ情報を取得する</h2>
+<p>記事へのタグ情報付与、タグごとのページ生成ができるようになったので、そのページのスタイリング、もしくは既存ページでのタグ紐付けを行いましょう。</p>
+<h3>記事詳細からタグを取得</h3>
+<p>記事詳細ページにタグ情報を表示させましょう。
+この記事でも上のほうに Gatsby というタグがついているはずです。</p>
+<p>これは簡単で、記事詳細となる template の内の query に tags フィールドを追加するだけです。</p>
+<pre><code class="language-js">export const pageQuery = graphql`
+  query BlogTemplate($path: String!) {
+    markdownRemark(frontmatter: { path: { eq: $path } }) {
+      html
+      frontmatter {
+        path
+        title
+        tags # これを追加
+      }
+    }
+  }
+`
+</code></pre>
+<p>そうすれば、Page コンポーネントであれば、data 変数からアクセスできるクエリ結果に tags が含まれています。</p>
+<p>例えばこのブログでは、</p>
+<pre><code class="language-jsx">&lt;div className={styles.tags}&gt;
+  {markdownRemark.frontmatter.tags.map(
+    tag =&gt;
+      tag &amp;&amp; (
+        &lt;Link to={`/tags/${tag}`}&gt;
+          &lt;a&gt;
+            &lt;Tag className={styles.tag} name={tag}&gt;&lt;/Tag&gt;
+          &lt;/a&gt;
+        &lt;/Link&gt;
+      )
+  )}
+&lt;/div&gt;
+</code></pre>
+<p>として利用しています。</p>
+<h3>記事一覧からタグを取得</h3>
+<p>これも tags のクエリを発行するだけで解決します。
+そのクエリは単一取得用のクエリじゃなくて、全件取得用のクエリでも使えることに留意しておきましょう。</p>
+<pre><code class="language-js">export const pageQuery = graphql`
+  query AllBlogs {
+    allMarkdownRemark {
+      nodes {
+        frontmatter {
+          title
+          path
+          tags
+        }
+      }
+    }
+  }
+`
+</code></pre>
+<p>先ほどの例と違って、markdownRemark ではなく allMarkdownRemark を使っていることに注目しておきましょう。</p>
+<h3>タグごとのページからタグの取得</h3>
+<p>タグごとのページとは、 <code>gatsby-node.js</code> から生成したページです。
+今回の例だと、 /tags/タグ名 でアクセスできるページです。
+これらは動的生成されるページなので何らかのテンプレートを使います。</p>
+<p>そのテンプレートで、記事一覧ページのようなものを作っていきます。
+流し込まれるデータがタグごとの記事であるものの、機能としては記事一覧と全く同じになるはずです。</p>
+<pre><code class="language-js">export const pageQuery = graphql`
+  query TagTemplate($tag: String!) {
+    allMarkdownRemark(
+      limit: 2000
+      filter: { frontmatter: { tags: { in: [$tag] } } }
+    ) {
+      nodes {
+        excerpt
+        frontmatter {
+          title
+          path
+          tags
+        }
+      }
+    }
+  }
+`
+</code></pre>
+<p>ここでは tag が該当のタグかどうかで filter をかけています。
+これにより、その tag を含む記事一覧しかこのページで表示されなくなります。
+またその filter の対象となるタグは $tag として変数化されています。</p>
+<p>そしてこの$tag は gatsby-node.js の createPage の context に埋め込んでおけば参照できます。
+<a href="https://www.gatsbyjs.org/tutorial/part-seven/">公式チュートリアル 7 章</a>を参照すると、</p>
+<pre><code class="language-js">result.data.allMarkdownRemark.edges.forEach(({ node }) =&gt; {
+  createPage({
+    path: node.fields.slug,
+    component: path.resolve(`./src/templates/blog-post.js`),
+    context: {
+      // Data passed to context is available
+      // in page queries as GraphQL variables.
+      slug: node.fields.slug,
+    },
+  })
+})
+</code></pre>
+<p>として変数を埋め込むことができます。
+上の例だと slug 変数をページの中で使えるようになります。
+(この context という仕組みはクエリだけではなく、直接ページ内から<code>data.context.hoge</code>として読み込むこともできます。ビルド時に作ったデータをコンポーネントに繋ぎ込むためのテクニックとして使えるので覚えておきましょう。)
+この仕組みを使うと、 gatsby-node が作るページごとにこの tag も置き換わることもあり、ページごとの結果はそれぞれ絞り込まれた記事の一覧が表示されるようになります。</p>
+<p>(お願い: 単一記事取得の例がそれなのですが、$path も変数として呼べるのはどうしてなんですかね？どうしてこれが context の登録なしで呼べるのでしょうか。Gatsby 側が標準でサポートしているだけなのですが、そのサポートをしている趣旨の記述をドキュメントで見つけることができなかったので何かしらの情報やドキュメントの場所を知っていたら教えて欲しいです。)</p>
+<h3>tag 一覧ページ</h3>
+<p>タグの一覧ページも作りましょう。もちろん一覧ページとしてではなく一覧コンポーネントとして提供したい場合もあると思いますが、基本的には同じように考えてくれると大丈夫です。（いまはページコンポーネント以外からも GraphQL を叩ける <a href="https://www.gatsbyjs.org/blog/2019-02-20-introducing-use-static-query/">useStaticQuery</a> というのがあるのでそれも覚えておこう！）</p>
+<pre><code class="language-jsx">import * as React from &quot;react&quot;
+import { graphql, Link } from &quot;gatsby&quot;
+import Layout from &quot;../components/layout&quot;
+import { TagsQuery } from &quot;../../types/graphql-types&quot;
+
+interface IProps {
+  data: TagsQuery;
+}
+
+const IndexPage: React.FC&lt;IProps&gt; = ({ data }) =&gt; {
+  return (
+    &lt;Layout&gt;
+      &lt;div
+        style={{
+          display: &quot;flex&quot;,
+          flexDirection: &quot;column&quot;,
+          alignItems: &quot;center&quot;,
+        }}
+      &gt;
+        &lt;h2
+          style={{ fontSize: &quot;32px&quot;, marginTop: &quot;32px&quot;, marginBottom: &quot;32px&quot; }}
+        &gt;
+          タグ一覧
+        &lt;/h2&gt;
+        {data.allMarkdownRemark.group.map(tag =&gt; (
+          &lt;Link to={tag.fieldValue ? `/tags/${tag.fieldValue}` : &quot;/&quot;}&gt;
+            &lt;div style={{ marginTop: &quot;12px&quot; }}&gt;
+              &lt;a&gt;
+                {tag.fieldValue}({tag.totalCount})
+              &lt;/a&gt;
+            &lt;/div&gt;
+          &lt;/Link&gt;
+        ))}
+      &lt;/div&gt;
+    &lt;/Layout&gt;
+  )
+}
+
+export const pageQuery = graphql`
+  query Tags {
+    allMarkdownRemark {
+      group(field: frontmatter___tags) {
+        fieldValue
+        totalCount
+      }
+    }
+  }
+`
+
+export default IndexPage
+</code></pre>
+<p>このようにタグの集約クエリを投げて(上の例だと frontmatter の tags で集約している)、その結果でタグ一覧をタグ名と集約した数で表示させてあげれば良いです。</p>
+<h2>おわりに</h2>
+<p>いかがでしたか、意外と手間がかかるタグ機能ですが作り方はなんとなく想像できたでしょうか。
+他の SSG だったり CMS だとこの手の機能がビルトインで提供されているため簡単に実現できるのですが、Gatsby の場合だと自作しないといけなく意外と手間がかかり、さらには Gatsby そのものへの理解が問われたりして、ブログを作ろうとしている人をふるい落としてしまっている関門になっていると思っていました。
+この記事がその関門をくぐるために役立ってくれると嬉しいです。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

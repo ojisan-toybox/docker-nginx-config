@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>はてブのネガティブなコメントからreact-helmetで守る</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="はてブにおけるネガティブなコメントやそれが引き起こす炎上から自分を守るための、そのプロテクト機能をこのブログに実装した話です。">
+    <meta property="og:title" content="はてブのネガティブなコメントからreact-helmetで守る">
+    <meta property="og:image" content="https://blog.ojisan.io//hatebu-helmet/visual.png">
+    <meta property="og:description" content="はてブにおけるネガティブなコメントやそれが引き起こす炎上から自分を守るための、そのプロテクト機能をこのブログに実装した話です。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="はてブのネガティブなコメントからreact-helmetで守る">
+    <meta name="twitter:description" content="はてブにおけるネガティブなコメントやそれが引き起こす炎上から自分を守るための、そのプロテクト機能をこのブログに実装した話です。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-05 18:00</time>
+      <h1>はてブのネガティブなコメントからreact-helmetで守る</h1>
+    </div>
+    <div class="post-contents"><p>はてブにおけるネガティブなコメントやそれが引き起こす炎上から自分を守るための、そのプロテクト機能をこのブログに実装した話です。</p>
+<h2>燃えたくないけど読まれたい</h2>
+<p>私はこのブログを運用する上で 「燃えたくないけど読まれたい」という気持ちを持っています。
+ブログを書くからにはやっぱり反応は欲しいし、たくさんの人に見られたいというのが率直な感想です。
+そのため、燃えるのを防ぐためにも誰かを煽ったり傷つけたりせずに、健全に運営して行こうというのを意識して運営しており、特にその投稿が誰かを傷つけないか・誤った情報を断定的に発信していないかといった自浄的なチェックをしています。
+ただ、どうしても燃えやすい話題もあったり、意図せずに燃えるパターンも見たりはしているので、それについてどう言及して行こうかと言うのを悩んでいました。</p>
+<p>そこで炎上プロテクト機能をブログに組み込んでみることにしました。</p>
+<h2>はてブのコメント欄は非表示にできる</h2>
+<p>はてブ歴が長い人はご存知だと思いますが、はてブのコメント欄は非表示にできます。</p>
+<p><img src="./mienai.png" alt="非表示" /></p>
+<p>これはページの metatag に</p>
+<pre><code class="language-html">&lt;meta name=&quot;Hatena::Bookmark&quot; content=&quot;nocomment&quot; /&gt;
+</code></pre>
+<p>とすることで実現できます。
+詳しくは<a href="https://b.hatena.ne.jp/help/entry/nocomment">公式のヘルプ</a>をご参照ください。</p>
+<p>ただメタタグに書くので SPA などの構成だとアプリケーションの全体にその設定が波及してしまいます。
+<strong>燃えたくないけど読まれたい</strong>といった考えを持つ私にとっては全部をオフにしたくはないです。
+そこで部分的にメタタグを書き換えれる react-helmet を使います。</p>
+<h2>燃えそうな記事だけコメントを非表示にする</h2>
+<h3>react-helmet とは</h3>
+<blockquote>
+<p>This reusable React component will manage all of your changes to the document head.</p>
+</blockquote>
+<p>FYI: https://github.com/nfl/react-helmet</p>
+<p>React アプリケーションで <code>&lt;head&gt;</code>タグを書き換えることができるものです。
+JSX の中に書くので JS の変数を展開できます。</p>
+<p>使い方はシンプルで</p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+import { Helmet } from &quot;react-helmet&quot;
+
+class Application extends React.Component {
+  render() {
+    return (
+      &lt;div className=&quot;application&quot;&gt;
+        &lt;Helmet&gt;
+          &lt;meta charSet=&quot;utf-8&quot; /&gt;
+          &lt;title&gt;My Title&lt;/title&gt;
+          &lt;link rel=&quot;canonical&quot; href=&quot;http://mysite.com/example&quot; /&gt;
+        &lt;/Helmet&gt;
+        ...
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p>のように使います。（公式例）</p>
+<h3>実装例</h3>
+<p>ではこのブログにも react-helmet を適用していきましょう。</p>
+<p>このブログは Gatsby で作られているので SPA ではないのですが、メタタグの埋め込みは react-helmet で行っており、公式の標準構成です。
+OGP 画像がセットされているのもこの react-helmet の恩恵であり、すでに利用しているものです。</p>
+<p>部分的に helmet を適用させたいので、適用したい記事の frontmatter に</p>
+<pre><code class="language-yml">---
+path: /hatebu-helmet
+created: &quot;2020-08-05 18:00&quot;
+title: はてブの炎上をreact-helmetで守る
+visual: &quot;./visual.png&quot;
+tags: [React]
+userId: sadnessOjisan
+isProtect: true
+---
+
+</code></pre>
+<p>という風に isProtect というフラグを渡しておき、</p>
+<p>記事取得のクエリで</p>
+<pre><code class="language-js">export const pageQuery = graphql`
+  query BlogTemplate($path: String!) {
+    post: markdownRemark(frontmatter: { path: { eq: $path } }) {
+      // 省略
+      frontmatter {
+        isProtect
+      }
+    }
+  }
+`
+</code></pre>
+<p>として isProtect のフラグを取得し、記事コンポーネントで</p>
+<pre><code class="language-tsx">post.frontmatter.isProtect &amp;&amp; (
+  &lt;Helmet
+    meta={[
+      {
+        name: &quot;Hatena::Bookmark&quot;,
+        content: &quot;nocomment&quot;,
+      },
+    ]}
+  /&gt;
+)
+</code></pre>
+<p>としてフラグが true のものだけ Helmet を被せると完了です。</p>
+<p>実装としては、</p>
+<ul>
+<li>https://github.com/sadnessOjisan/blog.ojisan.io/blob/master/src/templates/blogTemplate.tsx</li>
+<li>https://raw.githubusercontent.com/sadnessOjisan/blog.ojisan.io/master/src/contents/20200805-hatebu-helmet/index.md</li>
+</ul>
+<p>を参照するとイメージがつきやすいかと思います。</p>
+<h2>これで燃えないから好き放題言ってオーケー？</h2>
+<p>とこれで炎上対策できたので、安全圏から好き放題言えそうなのですが、そうではありません。
+記事本体は大丈夫だけど、代わりにそのブックマークページや魚拓が炎上しているといったものも見たことがあるので、そもそもその投稿が誰かを傷つけないか・誤った情報を断定的に発信していないかといった自浄的なチェックはどちらにせよ必要です。</p>
+<p>更新）ブックマークページへのブックマークも非表示になります。</p>
+<p><img src="./bukumabukuma.png" alt="ブクマのブクマ" /></p>
+<h2>あとがき</h2>
+<p>8/5 から<a href="https://www.amazon.co.jp/gp/video/detail/B088TWX2QS/ref=atv_dp_share_cu_r">プロメア</a>が Amazon Prime で配信されました。
+面白い映画です 🔥🔥🔥</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

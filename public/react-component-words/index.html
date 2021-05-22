@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Reactのコンポーネント周りの用語を整理する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="React のコンポーネント周りの用語ってごっちゃごちゃになった経験はありませんか?">
+    <meta property="og:title" content="Reactのコンポーネント周りの用語を整理する">
+    <meta property="og:image" content="https://blog.ojisan.io//react-component-words/visual.png">
+    <meta property="og:description" content="React のコンポーネント周りの用語ってごっちゃごちゃになった経験はありませんか?">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Reactのコンポーネント周りの用語を整理する">
+    <meta name="twitter:description" content="React のコンポーネント周りの用語ってごっちゃごちゃになった経験はありませんか?">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-20</time>
+      <h1>Reactのコンポーネント周りの用語を整理する</h1>
+    </div>
+    <div class="post-contents"><p>React のコンポーネント周りの用語ってごっちゃごちゃになった経験はありませんか?
+友人と話すときなどはなんとなくのニュアンスで伝わるので気にしていなかったのですが、型注釈つけるときやコードリーディングするときに言葉の定義がわからなくなって何回も調べるといったことをよくやるのでこれを機に整理しようと思います。
+本記事では JSX 以外にも createElement 記法の知識も要するので、自信がない方は<a href="https://ja.reactjs.org/docs/react-without-jsx.html">公式</a>や<a href="/jsx-to-js">どうして JSX を使ってもエラーにならないのか？</a>をご覧ください。</p>
+<p>ここでは</p>
+<ul>
+<li>React のドキュメント
+<ul>
+<li>JSX</li>
+<li>Elements</li>
+<li>Components</li>
+</ul>
+</li>
+<li>TypeScript の型定義
+<ul>
+<li>JSX.Element</li>
+<li>ReactElement
+<ul>
+<li>DetailedReactHTMLElement</li>
+<li>DOMElement</li>
+</ul>
+</li>
+<li>FunctionComponent</li>
+<li>Component</li>
+<li>ReactNode</li>
+<li>ReactChild</li>
+<li>ReactText</li>
+</ul>
+</li>
+</ul>
+<p>について扱います。
+本当はもっとたくさんありますが、自分が混同したり関係ありそうなものだけを恣意的にピックアップしました。
+他にも考慮した方が良いものがありましたら PR などいただけると幸いです。</p>
+<h2>コンポーネントにまつわる用語</h2>
+<p>React 内部の話に入る前に<a href="https://reactjs.org/docs/glossary.html">Glossary of React Terms</a>にで紹介されている概念を復習しましょう。
+なぜならその概念と型定義を対比すると理解が捗るからです。</p>
+<h3>JSX</h3>
+<p>いきなり説明が難しいのがきました。
+一見簡単な用語ですが「どれが JSX か」ではなく、「JSX とは何か」という質問に答えられますか？</p>
+<p>例えば、</p>
+<pre><code class="language-jsx">const A = () =&gt; {
+  return &lt;div&gt;hello&lt;/div&gt;
+}
+</code></pre>
+<p>や</p>
+<pre><code class="language-jsx">&lt;div&gt;hello&lt;/div&gt;
+</code></pre>
+<p>は JSX で書かれているということが分かりますが、内部ではそれぞれ JSX.Element や ReactElement とも呼ばれたりしています。
+それらは JSX と何が違うのでしょうか。
+僕はこの答えに自信を持てないので、公式や具体例を通じて JSX が何かを調べていきましょう。</p>
+<p>JSX が何かということ自体は React の公式ページに書かれています。</p>
+<blockquote>
+<p>JSX is a syntax extension to JavaScript.</p>
+</blockquote>
+<p>「JSX は JS の構文拡張である」と明記されています。
+ただし このドキュメントは JSX の公式ではなくいささか定義に不安が残りました。
+なぜなら例えば JSX がただの syntax extension であるならば React とは独立したものであるはずであり、だとすれば JSX 自体の公式と定義がどこかにあるだろうと考えたからです。
+勉強していた当時は React の公式からはそういった JSX の原点的なものを見つけられず分かりませんでした。（もしいまくまなく探せば見つかるのかも？）
+ただ一応 Facebook 配下の GitHub を漁ってみると、Draft 扱いですが、Spec が見つかるのでそれを見てみましょう。</p>
+<p>JSX の Spec: https://github.com/facebook/jsx</p>
+<p>Spec には、</p>
+<blockquote>
+<p>JSX is an XML-like syntax extension to ECMAScript without any defined semantics.</p>
+</blockquote>
+<p>とあり、ECMAScript に XML のような構文拡張を施した syntax を JSX と読んでいます。</p>
+<p>JSX という言葉自体はあくまで syntax であり、Component や ReactElement と同じくくりで比較するものではないことが分かります。
+この感覚は Elements と JSX の混同を避けるのに役立つので意識するようにしましょう。</p>
+<h3>Elements</h3>
+<p>そして JSX と全く異なるものであるものの外観が似てるものとして Elements があります。</p>
+<p>Elements は、</p>
+<blockquote>
+<p>React elements are the building blocks of React applications. One might confuse elements with a more widely known concept of “components”.</p>
+</blockquote>
+<p>とあり、components の一部であることがわかります。</p>
+<p>たとえば、</p>
+<pre><code class="language-jsx">const el = &lt;div&gt;hello world!&lt;/div&gt;
+</code></pre>
+<p>は Elements ですが、</p>
+<pre><code class="language-jsx">const El = () =&gt; &lt;div&gt;hello world!&lt;/div&gt;
+</code></pre>
+<p>は Elements ではありません。</p>
+<p>この Components と Elements の違いも個人的には混乱ポイントだと思っており、</p>
+<pre><code class="language-tsx">&lt;div&gt;
+  &lt;El&gt;&lt;/El&gt;
+&lt;/div&gt;
+</code></pre>
+<p>のような JSX で書かれたコードを HTML のように解釈すると 「El 要素が〜」って言ってしまい、「あれ El は Element だっけ？」ってなりそうだなと思いました。
+<code>El</code>ではなく<code>&lt;El&gt;&lt;/El&gt;</code>であれば、createElement に変換された後に ReactElement 型(厳密にはそれを継承した別のものが帰ってくるがそれは後述)が戻ってくるので Element と言えなくも無いのですが、React の公式の Elements の定義としては El 自体は当てはまらないので注意しましょう。
+(これに関しては無邪気に Element を 要素と訳すのが悪手な気がする)</p>
+<h3>Components</h3>
+<p>上で触れた El 関数は Components の説明で明らかになります。</p>
+<p>そこには、</p>
+<blockquote>
+<p>React components are small, reusable pieces of code that return a React element to be rendered to the page.</p>
+</blockquote>
+<p>とあり、<strong>Components は React element を返す</strong>ものを指すことが分かります。
+それは関数だったり、 <code>render(){}</code> を実装した クラスとして実装されます。
+いわゆる関数コンポーネントとクラスコンポーネントと呼ばれるものです。</p>
+<h2>これらの区別が役立つ場面</h2>
+<p>例えば、</p>
+<pre><code class="language-tsx">import React from &quot;react&quot;
+import ReactDOM from &quot;react-dom&quot;
+
+const App = () =&gt; &lt;div&gt;hello&lt;/div&gt;
+
+ReactDOM.render(App, document.getElementById(&quot;root&quot;))
+</code></pre>
+<p>のようなコードが</p>
+<pre><code class="language-sh">No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '() =&gt; JSX.Element' is not assignable
+    to parameter of type
+    'ReactElement&lt;any, string | ((props: any) =&gt;
+    ReactElement&lt;any, string | ... | (new (props: any) =&gt;
+    Component&lt;any, any, any&gt;)&gt; | null) | (new (props: any) =&gt;
+    Component&lt;any, any, any&gt;)&gt;[]'.
+</code></pre>
+<p>とミスを報告したときにエラー文を読んで気づけるかもしれません。</p>
+<p>ここで render に必要なのは Components ではなく Elements なので、</p>
+<pre><code class="language-tsx">ReactDOM.render(App, document.getElementById(&quot;root&quot;))
+</code></pre>
+<p>ではなく</p>
+<pre><code class="language-tsx">ReactDOM.render(&lt;App /&gt;, document.getElementById(&quot;root&quot;))
+</code></pre>
+<p>が正解です。</p>
+<p>createElement に変換される必要があるからです。</p>
+<h2>TypeScript における型定義</h2>
+<p>実際にコードを書いたりコードジャンプを繰り返すと上の分類以外にもっと細かく分類されていることに気づくと思います。
+それらについてみていきましょう。</p>
+<h3>JSX.Element</h3>
+<p>先ほど示した</p>
+<pre><code class="language-tsx">import React from &quot;react&quot;
+import ReactDOM from &quot;react-dom&quot;
+
+const App = () =&gt; &lt;div&gt;hello&lt;/div&gt;
+</code></pre>
+<p>の App の戻り値型は JSX.Element です。
+これは React のドキュメントに書かれていた Elements に相当します。</p>
+<p>TypeScript の中でこの JSX という namespace は</p>
+<pre><code class="language-tsx">declare global {
+  namespace JSX {
+    // tslint:disable-next-line:no-empty-interface
+    interface Element extends React.ReactElement&lt;any, any&gt; {}
+    ...
+  }
+}
+</code></pre>
+<p>であることが分かります。</p>
+<p>そしてその ReactElement は</p>
+<pre><code class="language-jsx">interface ReactElement&lt;P = any, T extends string
+| JSXElementConstructor&lt;any&gt; = string | JSXElementConstructor&lt;any&gt;&gt; {
+        type: T;
+        props: P;
+        key: Key | null;
+    }
+</code></pre>
+<p>という定義です。
+この定義については次の節でじっくりみていきます。</p>
+<p>ここで注意したいのは</p>
+<pre><code class="language-jsx">const App = () =&gt; &lt;div&gt;hello&lt;/div&gt;
+</code></pre>
+<p>の App の型は () =&gt; JSX.Element と関数であることです。
+これ自体は JSX.Element ではありません。</p>
+<p>そしてこの App を <code>&lt;App&gt;&lt;/App&gt;</code> として記述することで Babel によって</p>
+<pre><code class="language-js">React.createElement(&quot;div&quot;, null, &quot;&quot;)
+</code></pre>
+<p>といった風に<code>React.createElement()</code>へと変換されます。
+<code>&lt;App&gt;&lt;/App&gt;</code>として初めて JSX.Element として使えるということを覚えておきましょう。</p>
+<h3>ReactElement</h3>
+<p>この ReactElement は下の定義の通りです。</p>
+<pre><code class="language-tsx">interface ReactElement&lt;
+  P = any,
+  T extends string | JSXElementConstructor&lt;any&gt; =
+    | string
+    | JSXElementConstructor&lt;any&gt;
+&gt; {
+  type: T
+  props: P
+  key: Key | null
+}
+</code></pre>
+<p>そして JSXElementConstructor が何を指しているのかをみていくと、</p>
+<pre><code class="language-tsx">type JSXElementConstructor&lt;P&gt; =
+  | ((props: P) =&gt; ReactElement | null)
+  | (new (props: P) =&gt; Component&lt;P, any&gt;)
+</code></pre>
+<p>であることが分かります。</p>
+<h3>JSXElementConstructor</h3>
+<p><code>((props: P) =&gt; ReactElement | null)</code> は関数コンポーネントの型定義、<code>(new (props: P) =&gt; Component&lt;P, any&gt;)</code> はクラスコンポーネントの型定義です。
+TypeScript では new の型を書くことでそのクラスのコンストラクタの型定義を書いたこととなります。</p>
+<p>また ReactElement の定義に JSXElementConstructor が含まれ、JSXElementConstructor の定義に ReactElement が含まれることから、要素は入れ子にできることがわかるはずです。
+つまり</p>
+<pre><code class="language-tsx">&lt;Items&gt;
+  &lt;List&gt;&lt;/List&gt;
+  &lt;List&gt;&lt;/List&gt;
+  &lt;List&gt;&lt;/List&gt;
+&lt;/Items&gt;
+</code></pre>
+<p>といったコードが可能になるわけです。</p>
+<h3>DetailedReactHTMLElement</h3>
+<p>ところで Element(UI ブロックでいう意味でのコンポーネント) は createElement() からも作れます。
+これの戻り値の型は <code>DetailedReactHTMLElement</code> というものです。</p>
+<pre><code class="language-tsx">interface DetailedReactHTMLElement&lt;
+  P extends HTMLAttributes&lt;T&gt;,
+  T extends HTMLElement
+&gt; extends DOMElement&lt;P, T&gt; {
+  type: keyof ReactHTML
+}
+</code></pre>
+<p>これは HTML のキーワードを引数にもらって Element を作る関数なのでそれっぽい型がたくさん含まれています。</p>
+<h4>DOMElement</h4>
+<p>その定義の中の DOMElement は根幹的な役割を担います。</p>
+<pre><code class="language-tsx">// string fallback for custom web-components
+interface DOMElement&lt;
+  P extends HTMLAttributes&lt;T&gt; | SVGAttributes&lt;T&gt;,
+  T extends Element
+&gt; extends ReactElement&lt;P, string&gt; {
+  ref: LegacyRef&lt;T&gt;
+}
+</code></pre>
+<p>というもので、ReactElement を継承しています。
+そのため <code>createElement()</code> から作ったオブジェクトは JSX から作ったものと互換な機能を持つことが分かります。</p>
+<h4>コードジャンプや型検査における利点</h4>
+<p>先ほどは互換性がどうのこうのと言いましたが、<strong>そもそもランタイムにおいては JSX は全て createElement になるので互換性がある</strong>のは当然かなとも思います。
+ただこのように定義されることで createElement から作った Element オブジェクトと JSX から作った Element オブジェクトは TypeScript 上で同じように評価されコードジャンプなどの恩恵が得られます。</p>
+<p>例えば、</p>
+<pre><code class="language-tsx">const jsxel = &lt;div&gt;&lt;/div&gt;
+jsxel.key
+
+const crel = React.createElement(&quot;div&quot;)
+crel.key
+</code></pre>
+<p>という二つの関数を定義して、key からコードジャンプすると、双方とも ReactElement の key にジャンプするはずです。</p>
+<p>JSX の出力結果に型が付くのは開発支援という点では強力だったり、createElement と JSX を混ぜて型検査ができたりするのでそう言った面で役に立つ機能だと思います。</p>
+<h3>FunctionComponent</h3>
+<p>React の型定義で</p>
+<pre><code class="language-tsx">const Hoge:React.FC&lt;IProps&gt; (props) =&gt; {
+  return ...
+}
+</code></pre>
+<p>とする例を見たことがあることがあるかと思います。</p>
+<p><code>React.FC</code> はこうなっています。</p>
+<pre><code class="language-tsx">type FC&lt;P = {}&gt; = FunctionComponent&lt;P&gt;
+
+interface FunctionComponent&lt;P = {}&gt; {
+  (props: PropsWithChildren&lt;P&gt;, context?: any): ReactElement&lt;any, any&gt; | null
+  propTypes?: WeakValidationMap&lt;P&gt;
+  contextTypes?: ValidationMap&lt;any&gt;
+  defaultProps?: Partial&lt;P&gt;
+  displayName?: string
+}
+
+type PropsWithChildren&lt;P&gt; = P &amp; { children?: ReactNode }
+</code></pre>
+<p>このコンポーネントを使う 1 つのメリットとしては children を型推論から得られることが挙げられます。
+それが実現されていることは <code>PropsWithChildren</code> の定義からわかると思います。
+その結果<strong>FunctionComponent は children を props に必ず持ち ReactElement を返すコンポーネント</strong>と言えます。
+普段僕は関数コンポーネントと口で話すときは props に children を含む前提では話していないような気もするのですが、<code>FunctionComponent</code> といえば props に children を含むものなので言葉の使い分けを意識して話していきたいです。</p>
+<h3>Component</h3>
+<p>さて、<code>ReactElement</code> の<code>JSXElementConstructor</code> に含まれていた <code>Component</code> を見てみましょう。(可読性のためにコメントを全部消しています)</p>
+<pre><code class="language-tsx">interface Component&lt;P = {}, S = {}, SS = any&gt;
+  extends ComponentLifecycle&lt;P, S, SS&gt; {}
+class Component&lt;P, S&gt; {
+  static contextType?: Context&lt;any&gt;
+  context: any
+
+  constructor(props: Readonly&lt;P&gt;)
+  constructor(props: P, context?: any)
+  setState&lt;K extends keyof S&gt;(
+    state:
+      | ((prevState: Readonly&lt;S&gt;, props: Readonly&lt;P&gt;) =&gt; Pick&lt;S, K&gt; | S | null)
+      | (Pick&lt;S, K&gt; | S | null),
+    callback?: () =&gt; void
+  ): void
+  forceUpdate(callback?: () =&gt; void): void
+  render(): ReactNode
+  readonly props: Readonly&lt;P&gt; &amp; Readonly&lt;{ children?: ReactNode }&gt;
+  state: Readonly&lt;S&gt;
+  refs: {
+    [key: string]: ReactInstance
+  }
+}
+</code></pre>
+<p>いわゆるクラスコンポーネントですね。
+よく使う <code>render</code>, <code>state</code>, <code>setState</code> があることが確認できます。
+ライフサイクル系は別途 <code>ComponentLifecycle</code> に含まれています。</p>
+<h3>ReactNode</h3>
+<p><code>Component</code>(今の文脈ではクラスコンポーネントを指す) や <code>FunctionComponent</code> で登場した <code>ReactNode</code> とはなんでしょうか。</p>
+<p>これは</p>
+<pre><code class="language-tsx">type ReactNode =
+  | ReactChild
+  | ReactFragment
+  | ReactPortal
+  | boolean
+  | null
+  | undefined
+</code></pre>
+<p>という定義です。
+だんだんと primitive になってきましたね。
+さて、この ReactNode がどこで使われるかというと、<code>createElement</code> の引数です。</p>
+<pre><code class="language-tsx">function createElement&lt;P extends HTMLAttributes&lt;T&gt;, T extends HTMLElement&gt;(
+  type: keyof ReactHTML,
+  props?: (ClassAttributes&lt;T&gt; &amp; P) | null,
+  ...children: ReactNode[]
+): DetailedReactHTMLElement&lt;P, T&gt;
+</code></pre>
+<p>JSX は babel や tsc によって createElement という関数に変換されますが、ここにある children は JSX が入れ子として持つ要素のことです。</p>
+<p>たとえば</p>
+<pre><code class="language-tsx">class Hello extends React.Component {
+  render() {
+    return (
+      &lt;div&gt;
+        hello&lt;span&gt;world!&lt;/span&gt;
+      &lt;/div&gt;
+    )
+  }
+}
+
+const Component: React.FC = () =&gt; {
+  return (
+    &lt;div&gt;
+      hello world
+      &lt;Hello&gt;&lt;/Hello&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>のようなコードはトランスパイルすると</p>
+<pre><code class="language-js">const React = __importStar(require(&quot;react&quot;))
+class Hello extends React.Component {
+  render() {
+    return React.createElement(
+      &quot;div&quot;,
+      null,
+      &quot;hello&quot;,
+      React.createElement(&quot;span&quot;, null, &quot;world!&quot;)
+    )
+  }
+}
+const Component = () =&gt; {
+  return React.createElement(
+    &quot;div&quot;,
+    null,
+    &quot;hello world&quot;,
+    React.createElement(Hello, null)
+  )
+}
+</code></pre>
+<p>となり、たとえば Hello コンポーネントの例で言えば ...children: ReactNode[] は <code>&quot;hello&quot;</code>といった文字列 や <code>React.createElement(&quot;span&quot;, null, &quot;world!&quot;)</code> といった DetailedReactHTMLElement(ReactElement を継承している)を指します。</p>
+<p>そのため React を書くときに意識する型になると思うので、何から構成されているかは把握しておくと良いでしょう。</p>
+<h3>ReactChild</h3>
+<p><code>ReactNode</code> に含まれる <code>ReactChild</code> を見てみましょう。</p>
+<pre><code class="language-tsx">type ReactChild = ReactElement | ReactText
+</code></pre>
+<p>Child という名前から<code>props.children</code>に関係がある何かかもしれないと思うかもしれませんが、直接は関係ないので注意しましょう。
+props.children の型は ReactNode です。
+ファイル内検索をしてみると、<code>ReactChild</code> は <code>ReactNode</code> の型定義で使われているだけであることが分かります。</p>
+<p>とはいえ ReactNode の型定義の上で、ReactNode 以外の<code>ReactFragment| ReactPortal | boolean | null | undefined</code> が children として展開されることはそうそう無いと思うので、実質的には ReactNode 型である props.children に入るものは <code>ReactChild</code> と言えるかもしれません。</p>
+<h3>ReactText</h3>
+<pre><code class="language-tsx">type ReactText = string | number
+</code></pre>
+<p>primitive なものを 2 つ組み合わせただけのものです。
+この定義があるからこそ return の中で</p>
+<pre><code class="language-jsx">class Hoge extends React.Component {
+  render() {
+    return &quot;1&quot;
+  }
+}
+
+const Hoge2 = () =&gt; {
+  return 1
+}
+
+const Hoge3 = () =&gt; {
+  return &lt;div&gt;1&lt;/div&gt;
+}
+</code></pre>
+<p>といったことができるようになります。</p>
+<p>つまりコンポーネントそれ自体の返り値や、コンポーネント(Class Component と区別するためにわざとカタカナで表記)の children としてコンポーネント 以外にも primitive なものを含められるようになります。
+ただし関数コンポーネントの場合、戻り値に <code>:React.FC</code> をつけていると primitive な値を関数から返すと型検査に失敗するので注意しましょう。</p>
+<h2>まとめ</h2>
+<p>依存関係と入出力を整理するとこういう形になると思います。</p>
+<p><img src="./visual.png" alt="依存図" /></p>
+<h2>これを知って何がうれしいか？</h2>
+<p>知らなくても「要素」という言葉で一括りにしてしまえばなんだかんだでコミュニケーションには困らないかなとも思ったりはしているのですが、個人的にはライブラリを読むときとかに結構役に立っています。
+戻り値の型と引数を見比べるときなどに見通しが少し良くなります。
+あと型注釈をつけて想像と違った時に自分が悪いか元あるコードのどっちが悪いかと一歩立ち止まる機会も得られます。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

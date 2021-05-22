@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>luxon 使ってみた</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="「何を今さら」って感じのタイトルですが、最近 初めて luxon を使うことがありまして「へぇ〜〜〜」って思ったことが色々あったのでまとめていきます。">
+    <meta property="og:title" content="luxon 使ってみた">
+    <meta property="og:image" content="https://blog.ojisan.io//luxon-tukattemita/visual.png">
+    <meta property="og:description" content="「何を今さら」って感じのタイトルですが、最近 初めて luxon を使うことがありまして「へぇ〜〜〜」って思ったことが色々あったのでまとめていきます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="luxon 使ってみた">
+    <meta name="twitter:description" content="「何を今さら」って感じのタイトルですが、最近 初めて luxon を使うことがありまして「へぇ〜〜〜」って思ったことが色々あったのでまとめていきます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-20</time>
+      <h1>luxon 使ってみた</h1>
+    </div>
+    <div class="post-contents"><p>「何を今さら」って感じのタイトルですが、最近 初めて <a href="https://moment.github.io/luxon/">luxon</a> を使うことがありまして「へぇ〜〜〜」って思ったことが色々あったのでまとめていきます。
+当方 moment, dayjs しか使ったことがなかったので、「こういう差分があるんだなぁ」と学んだという話です。</p>
+<h2>immutable</h2>
+<p>moment では、</p>
+<pre><code class="language-js">const now = moment()
+console.log(&quot;now&quot;, now)
+const addNow = now.add(1, &quot;days&quot;) // これをやるとnowそのものが書き換わるから注意！
+console.log(&quot;addNow&quot;, addNow)
+
+// now Moment&lt;2020-11-20T17:02:09+09:00&gt;
+// addNow Moment&lt;2020-11-21T17:02:09+09:00&gt;
+</code></pre>
+<p>などとすると、now も変更されていました。</p>
+<p>console.log の位置を変えると、</p>
+<pre><code class="language-js">const now = moment()
+const addNow = now.add(1, &quot;days&quot;) // これをやるとnowそのものが書き換わるから注意！
+console.log(&quot;now&quot;, now)
+console.log(&quot;addNow&quot;, addNow)
+
+// now Moment&lt;2020-11-21T17:00:54+09:00&gt;
+// addNow Moment&lt;2020-11-21T17:00:54+09:00&gt;
+</code></pre>
+<p>として表示されます。</p>
+<p>一方で luxon だと</p>
+<pre><code class="language-js">const luxon = require(&quot;luxon&quot;)
+
+const now = luxon.DateTime.local()
+console.log(&quot;now&quot;, now)
+const addNow = now.plus(1, &quot;days&quot;)
+console.log(&quot;addNow&quot;, addNow)
+</code></pre>
+<p>としても now は変更されません。</p>
+<p>moment の後継ライブラリは基本的に immutable になっています。</p>
+<h2>デフォルトインポートした関数を使えない</h2>
+<p>moment や dayjs は日付オブジェクトを作成するとき、</p>
+<pre><code class="language-js">const now = moment()
+console.log(&quot;now&quot;, now)
+</code></pre>
+<p>などとできますが、luxon では DateTime というクラス（と呼んでいいかは知らないけど）を使って作る必要があります。</p>
+<pre><code class="language-js">const luxon = require(&quot;luxon&quot;)
+
+const now = luxon.DateTime.local()
+console.log(&quot;now&quot;, now)
+</code></pre>
+<p>dayjs も moment も inport したモジュールから直接オブジェクトを作れていたのでこの挙動は最初はハマりました。</p>
+<h2>比較関数がない</h2>
+<p>DateTime にはいわゆる isAfter や isBefore のような関数が存在しません。
+一応そのようなインターフェースは <a href="https://moment.github.io/luxon/docs/class/src/interval.js%7EInterval.html">Interval</a> というパッケージに含まれていますが、これは moment-range 相当のものですのでただ比較するだけに持ち出すのはオーバーなものです。
+それに <a href="https://moment.github.io/luxon/docs/manual/math.html#comparing-datetimes">公式</a> の推奨方法は違ったものです。
+それはただ</p>
+<pre><code class="language-js">d1 &lt; d2
+</code></pre>
+<p>とするだけです。(d1, d2 は DateTime 型)</p>
+<p>DateTime 型は valueOf としてタイムスタンプへの変換が実装されており、それは比較前に実行されるのでこのような比較方法でも前後を比較できます。</p>
+<p>FYI: <a href="https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/Object/valueOf">Object.prototype.valueOf()</a></p>
+<p>FYI: <a href="https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Operators/Comparison_Operators">比較演算子</a></p>
+<h2>date(日付) だけにフォーマットできる</h2>
+<p>YYYY-MM-DD 形式で取得するとき、moment だと</p>
+<pre><code class="language-js">// 日付までを表記
+const formatDate = moment().format(&quot;YYYY-MM-DD&quot;)
+console.log(&quot;formatDate&quot;, formatDate)
+</code></pre>
+<p>としていたものが、</p>
+<pre><code class="language-js">// 日付までを表記
+const formatDate = now.toISODate()
+console.log(&quot;formatDate&quot;, formatDate)
+</code></pre>
+<p>として取得できて便利でした。
+カレンダー作るときとかに使えますね。</p>
+<h2>timezone は標準で扱える</h2>
+<p>moment だと<code>require(&quot;moment-timezone&quot;);</code> とすることで、<code>.tz</code>を生やしていました。</p>
+<pre><code class="language-js">const samoa = utc.tz(&quot;Pacific/Apia&quot;)
+console.log(&quot;samoa&quot;, samoa)
+</code></pre>
+<p>それが luxon では setZone として標準で使えます。</p>
+<pre><code class="language-js">const samoa = now.setZone(&quot;Pacific/Apia&quot;)
+console.log(&quot;samoa&quot;, samoa)
+</code></pre>
+<p>便利。</p>
+<h2>まとめ</h2>
+<p>dayjs が割と moment 気分で使えることもあり、そのようなインターフェースに慣れ切っていた自分にとって luxon は調べながらでないと満足にコードを書けなくて少し辛かったのですが、使い方さえ覚えたら moment より便利になっているなぁと感じられました。
+ただ自分は moment のインターフェースに慣れ切っているので dayjs の方を好んで使うかなぁと思います。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

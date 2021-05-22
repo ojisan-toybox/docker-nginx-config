@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>gatsby-plugin-netlify-cacheのキャッシュが効かない</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="今朝更新した Gatsby 製サイトを Netlify にデプロイする前に見ておきたい設定 2 つ（ビルドと表示）">
+    <meta property="og:title" content="gatsby-plugin-netlify-cacheのキャッシュが効かない">
+    <meta property="og:image" content="https://blog.ojisan.io//gatsby-meet-netlify-botsu/visual.png">
+    <meta property="og:description" content="今朝更新した Gatsby 製サイトを Netlify にデプロイする前に見ておきたい設定 2 つ（ビルドと表示）">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="gatsby-plugin-netlify-cacheのキャッシュが効かない">
+    <meta name="twitter:description" content="今朝更新した Gatsby 製サイトを Netlify にデプロイする前に見ておきたい設定 2 つ（ビルドと表示）">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-03 18:00</time>
+      <h1>gatsby-plugin-netlify-cacheのキャッシュが効かない</h1>
+    </div>
+    <div class="post-contents"><p>今朝更新した <a href="/gatsby-meet-netlify">Gatsby 製サイトを Netlify にデプロイする前に見ておきたい設定 2 つ（ビルドと表示）</a>の<a href="https://github.com/sadnessOjisan/blog.ojisan.io/pull/61/commits/3a621e73f835bc10be92a13f4f24d70791d4dda5">ボツ原稿</a>です。
+この記事では Netlify でのビルドキャッシュを使う方法を紹介しました。
+そこでは <a href="https://github.com/jlengstorf/netlify-plugin-gatsby-cache">netlify-plugin-gatsby-cache</a> という Netlify のプラグインを紹介してビルド時間が 10 分 =&gt; 1 分 になったことを紹介しましたが、実はこの原稿を書いている時は <a href="https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/">gatsby-plugin-netlify-cache</a>を使って 10 分 =&gt; 9 分 にしか減らなくて「記事書けないどうしよう」となっていました。</p>
+<p>ややこしいですが、<a href="https://github.com/jlengstorf/netlify-plugin-gatsby-cache">netlify-plugin-gatsby-cache</a> と <a href="https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/">gatsby-plugin-netlify-cache</a>は別物で、<a href="https://github.com/jlengstorf/netlify-plugin-gatsby-cache">netlify-plugin-gatsby-cache</a>は netlify plugin, <a href="https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/">gatsby-plugin-netlify-cache</a>は gatsby plugin です。</p>
+<h2>gatsby-plugin-netlify-cache とは</h2>
+<p><a href="https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/">gatsby-plugin-netlify-cache</a> は Gatsby 公式の plugin です。</p>
+<blockquote>
+<p>This plugin caches your build files locally or in the Netlify cache directory. It will massively speed up subsequent builds.</p>
+</blockquote>
+<p>とあり、Netlify 側でキャッシュできるようにしてくれるものです。</p>
+<p>Netlify では <code>/opt/build/cache/</code> に置かれたファイルはビルドを跨いで使い回すことができるらしく、そこにキャッシュしたいファイルを置くのがこのプラグインです。
+このプラグインはデフォルトで <code>.cache</code> と <code>public</code> を置いてくれます。</p>
+<p>しかし説明には</p>
+<blockquote>
+<p>It automatically restores your cache and caches new files within the Netlify cache folder. This folder is undocumented but works fine. To reset the cache, hit the Clear build cache checkbox in the Netlify app.</p>
+</blockquote>
+<p>とあり、undocumented な機能を使おうとしていて危険な香りはします。</p>
+<h2>gatsby-plugin-netlify-cache でキャッシュできない？</h2>
+<p>とりあえず使ってみましょう。</p>
+<h3>plugin を使ってみる</h3>
+<p>入れて設定ファイルを書くだけでキャッシュされるようになります。</p>
+<pre><code class="language-sh">$ yarn add -D gatsby-plugin-netlify-cache
+</code></pre>
+<pre><code class="language-js:title=gatsby-config.js">plugins: [
+  {
+    resolve: &quot;gatsby-plugin-netlify-cache&quot;,
+    options: {
+      cachePublic: true,
+    },
+  },
+]
+</code></pre>
+<h3>計測してみよう</h3>
+<p>この Plugin を入れた次のビルドがこのビルドです。</p>
+<p>FYI: https://app.netlify.com/sites/amazing-goodall-59e3b0/deploys/5f2700f1852d670008cdf92b</p>
+<p>ビルドに 9 分ほどかかっており、全然時間を節約できていません。</p>
+<p><img src="log.png" alt="計測写真" /></p>
+<p>このログの写真にあるように、</p>
+<pre><code class="language-sh">3:10:17 AM: plugin-netlify-cache: Restoring 124 cached files for public directory with 0 already existing files.
+3:10:18 AM: plugin-netlify-cache: Restoring 48 cached files for .cache directory with 1 already existing files.
+</code></pre>
+<p>といった感じで、全然キャッシュにヒットしていません。
+ただキャッシュ自体はできています。</p>
+<h2>Issue をみてみる</h2>
+<p>さすがに Issue になってるでしょと思って調べてみたら案の定ありました。</p>
+<p>FYI: https://github.com/axe312ger/gatsby-plugin-netlify-cache/issues/25#issuecomment-623491562</p>
+<p>cache の永続化ができないとのことですが、どうやら Gatsby 側の変更が原因のようです。</p>
+<p>FYI: <a href="https://github.com/gatsbyjs/gatsby/issues/23365">Jobs API v2 breaks caching plugins</a></p>
+<p>詳しい原因はわからないものの、</p>
+<blockquote>
+<p>For what it's worth, Netlify just published a gatsby cache plugin. It does nothing else than persist/restore .cache and /public so it's not really doing much that this plugin.</p>
+</blockquote>
+<p>とあるとおり Netlify がプラグインを出したからそちらを使いなよとのことでそちらを使うことで解消しました。</p>
+<p>Gatsby 側に立ってる Issue はまだ解消されていないようかつ、同じバグ報告が複数上がっているので、しばらく Netlify プラグインを使うようにしました。</p>
+<h2>まとめ</h2>
+<p><a href="https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/">gatsby-plugin-netlify-cache</a>はいま動かないので<a href="https://github.com/jlengstorf/netlify-plugin-gatsby-cache">netlify-plugin-gatsby-cache</a>を使いましょう。(もし動かせる方法があるなら DM か Issues などで教えていただけると幸いです。)</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

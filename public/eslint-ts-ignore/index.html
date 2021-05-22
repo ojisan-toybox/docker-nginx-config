@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>TypeScript と ESLint における検査エラーを無視したい時のおまじないまとめ</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="ESLint にも TypeScript にも「ルールを設定してみたけど、いざ運用するとなるとエラー出ちゃった。これ動作確認して欲しいのにデプロイが CI に弾かれちゃう。うーん、ごまかしちゃえ(てへぺろ)」って時などに使えるハッチが存在しています。ファイル単位・ブロック単位・行単位でそれぞれいろいろな方法があるのでそれらをまとめます。">
+    <meta property="og:title" content="TypeScript と ESLint における検査エラーを無視したい時のおまじないまとめ">
+    <meta property="og:image" content="https://blog.ojisan.io//eslint-ts-ignore/visual.png">
+    <meta property="og:description" content="ESLint にも TypeScript にも「ルールを設定してみたけど、いざ運用するとなるとエラー出ちゃった。これ動作確認して欲しいのにデプロイが CI に弾かれちゃう。うーん、ごまかしちゃえ(てへぺろ)」って時などに使えるハッチが存在しています。ファイル単位・ブロック単位・行単位でそれぞれいろいろな方法があるのでそれらをまとめます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="TypeScript と ESLint における検査エラーを無視したい時のおまじないまとめ">
+    <meta name="twitter:description" content="ESLint にも TypeScript にも「ルールを設定してみたけど、いざ運用するとなるとエラー出ちゃった。これ動作確認して欲しいのにデプロイが CI に弾かれちゃう。うーん、ごまかしちゃえ(てへぺろ)」って時などに使えるハッチが存在しています。ファイル単位・ブロック単位・行単位でそれぞれいろいろな方法があるのでそれらをまとめます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-23</time>
+      <h1>TypeScript と ESLint における検査エラーを無視したい時のおまじないまとめ</h1>
+    </div>
+    <div class="post-contents"><p>ESLint にも TypeScript にも「ルールを設定してみたけど、いざ運用するとなるとエラー出ちゃった。これ動作確認して欲しいのにデプロイが CI に弾かれちゃう。うーん、ごまかしちゃえ(てへぺろ)」って時などに使えるハッチが存在しています。ファイル単位・ブロック単位・行単位でそれぞれいろいろな方法があるのでそれらをまとめます。</p>
+<h2>TypeScript</h2>
+<h3>word 単位で無視する</h3>
+<p>ご存知の通り as や any が使えます。</p>
+<h3>行単位で無視する</h3>
+<p><code>@ts-ignore</code> で抑制できます。</p>
+<p>TS2.6 からの機能で<a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-6.html#suppress-errors-in-ts-files-using--ts-ignore-comments">Suppress errors in .ts files using ’// @ts-ignore’ comments</a>によると、</p>
+<blockquote>
+<p>TypeScript 2.6 support suppressing errors in .js files using // @ts-ignore comments placed above the offending lines.</p>
+</blockquote>
+<p>とあり エラーが起きている箇所の上に <code>@ts-ignore</code> と書くとその箇所のエラーを抑制できます。</p>
+<h4>React Element(JSX) に対して抑制したい</h4>
+<p><code>render</code> や <code>return</code> の中では コメントを書くのが難しいかもしれません。
+例えば、</p>
+<pre><code class="language-tsx">const Hoge = () =&gt; {
+  return (
+    &lt;div&gt;
+      // ここに ignore を入れたい(例えば存在しないpropsが含まれている)
+      &lt;HogeChild
+        type=&quot;admin&quot;
+        user={user}
+        items={items}
+        handleClick={handleClick}
+      /&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>といった場合です。
+JSX の中では <code>//</code> が文字列として認識されることもあります。</p>
+<p>そのときは</p>
+<pre><code class="language-tsx">const Hoge = () =&gt; {
+  return (
+    &lt;div&gt;
+      {/* @ts-ignore としましょう */}
+      &lt;HogeChild
+        type=&quot;admin&quot;
+        user={user}
+        items={items}
+        handleClick={handleClick}
+      /&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>とします。</p>
+<p><code>{/* @ts-ignore */}</code> と言ったように <code>{}</code> で JS の式を入れられるようにして、そこに <code>@ts-ignore</code> を埋め込みましょう。ここで注意なのが <code>{/* //@ts-ignore */}</code> ではないことです。<strong><code>//</code>は不要</strong>です。むしろ<code>//</code>を入れると ignore がうまく働きません。</p>
+<h3>ファイル単位で無視する</h3>
+<p><code>// @ts-nocheck</code> で抑制できます。</p>
+<p>TS3.7 からの機能で<a href="https://devblogs.microsoft.com/typescript/announcing-typescript-3-7-beta/">Announcing TypeScript 3.7 Beta</a>によると、</p>
+<blockquote>
+<p>TypeScript 3.7 allows us to add // @ts-nocheck comments to the top of TypeScript files to disable semantic checks. Historically this comment was only respected in JavaScript source files in the presence of checkJs, but we’ve expanded support to TypeScript files to make migrations easier for all users.</p>
+</blockquote>
+<p>とあり、TS ファイルの先頭に <code>// @ts-nocheck</code> とつけることでそのファイルの型検査を無視することができます。</p>
+<h3>ブロック単位で無視する</h3>
+<p>というのはできなさそうです。<code>no-nocheck</code> だけでは足りないという意見は出ているのでもしかしたら将来的には・・・（？）</p>
+<p>FYI: https://github.com/Microsoft/TypeScript/issues/19573</p>
+<h2>ESLint</h2>
+<p>公式の<a href="https://eslint.org/docs/user-guide/configuring.html#disabling-rules-with-inline-comments">Disabling Rules with Inline Comments</a> にある程度まとまっていますが、補足したいことがいくつかあるのでそれらを加えながらまとめます。</p>
+<h3>ファイル単位で無視する</h3>
+<p>2 つの方法があります。</p>
+<h4>.eslintignore で指定する</h4>
+<p><code>.eslintignore</code> に書いたファイル名は検査から除外されます。
+ファイル名だけでなく glob 記法も使えます。</p>
+<p>これは手軽で便利なのですがあまりお勧めはしません。
+追加したことを忘れていたらずっと無視され続けるからです。
+.eslintignore はそんなに定期的に見直すものでもないのでエラーを抑制したことを忘れてしまうことは十分に考えられます。</p>
+<h4>eslint-disable を付ける</h4>
+<p><code>/* eslint-disable */</code> を先頭につけたファイルは検査から除外されます。
+ファイル単位で無視したいときはこの方法が良いと思います。</p>
+<h3>ルール単位で無視する</h3>
+<p><code>/* eslint ルール名: 0|1|2 */</code> をファイル先頭に書くことで制御できます。
+ESLint の rule の設定そのものを書けるので、ここで 0(つまり off)を指定すればエラーを抑制できます。
+もちろん、<code>0|1|2</code> ではなく<code>&quot;off&quot;</code>,<code>&quot;warn&quot;</code>,<code>&quot;error&quot;</code>で書いても良いです。</p>
+<h3>行単位で無視する</h3>
+<p><code>eslint-disable-next-line</code> を使って下の行のエラーをピンポイントで抑制できます。</p>
+<pre><code class="language-js">// eslint-disable-next-line
+hoge
+</code></pre>
+<p>また、eslint-disable-line とすれば同一行のエラーを抑制できます。</p>
+<pre><code class="language-js">hoge // eslint-disable-line
+</code></pre>
+<p>またコメントの後ろにルール名を書けばそのルールだけをピンポイントで抑制できます。</p>
+<pre><code class="language-js">// eslint-disable-next-line ルール名
+hoge
+
+fuga // eslint-disable-line ルール名
+</code></pre>
+<h3>ブロック単位で無視する</h3>
+<p><code>eslint-disable</code> と <code>eslint-enable</code> で囲った範囲はそこだけエラーを抑制できます。</p>
+<pre><code class="language-js">/* eslint-disable ルール名 */
+hoge
+fuga
+/* eslint-enable ルール名 */
+piyo
+</code></pre>
+<h3>複数のルールを対応する場合</h3>
+<p><code>/* eslint ルール名: 0|1|2 */</code> も <code>// eslint-disable-next-line ルール名</code> も <code>/* eslint-disable ルール名 */</code> も <code>/* eslint-enable ルール名 */</code> も単一のルールに対しての書き方です。
+複数のルールに対して制御したい場合はどうすればいいでしょうか。</p>
+<p>それは、<strong>ルールを単にコンマでつなげるだけ</strong>で良いです。</p>
+<p>つまり、たとえば行単位での無視の場合</p>
+<pre><code class="language-js">alert(&quot;foo&quot;) // eslint-disable-line no-alert, quotes, semi
+
+// eslint-disable-next-line no-alert, quotes, semi
+alert(&quot;foo&quot;)
+</code></pre>
+<p>とすれば良いです。</p>
+<p>同様に ブロック単位の無視においては</p>
+<pre><code class="language-js">/* eslint-disable no-alert, no-console */
+
+alert(&quot;foo&quot;)
+console.log(&quot;bar&quot;)
+
+/* eslint-enable no-alert, no-console */
+</code></pre>
+<p>とすれば良いです。</p>
+<p><code>/* eslint ルール名: 0|1|2 */</code>　を複数対応するときは少し記法が変わり、</p>
+<p><code>/* eslint ルール名: 0, ルール名: 1 */</code> とします。例えば、<code>/* eslint eqeqeq: 0, curly: 1 */</code>となります。</p>
+<p>FYI: https://eslint.org/docs/user-guide/configuring.html#disabling-rules-with-inline-comments</p>
+<h3>コメントの種類に注意！</h3>
+<p>抑制するコメントに使うコメントタイプが <code>/* */</code> なのか <code>//</code> なのかは意識しておきましょう。
+<code>//</code> は行単位の抑制でしか使いません。反対に <code>/* */</code> は行単位でもファイル単位でもブロック単位でも使えます。
+disable したのに想定通りの挙動にならない時の犯人はこの取り違いだったりします。
+基本的には <code>/* */</code> を使うようにしておけばこのミスにはハマりにくいです。</p>
+<h2>ルール設定するなら誤魔化すなよとはいえ・・・？</h2>
+<p>僕はどちらかと言うとこういう誤魔化しは <strong>「「「だめっ！」」」</strong> という立場なのですが、実際には「次の要件でこういう機能実装しないといけないから実現可能かちょっと試したい」や「認識合わせのために制作途中のものを開発環境にデプロイしたい」といった <strong>カジュアルなビルドは通したいニーズ</strong>というのはあったりして、こういうときはいちいち型合わせたりルールを遵守したりというのはしなくて良いと思うので、検査エラーを抑制する方法は知っといた方が嬉しかったりします。</p>
+<p>もちろん恒久的にはルールに適合するコードを書く努力やルールそのものの見直しの方が大切だと思います。</p>
+<h2>参考にしたもの</h2>
+<ul>
+<li>https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-6.html</li>
+<li>https://github.com/Microsoft/TypeScript/issues/19573</li>
+<li>https://devblogs.microsoft.com/typescript/announcing-typescript-3-7-beta/</li>
+<li>https://eslint.org/docs/user-guide/configuring.html#disabling-rules-with-inline-comments</li>
+<li>https://qiita.com/nju33/items/2d0cfea4fffbfdbff87a</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Hover時に他の要素にスタイルを当てたい</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="(iframe の実験用の記事)Twitter のメニューなどそうなのですが、Hover した要素の中や隣接した要素のスタイルが変わるデザインってありますよね。">
+    <meta property="og:title" content="Hover時に他の要素にスタイルを当てたい">
+    <meta property="og:image" content="https://blog.ojisan.io//hover-next-style/visual.png">
+    <meta property="og:description" content="(iframe の実験用の記事)Twitter のメニューなどそうなのですが、Hover した要素の中や隣接した要素のスタイルが変わるデザインってありますよね。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Hover時に他の要素にスタイルを当てたい">
+    <meta name="twitter:description" content="(iframe の実験用の記事)Twitter のメニューなどそうなのですが、Hover した要素の中や隣接した要素のスタイルが変わるデザインってありますよね。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-01</time>
+      <h1>Hover時に他の要素にスタイルを当てたい</h1>
+    </div>
+    <div class="post-contents"><p>(iframe の実験用の記事)</p>
+<p>Twitter のメニューなどそうなのですが、Hover した要素の中や隣接した要素のスタイルが変わるデザインってありますよね。
+↓ こういうの ↓</p>
+<p><img src="cursor.png" alt="Twitterのメニューのホバー時デザイン" /></p>
+<p>これって実装しようとしたらちょっとめんどくさそうじゃないですか。
+hover した要素を光らせるだけでよさそうなものの、実際は hover 可能な領域が光らせる領域より広いため、hover 属性を使えば解決というわけではありません。</p>
+<p>こういうデザインを作る一つの例としては、コンポーネントに状態を持たせて hover してるかどうかを管理し、その状態に合わせて動的に class や CSS を書き換える方法があります。</p>
+<p>?????????????????????</p>
+<p>はい、「直下要素を使え」、そうですね。
+JS を使わなくても大丈夫なやつでした。</p>
+<p><strong>state を利用した動的なスタイル変更は楽なのでついやってしまいがちですが、これは CSS のセレクタだけで解決できる問題です</strong>。</p>
+<p>※ちなみ Twitter は動的に JS でスタイルを書き換えています。自分も動的にスタイルを書き換えていました（すみません・・・）</p>
+<h2>CSS セレクタ</h2>
+<p>さきほどの Twitter の例は簡略に書くとこのように <code>div:hover &gt; span</code> とすると、CSS だけでスタイルを当てることができます。
+box を hover したときにその中にある文字にだけスタイルを当てます。</p>
+<iframe
+     src="https://codesandbox.io/embed/twitternoli-y6zc2?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="Twitterの例"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-autoplay allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+   ></iframe>
+<p>この <code>:hover</code> も 「hover したとき」 と考えると、分かりやすいです。
+<code>:hober &gt; div</code> なら 「hover したときその子供に〜」と考えられます。</p>
+<p>hover したときにどうするかは CSS セレクタの種類を覚えておく必要があります。
+<a href="https://webllica.com/css-combinators/">ここの記事</a>が完結にまとまってて分かりやすいので、慣れていない人は見ておくとよいでしょう。
+CSS に隣接セレクタ・直下セレクタ・間接セレクタがあります。
+これらのセレクタを使うことで、該当要素の隣接要素や子要素にスタイルを当てられます。</p>
+<p>たとえば、</p>
+<p><code>:hober + div</code> なら hover した要素の隣接する div 要素ひとつのみにスタイルを当てる、<code>:hober ~ div</code> なら hover した要素の隣接する div 要素すべてにスタイルを当てる、<code>:hober &gt; div</code> なら hover した要素の直下の子要素すべてにスタイルを当てる</p>
+<p>となります。</p>
+<h2>光らせてみた</h2>
+<p>で、:hover を「hover したとき」と考えると比較的何でもありなことができるようになります。
+たとえば nth を使えば hover 時に規則を持って要素のスタイルを<strong>JS を使わずに</strong>書き換えることができることもできます。</p>
+<p>たとえば以下の例では、Hover したら 2, 3, 4 の倍数ごとに光を切り替えられます。
+高速に hover in/out すると目がチカチカします。</p>
+<iframe
+     src="https://codesandbox.io/embed/metutiyahikaru-jvchn?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="めっちゃひかる"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-autoplay allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+   ></iframe>
+<p>CSS にはそのうち親の要素に遡ってスタイルを当てられるようになる<a href="https://developer.mozilla.org/ja/docs/Web/CSS/:has">夢の仕様</a>があり、 これがブラウザに実装されると hover したところを起点にいろんなものを光らせられるようになるので、pad 演奏 アプリが作りやすくなりそうだなーと妄想していたりします。（UI の書き換えによる JS の実行を削って、Audio の処理にリソースを割ける）。</p>
+<p>↓ こういうのを CSS だけで作りたい ↓</p>
+<iframe src="https://www.youtube.com/embed/DpFkeoUU5VE" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen id="youtube"></iframe>
+<p>以上、hover の状態を使ってスタイルを書き換える必要があるとき、隣接・子要素なら CSS だけでできるので、動的な CSS は使わなくても良いよ（というよりやるな！）という自戒記事でした〜</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

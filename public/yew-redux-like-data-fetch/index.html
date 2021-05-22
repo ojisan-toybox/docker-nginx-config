@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>yew での data fetch を redux っぽくやる</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="yew の next バージョンの公式チュートリアルに data fetch に関する記述がある">
+    <meta property="og:title" content="yew での data fetch を redux っぽくやる">
+    <meta property="og:image" content="https://blog.ojisan.io//yew-redux-like-data-fetch/visual.png">
+    <meta property="og:description" content="yew の next バージョンの公式チュートリアルに data fetch に関する記述がある">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="yew での data fetch を redux っぽくやる">
+    <meta name="twitter:description" content="yew の next バージョンの公式チュートリアルに data fetch に関する記述がある">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-03-15</time>
+      <h1>yew での data fetch を redux っぽくやる</h1>
+    </div>
+    <div class="post-contents"><p>yew の <a href="https://yew.rs/docs/en/next/concepts/services/fetch">next バージョンの公式チュートリアルに data fetch に関する記述がある</a>のですが、React ユーザとしては Not for me だったので別のやり方を試してみました。</p>
+<p>もちろん 「yew に 別 FW での考え方を持ち込んで勝手に Not for Me とか言ってんじゃねぇ」とも思わなくもないのですが、yew の html マクロは JSX のように目に映るので、開発効率のためにも なるべく React で普段やっていることを取り入れていきたいなとも思ってのことです。</p>
+<p>Not for me なのはこの箇所です。</p>
+<pre><code class="language-rust">match msg {
+    GetLocation =&gt; {
+        // 1. build the request
+        let request = Request::get(&quot;http://api.open-notify.org/iss-now.json&quot;)
+            .body(Nothing)
+            .expect(&quot;Could not build request.&quot;);
+        // 2. construct a callback
+        let callback =
+            self.link
+            .callback(|response: Response&lt;Json&lt;Result&lt;ISS, anyhow::Error&gt;&gt;&gt;| {
+                let Json(data) = response.into_body();
+                Msg::ReceiveResponse(data)
+            });
+         // 3. pass the request and callback to the fetch service
+        let task = FetchService::fetch(request, callback).expect(&quot;failed to start request&quot;);
+        // 4. store the task so it isn't canceled immediately
+        self.fetch_task = Some(task);
+        // we want to redraw so that the page displays a 'fetching...' message to the user
+        // so return 'true'
+        true
+    }
+    ReceiveResponse(response) =&gt; {
+        match response {
+            Ok(location) =&gt; {
+                self.iss = Some(location);
+            }
+            Err(error) =&gt; {
+                self.error = Some(error.to_string())
+            }
+        }
+        self.fetch_task = None;
+        // we want to redraw so that the page displays the location of the ISS instead of
+        // 'fetching...'
+        true
+    }
+}
+</code></pre>
+<p>このうち、</p>
+<ul>
+<li>msg が GetLocation と ReceiveResponse しかない</li>
+<li>GetLocation を実行したコールバックを ReceiveResponse で処理する</li>
+</ul>
+<p>という部分が Not for me です。
+これはいわば fetch の Promise のメソッドチェーンの中で setState() して状態管理しているようなものです。
+もちろんそのやり方も React like な方法で僕もよく使いますが、状態管理が複雑になってくるとリファクタリングしたくなるのも事実です。
+なので、そうしなくていいようにしましょう。</p>
+<p>yew は Msg を enum で管理し、その各 Msg をパターンマッチに食わせることで、処理を分類できます。
+これをみた時僕は、「あっ、React や Redux でみる reducer だ！」と思いました。
+だとしたら、msg は action として見たくなり、各 action は start, success, fail であって欲しいと思いました。
+action は小さくちぎっておくと、将来的に複数の action をまとめて監視したり呼び出せたりできるので、なるべく小さく作っておきたいと考えています。</p>
+<p>なので、そう書き換えます。</p>
+<p>以降の例では Hackers News の API を使って開発します。
+叩く API は https://hacker-news.firebaseio.com/v0/item/8863.json?print=pretty で、戻り値は</p>
+<pre><code class="language-json">{
+  &quot;by&quot;: &quot;dhouston&quot;,
+  &quot;descendants&quot;: 71,
+  &quot;id&quot;: 8863,
+  &quot;kids&quot;: [9224],
+  &quot;score&quot;: 104,
+  &quot;time&quot;: 1175714200,
+  &quot;title&quot;: &quot;My YC app: Dropbox - Throw away your USB drive&quot;,
+  &quot;type&quot;: &quot;story&quot;,
+  &quot;url&quot;: &quot;http://www.getdropbox.com/u/2/screencast.html&quot;
+}
+</code></pre>
+<p>です。</p>
+<p>ただ簡単なデモをすだけなので、そのうち title しか使わず、受け取った JSON を Deserialize する serde の定義は、</p>
+<pre><code class="language-rust">#[derive(Deserialize, Debug, Clone)]
+pub struct ResponseData {
+    title: String,
+}
+</code></pre>
+<p>です。</p>
+<h2>チュートリアルを書き換えていく</h2>
+<h3>モデルの準備</h3>
+<p>次のようなモデルを用意します。</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub struct Model {
+    ft: Option&lt;FetchTask&gt;,
+    is_loading: bool,
+    data: Option&lt;ResponseData&gt;,
+    link: ComponentLink&lt;Self&gt;,
+    error: Option&lt;String&gt;,
+}
+</code></pre>
+<p>これは React でいうと state に該当します。</p>
+<h3>Msg の準備</h3>
+<p>そして Msg はこう定義します。</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub enum Msg {
+    StartFetch,
+    SuccessFetch(ResponseData),
+    FailFetch,
+}
+</code></pre>
+<p>これは Redux でいうと Action Type の集まりに該当します。</p>
+<h3>Msg の実装</h3>
+<p>この Msg を使って、上の Model を書き換えていきます。</p>
+<p>その書き換える処理を担うのが、update 関数です。</p>
+<pre><code class="language-rust">fn update(&amp;mut self, msg: Self::Message) -&gt; bool {
+    match msg {
+        Msg::StartFetch =&gt; {
+        }
+        Msg::SuccessFetch(response) =&gt; {
+        }
+        Msg::FailFetch =&gt; {
+        }
+    }
+    true
+}
+</code></pre>
+<p>この関数が Component トレイトとして実装されると、メッセージごとに呼び出されます。
+これは Yew に実装されているライフサイクルメソッドの一つです。</p>
+<p>では、それぞれのメッセージを受けたときの処理を書いていきましょう。</p>
+<pre><code class="language-rust">fn update(&amp;mut self, msg: Self::Message) -&gt; bool {
+    match msg {
+        Msg::StartFetch =&gt; {
+            let request = Request::get(
+                &quot;https://hacker-news.firebaseio.com/v0/item/8863.json?print=pretty&quot;,
+            )
+            .body(Nothing)
+            .expect(&quot;Could not build request.&quot;);
+
+            // callbackの組み立て
+            let callback = self.link.callback(
+                response: Response&lt;Json&lt;Result&lt;ResponseData, anyhow::Error&gt;&gt;&gt;| {
+                    let Json(data) = response.into_body();
+                    match data {
+                        Ok(data) =&gt; Msg::SuccessFetch(data),
+                        Err(_) =&gt; {
+                            log::info!(&quot;{:?}&quot;, data);
+                            Msg::FailFetch
+                        }
+                    }
+                },
+            );
+            let task = FetchService::fetch(request, callback).expect(&quot;failed to start request&quot;);
+            self.is_loading = true;
+            self.ft = Some(task)
+        }
+        Msg::SuccessFetch(response) =&gt; {
+            self.is_loading = false;
+            self.data = Some(response);
+        }
+        Msg::FailFetch =&gt; {
+            self.error = Some(&quot;error&quot;.to_string());
+            self.is_loading = false;
+        }
+    }
+    true
+}
+</code></pre>
+<p>ここでは注目したいのは StartFetch メッセージを受けたときの処理が最終的に実行するコールバック関数の中で Success と Fail を呼び出しています。
+まるで redux-saga で <code>STSRT_FETCH</code> action を take して、<code>SUCCESS_FETCH</code> や <code>FAIL_FETCH</code> を呼び出しているような感じですね。</p>
+<p>そうすればあとは <code>SuccessFetch</code> <code>FailFetch</code> それぞれのメッセージを受け取った時に state を更新してくれます。</p>
+<p>fetch 中には一点注意点があり、それは fetch の時に</p>
+<pre><code class="language-rust">self.ft = Some(task)
+</code></pre>
+<p>を忘れないようにするということです。</p>
+<p>fetchTask は model の中に持たせておかないと、data fetch に失敗します。
+この fetchTask を見ていれば、これがないときは data loading とも判断できるので、loading フラグで loading を表現するのはモヤモヤもするのですが、それはいわば 「react の世界で data がないときは loading 中」といっているようにも取れるので、明示的に loading/error というフラグを使っていこうと思います。</p>
+<h3>View の作成</h3>
+<p>これで状態が書き換わるようになりました。
+その状態が書き換わった画面を作成します。</p>
+<pre><code class="language-rust">fn view(&amp;self) -&gt; Html {
+    html! {
+        &lt;div class=&quot;container&quot;&gt;
+        {
+           match (self.is_loading, self.data.as_ref(), self.error.as_ref()) {
+               (true, _, _) =&gt; {
+                self.fetching()
+               }
+               (false, Some(ResponseData), None) =&gt; {
+                self.success()
+               }
+               (false, None, None) =&gt; {
+                self.fail()
+               }
+               (_,_,_)=&gt;{
+                self.fail()
+               }
+           }
+       }
+       &lt;button onclick=self.link.callback(|_| Msg::StartFetch)&gt;{&quot;refetch&quot;}&lt;/button&gt;
+      &lt;/div&gt;
+    }
+}
+</code></pre>
+<p>状態によって画面を出しわけています。</p>
+<p>これらはそれぞれ</p>
+<pre><code class="language-rust">impl Model {
+    fn success(&amp;self) -&gt; Html {
+        match self.data {
+            Some(ref res) =&gt; {
+                html! {
+                    &lt;&gt;
+                        &lt;p class=&quot;sum&quot;&gt;{&amp;res.title}&lt;/p&gt;
+                    &lt;/&gt;
+                }
+            }
+            None =&gt; {
+                html! {
+                     &lt;&gt;{&quot;none&quot;}&lt;/&gt;
+                }
+            }
+        }
+    }
+
+    fn fetching(&amp;self) -&gt; Html {
+        html! {
+            &lt;div&gt;{&quot;fetching&quot;}&lt;/div&gt;
+        }
+    }
+
+    fn fail(&amp;self) -&gt; Html {
+        html! {
+            &lt;div&gt;{&quot;fail&quot;}&lt;/div&gt;
+        }
+    }
+}
+</code></pre>
+<p>といった関数です。</p>
+<p>これらの関数はパターンマッチで出し分けられています。
+そのためどういう状態の時にどういう画面を出すかという分岐が書きやすく、これは僕が yew を気に入っている箇所でもあります。
+TypeScript のように</p>
+<pre><code class="language-ts">type PageState =
+  | { loading: true }
+  | { loading: false; data: any }
+  | { loading: false; error: string }
+</code></pre>
+<p>のような型定義を書かなくても、ページがとりうる状態に対する実装の抜け漏れを防ぎやすいです。</p>
+<h2>ソースコード</h2>
+<p>https://github.com/ojisan-toybox/yew-data-fetch</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

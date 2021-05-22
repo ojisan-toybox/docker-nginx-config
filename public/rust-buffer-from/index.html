@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Rust でも require("crypto").createHash("sha1").update(key).digest("base64") したい</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="websocket サーバーを作る時に sha1 の base64 ダイジェスト値が欲しくなったのでそのときのメモです。">
+    <meta property="og:title" content="Rust でも require("crypto").createHash("sha1").update(key).digest("base64") したい">
+    <meta property="og:image" content="https://blog.ojisan.io//rust-buffer-from/visual.png">
+    <meta property="og:description" content="websocket サーバーを作る時に sha1 の base64 ダイジェスト値が欲しくなったのでそのときのメモです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Rust でも require("crypto").createHash("sha1").update(key).digest("base64") したい">
+    <meta name="twitter:description" content="websocket サーバーを作る時に sha1 の base64 ダイジェスト値が欲しくなったのでそのときのメモです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-12 20:00</time>
+      <h1>Rust でも require("crypto").createHash("sha1").update(key).digest("base64") したい</h1>
+    </div>
+    <div class="post-contents"><p>websocket サーバーを作る時に sha1 の base64 ダイジェスト値が欲しくなったのでそのときのメモです。
+<code>Buffer.from(str, 'hex')</code> 同等のコードの作り方を教えてくださった <a href="https://twitter.com/_likr">@_likr</a>さんありがとうございます。</p>
+<p>Node.js でいう</p>
+<pre><code class="language-js">require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;base64&quot;)
+</code></pre>
+<p>に相当する関数が Rust に無くて少し困りました。
+なので、同じ処理を作っていきましょう。</p>
+<h2>Node.js の crypto の挙動</h2>
+<p>まず、</p>
+<pre><code class="language-js">require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;base64&quot;)
+</code></pre>
+<p>は</p>
+<pre><code class="language-js">Buffer.from(
+  require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;base64&quot;),
+  &quot;hex&quot;
+).toString(&quot;base64&quot;)
+</code></pre>
+<p>と同値です。</p>
+<p><code>digest()</code> は <code>'base64'</code> 以外にも <code>'hex'</code> を指定できます。
+<code>'hex'</code>を指定すると sha1 を 16 進数で返します。</p>
+<pre><code class="language-js">const key = 'this_is_key'
+console.log(require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;hex&quot;);)
+// 558c6e2f93212d10f8b4ab1ac77031e2ba157471
+</code></pre>
+<p>そしてこれを Buffer.from でバイト列にします。
+このとき、hex を指定するのを忘れないでください。</p>
+<pre><code class="language-js">Buffer.from(
+  require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;hex&quot;),
+  &quot;hex&quot;
+)
+</code></pre>
+<p>digest 値は 16 進数に変換されていて、Buffer.from はデフォルトでは utf-8 を想定しているためです。
+つまり<code>&quot;hex&quot;</code>を渡しておかなければ本来の文字列と異なる文字でバイト列を作ろうとしてしまいます。
+（ここが Rust 化するときの落とし穴になる）</p>
+<pre><code class="language-sh">558c6e2f93212d10f8b4ab1ac77031e2ba157471
+&lt;Buffer 55 8c 6e 2f 93 21 2d 10 f8 b4 ab 1a c7 70 31 e2 ba 15 74 71&gt;
+</code></pre>
+<p>そうするとあとはこれを base64 にします。</p>
+<pre><code class="language-js">.toString(&quot;base64&quot;)
+</code></pre>
+<p>これで、</p>
+<pre><code class="language-js">console.log(
+  Buffer.from(
+    require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;base64&quot;),
+    &quot;hex&quot;
+  ).toString(&quot;base64&quot;)
+)
+// 'VYxuL5MhLRD4tKsax3Ax4roVdHE='
+</code></pre>
+<p>を取得できます。</p>
+<h2>Rust で同じことをする</h2>
+<p>sha1 をとるために rust-crypto というクレートを使います。</p>
+<pre><code class="language-sh">cargo add rust-crypto
+</code></pre>
+<p>まずは普通に sha1 をとります。</p>
+<pre><code class="language-rust">let key = &quot;this_is_key&quot;.as_bytes();
+let mut hasher = Sha1::new();
+hasher.input(key);
+let sha1_string = hasher.result_str();
+</code></pre>
+<p>このとき、<code>sha1_string</code> は 16 進数表記です。
+<code>result_str</code> の挙動は <code>String in hexadecimal format.</code>を返します。</p>
+<p>ということはここで</p>
+<pre><code class="language-js">Buffer.from(
+  require(&quot;crypto&quot;).createHash(&quot;sha1&quot;).update(key).digest(&quot;hex&quot;),
+  &quot;hex&quot;
+)
+</code></pre>
+<p>のようなことをする必要が生まれます。</p>
+<p>つまりここで愚直に sha1 取った後に base64 化するということで、</p>
+<pre><code class="language-rust">// String に as_bytes はできないけど疑似コードということで。
+let sha1_bytes = hasher.result_str().as_bytes();
+let sha1_base64 = base64::encode(sha1_bytes);
+println!(&quot;{:?}&quot;, sha1_base64);
+</code></pre>
+<p>とすると値はおかしくなります。
+Buffer.from() で hex を指定しなかった時と同じ挙動になります。</p>
+<p>というわけで 16 進数を前提としたバイト列を作りましょう。</p>
+<p>幸いにも 16 進数文字列からバイト列を作るクレートがあるのでそれを使います。</p>
+<pre><code class="language-sh">cargo add hex
+</code></pre>
+<pre><code class="language-rust">extern crate hex;
+
+hex::decode(sha1_string)
+</code></pre>
+<p>そうしたらあとはこのバイト列を base64 すれば完了です。</p>
+<pre><code class="language-rust">let sha1_base64 = base64::encode(bytes);
+println!(&quot;{:?}&quot;, sha1_base64);
+</code></pre>
+<h2>サンプルコード</h2>
+<p>というわけでこういう実装になります。</p>
+<pre><code class="language-rust">extern crate base64;
+extern crate hex;
+
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
+
+fn main() {
+    let key = &quot;this_is_key&quot;.as_bytes();
+    let mut hasher = Sha1::new();
+    hasher.input(key);
+    let sha1_string = hasher.result_str();
+    // sha1_string: 558c6e2f93212d10f8b4ab1ac77031e2ba157471
+    let bytes = hex::decode(sha1_string).unwrap();
+    let sha1_base64 = base64::encode(bytes);
+    println!(&quot;{:?}&quot;, sha1_base64);
+}
+</code></pre>
+<p>FYI: https://github.com/ojisan-toybox/sha-base64</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

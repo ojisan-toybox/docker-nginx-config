@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Rust で frontmatter からデータを取得する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="frontmatter からデータを取り出すRust で frontmatter 文字列からデータを取り出しましょう。">
+    <meta property="og:title" content="Rust で frontmatter からデータを取得する">
+    <meta property="og:image" content="https://blog.ojisan.io//rust-frontmatter-parse-and-get-data/visual.png">
+    <meta property="og:description" content="frontmatter からデータを取り出すRust で frontmatter 文字列からデータを取り出しましょう。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Rust で frontmatter からデータを取得する">
+    <meta name="twitter:description" content="frontmatter からデータを取り出すRust で frontmatter 文字列からデータを取り出しましょう。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-04-19</time>
+      <h1>Rust で frontmatter からデータを取得する</h1>
+    </div>
+    <div class="post-contents"><h2>frontmatter からデータを取り出す</h2>
+<p>Rust で frontmatter 文字列からデータを取り出しましょう。
+frontmatter の parser としては、rust-frontmatter というものがあります。</p>
+<p>FYI: https://github.com/azdle/rust-frontmatter</p>
+<p>cargo-doc を見ればやり方は想像がつくとは思うのですが、個人的には README に書いておいて欲しかった内容なのでまとめます。</p>
+<h2>parse しよう</h2>
+<p>早速 rust-frontmatter を使ってみましょう。</p>
+<pre><code class="language-sh">cargo add rust-frontmatter
+</code></pre>
+<pre><code class="language-rust">use frontmatter::{parse, Yaml};
+
+let fm = parse(&amp;s);
+</code></pre>
+<p>これで parse できました。
+中身はどうなっているでしょうか。</p>
+<pre><code class="language-rust">println!(&quot;{:?}&quot;, fm)
+</code></pre>
+<p>たとえばこのブログの frontmatter は</p>
+<pre><code class="language-sh">Ok(Some(Hash({String(&quot;path&quot;): String(&quot;/rust-frontmatter&quot;), String(&quot;created&quot;): String(&quot;2021-04-19&quot;), String(&quot;title&quot;): String(&quot;Rust で frontmatter 文字列から値を取り出す&quot;), String(&quot;visual&quot;): String(&quot;./visual.png&quot;), String(&quot;tags&quot;): Array([String(&quot;Rust&quot;), String(&quot;frontmatter&quot;)]), String(&quot;userId&quot;): String(&quot;sadnessOjisan&quot;), String(&quot;isFavorite&quot;): Boolean(false), String(&quot;isProtect&quot;): Boolean(false)})))
+</code></pre>
+<p>となります。（実はいまブログの SSG を Rust で実装している最中です。）</p>
+<p>Result 型の中にオプション型があって、その中に Hash が入っているという形でしょうか。</p>
+<p>その Hash を取り出してみましょう。</p>
+<pre><code class="language-rust">let hash = front.ok().unwrap().unwrap();
+</code></pre>
+<p>さてではこの中からデータを取り出してみましょう。</p>
+<pre><code class="language-rust">let path = &amp;d[&quot;path&quot;];
+let title = &amp;d[&quot;title&quot;];
+let tags = &amp;d[&quot;tags&quot;];
+</code></pre>
+<p>これらはそれぞれ、</p>
+<pre><code class="language-sh">String(&quot;/rust-frontmatter&quot;)
+
+String(&quot;Rust で frontmatter 文字列から値を取り出す&quot;)
+
+Array([String(&quot;Rust&quot;), String(&quot;frontmatter&quot;)])
+</code></pre>
+<p>です。</p>
+<p>どうやってここから値を取り出しましょうか。</p>
+<h2>そもそも Hash は何なのか</h2>
+<p>frontmatter は <code>---</code> で覆われた yaml や json です。
+そのため frontmatter の parser は yaml の parser を持っています。
+この hash は yaml-rust というクレートが返していた値です。
+rust-frontmatter は yaml-rust への依存を持っています。</p>
+<p>FYI: https://github.com/chyh1990/yaml-rust</p>
+<p>hash として見えていた値は yaml-rust の Yaml Enum が持つ Variant です。</p>
+<p>FYI: https://docs.rs/yaml-rust/0.4.5/yaml_rust/yaml/enum.Yaml.html</p>
+<p>それらは <code>as_str</code>, <code>as_vec</code> などの変換メソッドを持っているのでそれを使えば値を取り出せます。</p>
+<pre><code class="language-rust">#[derive(Debug)]
+struct PostMeta {
+    path: String,
+    title: String,
+    tags: Vec&lt;String&gt;,
+}
+
+fn parse_frontmatter(s: &amp;str) -&gt; PostMeta {
+    let front = parse(&amp;s);
+    let d = front.ok().unwrap().unwrap();
+    let path = &amp;d[&quot;path&quot;];
+    let title = &amp;d[&quot;title&quot;];
+    let tags = &amp;d[&quot;tags&quot;];
+    PostMeta {
+        path: path.as_str().unwrap().to_string(),
+        title: title.as_str().unwrap().to_string(),
+        tags: tags
+            .as_vec()
+            .unwrap()
+            .into_iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect(),
+    }
+}
+</code></pre>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

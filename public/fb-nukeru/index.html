@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Firebaseの存在をフロントエンドから隠蔽するために</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="「Firebase は安いし楽だしマジ最高」という一心で技術選定してしまったプロダクトが成功して見えてきた課題、割高なコスト・権限管理・カスタマイズ性、そして （特性やスキルセット的に）RDB 製品が適していたのに無理やり Firestore を採用したことによるデータ不整合。">
+    <meta property="og:title" content="Firebaseの存在をフロントエンドから隠蔽するために">
+    <meta property="og:image" content="https://blog.ojisan.io//fb-nukeru/visual.png">
+    <meta property="og:description" content="「Firebase は安いし楽だしマジ最高」という一心で技術選定してしまったプロダクトが成功して見えてきた課題、割高なコスト・権限管理・カスタマイズ性、そして （特性やスキルセット的に）RDB 製品が適していたのに無理やり Firestore を採用したことによるデータ不整合。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Firebaseの存在をフロントエンドから隠蔽するために">
+    <meta name="twitter:description" content="「Firebase は安いし楽だしマジ最高」という一心で技術選定してしまったプロダクトが成功して見えてきた課題、割高なコスト・権限管理・カスタマイズ性、そして （特性やスキルセット的に）RDB 製品が適していたのに無理やり Firestore を採用したことによるデータ不整合。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-28</time>
+      <h1>Firebaseの存在をフロントエンドから隠蔽するために</h1>
+    </div>
+    <div class="post-contents"><p>「<a href="https://firebase.google.com/?hl=ja">Firebase</a> は安いし楽だしマジ最高」という一心で技術選定してしまったプロダクトが成功して見えてきた課題、割高なコスト・権限管理・カスタマイズ性、そして （特性やスキルセット的に）RDB 製品が適していたのに無理やり Firestore を採用したことによるデータ不整合。
+その結果チーム内で Firebase を抜ける機運が高まるも、Firebase べっとりなアプリケーションすぎて移行しづらいといった問題に出会うかもしれません。
+そのような場合に備え、Firebase の存在を隠蔽して開発することに挑戦してみましょう。</p>
+<p><code>注意</code>: Firebase を剥がしているときに「俺、次は絶対そうするわ」と感じたものを書いているだけであり、まだ実際にはこのパターンでプロダクション導入していません。
+あくまで個人開発で試してみていけそうと思ったので、提案しますという体です。
+また Firebase を隠蔽しないコードを否定するわけではないですのであしからず、<strong>高速道路の右と左どっちを走るか</strong>という話だと思っています。
+なのでこの記事はあくまで右車線でイケイケどんどんしすぎた事故を処理した話です。（※右は速度重視、左は安全重視という意味です。右車線を走っても法律を守れば安全と個人的には思います。））</p>
+<p>またコード例は React ですが、hooks 以外は他の FW でも当てはまるお話ですので適宜読み飛ばしていただくと参考になると思います。</p>
+<h2>なぜ隠蔽するか</h2>
+<p>Firebase という mBaaS はフルマネージドなサービスで、インフラの保守コストを下げてくれます。
+さらに easy なインターフェースを持つことから開発速度を出しやすく、 <strong>Firebase は予算的なリソースや人的なリソースが潤沢でないチームにとって魅力的なもの</strong>です。</p>
+<p>たとえば データの永続化、オブジェクトストレージ、認証機能をバックエンドの構築なしで無料で利用でき、また CloudFunctions を使えばバックエンドサービスも作れます。（これは有料）</p>
+<p>ただ、その分設定の自由度が低かったり癖があったりもするので、サービスが成功して予算に余裕が出てきたり、さらなる拡大をしていこうとすると Firebase を抜けたいねという話になったりもします。Firebase はクライアントに対して SDK を提供していますが、いざ移行というときにコードが SDK からさまざまな機能を直接叩いてしまうと、離脱するときの修正の影響範囲が広くなってしまい抜け出し辛くなります。</p>
+<h2>関心の分離による Firebase の隠蔽を試みる</h2>
+<p>そこで将来の移行を考慮して意識しておきたい考え方は <strong><a href="https://deviq.com/separation-of-concerns/">関心の分離</a></strong> です。
+アーキテクチャー上の要素をその責任で分離し、Firebase といったインフラ基盤に該当するものはアプリケーションに対するプラグインとみなして他の基盤に移れるように設計できればとても嬉しいです。</p>
+<p>この分離を React アプリケーションに取り込む為に、特定のインフラといった詳細をプラグインとして差し込める依存性の注入(DI)を採用したいですが、それをやろうとするとクラスベースでのインターフェース設計が必要になり、明示的な DI を行わない React での開発方法にも反してしまいます。
+もちろん、Context などで Repository へのアクセスができる Usecase/Service 層 を UI に流し込んで、Constructor Injection に頼らない擬似的な DI も可能ですが、React の慣習からすれば本流ではないやり方です。</p>
+<p>そこで DI は考えずにただ依存を分離することを考えようと思います。
+「<strong>依存とはモジュールが他のモジュールの存在を知っていること</strong>」という考えで、「UI 層に Firebase という文字を出さない」といった設計を目指していきます。</p>
+<p>つまり、pages/, components/, containers/ などで</p>
+<ul>
+<li><code>import firebase from 'firebase'</code>を書かない</li>
+<li>Firebase という文字が入った型も受け取らない</li>
+</ul>
+<p>という制約を課します。</p>
+<h3>永続化層とやりとりする関数を一つのファイルもしくはフォルダにまとめる</h3>
+<p>Firestore/CloudStorage とやりとりする関数を Repository 層的なものに押し付けていきます。
+そうすることで UI 層から直接永続化層にアクセスすることを防ぎ、Firebase の存在を隠蔽します。</p>
+<pre><code class="language-ts:title=repositories/post.ts">import firebase from &quot;firebase&quot;
+
+export default {
+  getAllPosts() {
+    firebase
+      .firestore()
+      .collection(&quot;post&quot;)
+      .get()
+      .then(d =&gt; d.data())
+      .catch(e =&gt; {
+        console.error(e)
+      })
+  },
+}
+</code></pre>
+<pre><code class="language-tsx:title=pages/index.tsx">useEffect(() =&gt; {
+  Repository.getAllPosts().then(d =&gt; {
+    setAllPosts(d)
+  })
+}, [])
+</code></pre>
+<p>こうすることで UI 層(pages/index.tsx)は firestore/cloud storage の存在を知ることなくデータを取得できます。</p>
+<p>もし何かに移行する場合はこの repositories/post.ts まるごと入れ替えます。
+たとえば firestore でなく API からその値が帰ってくるようになれば、repositories/post.ts 内の同じ関数に、同じ型の返り値が帰ってくるように API 経由で fetch できるコードを書くだけで移行が済みます。</p>
+<p>(これに関しては inteface を使ったり(Repository 層が実装する interface を props の型定義に混ぜておく)、Repository を Root から Context 経由で Injection すればもっと硬いコードが書けそうとは思ったのですが、流石にそこまでしなくても大丈夫かなーと思って緩めました。)</p>
+<h4>react-firebase-hooks は諦める</h4>
+<p>Firebase と React の組み合わせ経験がある方は <a href="https://github.com/CSFrequency/react-firebase-hooks">react-firebase-hooks</a> をご存知でしょう。
+これは auth/firestore/realtime database/cloud storage に対するアクセスを簡単にしてくれる hooks で、主にデータ取得とそのキャッシュ(状態管理)、さらにリアルタイムでの更新(データを書き込むとそれを即座に反映させる)ができます。</p>
+<p>とても便利な hooks なので react-firebase-hooks/firestore を採用したくなるのですが、firebase との依存を断ち切るためにこの hooks の利用は諦めます。</p>
+<p>react-firebase-hooks/firestore は、</p>
+<pre><code class="language-js">const [userData, userDataLoading] = useCollection(
+  firebase.firestore().collection(&quot;user&quot;),
+  {
+    snapshotListenOptions: { includeMetadataChanges: true },
+  }
+)
+</code></pre>
+<p>といったコードを書きます。
+<a href="https://ja.reactjs.org/docs/hooks-overview.html#rules-of-hooks">hooks の呼び出しはその特性上必ず 関数コンポーネントのトップレベルで行わないといけない</a>ので、必ず UI 層に firestore の情報が出てきてしまいます。
+ここでは <code>collection(&quot;user&quot;)</code> という firestore のコレクション名が見えており、この UI は firestore の詳細を知ってしまっています。
+つまり firebase に依存したコンポーネントになります。</p>
+<p><strong>「依存とはモジュールが他のモジュールの存在を知っていること」という考えのもとではこの firebase や firestore という文字が出てきてしまった時点で NG🙅‍♂️ です 😭</strong></p>
+<p>そのため react-firebase-hooks/firestore の利用は諦めます。</p>
+<h4>realtime 処理そのものも諦めた方が良いかも？</h4>
+<p>react-firebase-hooks/firestore を使わない場合、同様のリアルタイムの更新処理は直接 firestore の SDK が提供している onSnapshot が使えます。</p>
+<p>参考資料: <a href="https://firebase.google.com/docs/firestore/query-data/listen?hl=ja">Cloud Firestore でリアルタイム アップデートを入手する</a></p>
+<pre><code class="language-ts:title=例">db.collection(&quot;cities&quot;)
+  .doc(&quot;SF&quot;)
+  .onSnapshot(function (doc) {
+    console.log(&quot;Current data: &quot;, doc.data())
+  })
+</code></pre>
+<p>としておけば、onSnapshot のコールバック関数ブロックでは、コンテンツが変更されるたびに、ドキュメントスナップショットを取得できます。</p>
+<p>そのため react-firebase-hooks/firestore を使わず、この関数を repository 層に置いておいて、それにコールバック関数を渡せば一応は UI から firestore の存在自体は隠蔽できます。</p>
+<p>しかし、本当にやるべきかは要検討です。
+もし firebase から移行するときにこの機能が本当に使えるのでしょうか。
+バックエンドが保持している値/DB での値の変更を検知してクライアントを書き換える機能を実現できるバックエンドが移行時に作られるかと言うと、実装コストがかかるので優先度は低くなるだろうなと思っています。
+なので <strong>将来の移行を予想しておくならばそもそもリアルタイムでの更新処理は使わない方が無難</strong>だと思います。</p>
+<p>ただしどうしても Read の速度を縮めたい、再取得する処理書くのめんどくさい、 <strong>移行のときに責任を持てる</strong> と言う場合は Repository に onSnapshot を押し込んだ上であれば使っても良いかなぁとは思います。</p>
+<h3>Firebase Client を生成する Singleton クラスを作る</h3>
+<p>Firebase を使う為にはアプリケーション内で 初期設定をする必要があります。
+例えばこのようなものです。</p>
+<pre><code class="language-js">firebase.initializeApp({
+  apiKey: &quot;XXXXXXX&quot;,
+  authDomain: &quot;XXXXXXX&quot;,
+  databaseURL: &quot;XXXXXXX&quot;,
+  projectId: &quot;XXXXXXX&quot;,
+  storageBucket: &quot;XXXXXXX&quot;,
+  messagingSenderId: &quot;XXXXXXX&quot;,
+  appId: &quot;XXXXXXX&quot;,
+})
+</code></pre>
+<p>こういった初期設定をし、いつでもどこでも Firebase を呼び出せるようにします。
+これを直接宣言してもいいのですが、そうはできない理由があります。</p>
+<p>こういった初期設定はアプリケーションが必ずファイルに書く必要がある・もしくは必ず呼び出す必要があるものです。
+たとえば JS ファイルのルートに書いたり、NextJS でいう _app.tsx のような共通ファイルに書いたりします。</p>
+<p>ただそこで冷静に考えたいのは、<strong>Firebase の初期設定をルートに埋め込むと言うことは、アプリケーションそれ自体が Firebase そのものの存在を知ってしまいます</strong>。
+移行したときにもその移行先でそういった初期化コードが必要なら埋め込むべきだとは思いますが、おそらくはそうはならないので(API ベースで fetch するだけで済むはずなので)、そういった詳細はアプリから隠してしまいましょう。</p>
+<p>そこで Infra 層を作りそこで Firebase の初期化をしてします。</p>
+<pre><code class="language-ts:title=infra/firebase.ts">export default class Firebase {
+  private static _instance: Firebase
+  private _db: firebase.firestore.Firestore
+  private _auth: firebase.auth.Auth
+
+  private constructor() {
+    firebase.initializeApp({
+      apiKey: &quot;XXXXXXX&quot;,
+      authDomain: &quot;XXXXXXX&quot;,
+      databaseURL: &quot;XXXXXXX&quot;,
+      projectId: &quot;XXXXXXX&quot;,
+      storageBucket: &quot;XXXXXXX&quot;,
+      messagingSenderId: &quot;XXXXXXX&quot;,
+      appId: &quot;XXXXXXX&quot;,
+    })
+
+    this._db = firebase.firestore()
+    this._auth = firebase.auth()
+  }
+
+  public static get instance(): Firebase {
+    if (!this._instance) {
+      this._instance = new Firebase()
+    }
+    return this._instance
+  }
+
+  public get db() {
+    if (this._db) {
+      return this._db
+    } else {
+      this._db = firebase.firestore()
+      return this._db
+    }
+  }
+
+  public get auth() {
+    if (this._auth) {
+      return this._auth
+    } else {
+      this._auth = firebase.auth()
+      return this._auth
+    }
+  }
+}
+</code></pre>
+<p>さて、このコードは constructor は隠蔽されシングルトンになっています。
+どうしてこのようなことをしているかと言うと、<strong>このコードを永続化層から直接呼ぶからです</strong>。
+つまりアプリケーション側で初期設定を呼び出さず、永続化層から呼び出します。
+シングルトンなので、インスタンスがなければインスタンスが作られて初期化されるし、二回目からは設定済みの Firebase クライアントを手に入れることができます。
+<strong>つまり明示的な初期化をしなくても infra 層を呼ぶだけで初期化をすることができます。</strong></p>
+<p>またこの方式の良いところは複数回初期化に対する防御コードを書く必要がありません。
+たとえば、初期化するポイントを明示的に指定しないと言うことはあらゆるところで初期化される恐れがあり、また明示的に指定しても React の書き方次第では再レンダリングの影響で再初期化がされるということもあります。
+それに対しては</p>
+<pre><code class="language-js">if (!firebase.apps.length) {
+  firebase.initializeApp({
+    apiKey: &quot;XXXXXXX&quot;,
+    authDomain: &quot;XXXXXXX&quot;,
+    databaseURL: &quot;XXXXXXX&quot;,
+    projectId: &quot;XXXXXXX&quot;,
+    storageBucket: &quot;XXXXXXX&quot;,
+    messagingSenderId: &quot;XXXXXXX&quot;,
+    appId: &quot;XXXXXXX&quot;,
+  })
+}
+</code></pre>
+<p>として防御する方法がありますが、これをやらなくて済みます。
+これはすでに初期化されていない場合のみ初期化するというコードで、詳しくは<a href="https://github.com/zeit/next.js/issues/1999#issuecomment-302244429">この Issue</a> にまとまっています。
+Firebase をシングルトンにしてしまって必ず初期化が一回しかされないことにしてしまえばこのような防御的コードは書かなくて済みます。（と思ってます！）</p>
+<h3>認証用の store を使う</h3>
+<p>firebase では認証後、firebase.auth().currentUser で認証したユーザーの情報を取得できます。
+<strong>この値が null かどうかでログインしているかの判定にも使える</strong>のでこのユーザー情報は非常に大切なものです。</p>
+<p>特にアプリケーションにおいてはログイン管理は大切なので、これはクライアントサイドでそのセッション中は保持しておきたい情報です。
+そこで Redux や useReducer といったものに保持、Context で全ページに配信するとよいです。</p>
+<p>そこで login 後に user 情報を取得しそれを Context 経由で UI に配信してみましょう。
+全ページ共有で使う Context なので_app.tsx から配信します。
+export する Context は、呼び出し側で useContext され中にある値や関数が使われることを想定し、userId とその userId をセットする関数を入れておきます。</p>
+<pre><code class="language-tsx:title=pages/_app.tsx">import { AppProps } from &quot;next/app&quot;
+import &quot;firebase/auth&quot;
+import { useState, createContext, Dispatch, SetStateAction } from &quot;react&quot;
+
+export const AuthContext = createContext&lt;{
+  uid: string | null
+  setUid: Dispatch&lt;SetStateAction&lt;string&gt;&gt;
+}&gt;(null)
+
+const App = ({ Component, pageProps }: AppProps) =&gt; {
+  const [uid, setUid] = useState&lt;string | null&gt;(null)
+  return (
+    &lt;AuthContext.Provider value={{ uid, setUid }}&gt;
+      &lt;Component {...pageProps} /&gt;
+    &lt;/AuthContext.Provider&gt;
+  )
+}
+
+export default App
+</code></pre>
+<p>さてその認証情報の取得に使う関数なのですが、<code>firebase.auth().currentUser</code> は使いません。
+ここ落とし穴になってるので注意しましょう。
+これは firebase の SDK の初期化タイミング次第では null が入っているからです。
+これを useEffect(()=&gt;{}, []) の中で読んでしまうと ユーザー情報が null のままアプリケーションが開始されてしまってログイン後ページの UI を表示させることができません。</p>
+<p>そこで <code>auth.onAuthStateChanged</code> というメソッドを使います。
+これは</p>
+<pre><code class="language-ts:title=repositories/session.ts">checkAlreadyLogin: ({
+    successHandle,
+    noUserHandle,
+  }: {
+    successHandle: (userId: string) =&gt; void;
+    noUserHandle: () =&gt; void;
+  }): void =&gt; {
+    Firebase.instance.auth.onAuthStateChanged((user) =&gt; {
+      if (user) {
+        successHandle(user.uid);
+      } else {
+        noUserHandle();
+      }
+    });
+  },
+</code></pre>
+<p>として使え、さらに user を監視しておりそこに変化があったときに実行される関数なので nonNull な user として扱えます。
+ここでコールバック関数を実行すればそのユーザーに対して何かアクションすることができます。(提供されてる API が Promise を返していない設計なのでコールバックをここで実行しています。)
+この関数も firebase との境界なので Repository 置き場に置いておきます。(上の例だと repository/session.ts と言う場所に置いた。)</p>
+<p>これを UI 側から呼び出すことでログイン情報を context にセットできます。</p>
+<pre><code class="language-tsx:title=pages/index.tsx">import * as React from &quot;react&quot;
+import { SessionRepository } from &quot;../repository/session&quot;
+import { AuthContext } from &quot;./_app&quot;
+
+export default () =&gt; {
+  const auth = React.useContext(AuthContext)
+  const [content, setContent] = React.useState(&quot;&quot;)
+  React.useEffect(() =&gt; {
+    SessionRepository.checkAlreadyLogin({
+      successHandle: (userId: string) =&gt; {
+        auth.setUid(userId)
+      },
+      noUserHandle: () =&gt; {
+        auth.setUid(null)
+      },
+    })
+  }, [])
+  return (
+    &lt;div&gt;
+      &lt;h2&gt;auth&lt;/h2&gt;
+      {auth.uid ? (
+        &lt;div&gt;
+          &lt;p&gt; userId: ${auth.uid}&lt;/p&gt;
+        &lt;/div&gt;
+      ) : (
+        &lt;button
+          onClick={async () =&gt; {
+            const userId = await SessionRepository.loginAnonymous()
+          }}
+        &gt;
+          匿名ログイン
+        &lt;/button&gt;
+      )}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h4>react-firebase-hook/auth で解決できるが・・・</h4>
+<p>ちなみにここで書いた user の監視問題は <a href="https://github.com/CSFrequency/react-firebase-hooks/tree/master/auth">react-firebase-hook/auth</a> を使えば鮮やかに解決できたりもします。</p>
+<pre><code class="language-js:title=例">import { useAuthState } from &quot;react-firebase-hooks/auth&quot;
+
+const login = () =&gt; {
+  firebase.auth().signInWithEmailAndPassword(&quot;test@test.com&quot;, &quot;password&quot;)
+}
+const logout = () =&gt; {
+  firebase.auth().signOut()
+}
+
+const CurrentUser = () =&gt; {
+  const [user, loading, error] = useAuthState(firebase.auth())
+
+  if (loading) {
+    return (
+      &lt;div&gt;
+        &lt;p&gt;Initialising User...&lt;/p&gt;
+      &lt;/div&gt;
+    )
+  }
+  if (error) {
+    return (
+      &lt;div&gt;
+        &lt;p&gt;Error: {error}&lt;/p&gt;
+      &lt;/div&gt;
+    )
+  }
+  if (user) {
+    return (
+      &lt;div&gt;
+        &lt;p&gt;Current User: {user.email}&lt;/p&gt;
+        &lt;button onClick={logout}&gt;Log out&lt;/button&gt;
+      &lt;/div&gt;
+    )
+  }
+  return &lt;button onClick={login}&gt;Log in&lt;/button&gt;
+}
+</code></pre>
+<p>ここでは user の値は動的に裏側でよしなにセットされるため、自分でセットする必要はありません。
+そのため null をセットすると言ったことは避けられる便利な hooks です。</p>
+<p>しかし見てお気づきの通り、hooks を使う場面で <code>firebase.auth()</code> として firebase という文字が見えてしまっています。つまりこのコンポーネントは firebase に依存してしまっています。
+つまり firebase に依存したコンポーネントになります。
+firebase を剥がす時が大変なので auth hooks も利用は控えておきましょう。</p>
+<h4>SSR への対応</h4>
+<p>先ほどは認証情報をなんらかの store に保存し、それを Context を配信していました。
+state や store を配信すると、SSR 前提のアプリであれば routing 時にその情報が吹っ飛んでしまいます。
+そのため私は routing ごとに認証情報を再取得しています。
+無駄な気もするのですが認証情報が最新であることは良いことでもあるのでそうしています。</p>
+<p>それをやっているのが先に出したコードの useEffect の部分です。
+認証が必要なページにこれを書いておけば、そのページに来るたびに useEffect が呼ばれ認証が済んでるかチェック、そしてチェックされていたらユーザー情報を store に保存します。</p>
+<pre><code class="language-jsx">React.useEffect(() =&gt; {
+  SessionRepository.checkAlreadyLogin({
+    successHandle: (userId: string) =&gt; {
+      auth.setUid(userId)
+    },
+    noUserHandle: () =&gt; {
+      auth.setUid(null)
+    },
+  })
+}, [])
+</code></pre>
+<p>(TIPS: ブラウザ備え付けのストレージで user 情報を永続化してしまえば SSR しても user 情報を保てるし、store として Redux を選択していれば middleware で自動的に store &lt;=&gt; browser で sync できるのでこの手の問題は考えなくても済んだりする。しかも認証情報ではなくユーザー情報(ここでは userID のみ)を保存するのでセキュリティ的にも大丈夫です。)</p>
+<h4>型推論でも firebase.User を使わない</h4>
+<p>さて先の TIPS で「しかも認証情報ではなくユーザー情報(ここでは userID のみ)を保存するのでセキュリティ的にも大丈夫です。」と書きましたが、ユーザー情報ではなくユーザー ID だけを受け取っています。</p>
+<p>上のコールバック関数は <code>successHandle(user.uid);</code> となっています。
+user そのものの情報(firebase.User)を使っていません。
+これは コールバック関数を登録した呼び出し元から firebase の存在を隠蔽するためです。
+ここで user をそのまま渡してしまうと、firebase.User という firebase 特有のオブジェクトが UI へと渡ってしまいます。
+そうなるとそこにある特殊な関数をアプリケーション側で呼び出されてしまうと剥がすのが大変なので、ここでは userId だけを保持することとします。</p>
+<p>firestore は userId さえあれば rule を使った認証や user 情報に対する参照を埋め込めるので(userId や userId を基に取得した user 情報が外部キーになるので)、userId さえ認証後の identity として持っておけば大丈夫です。
+もちろん退会処理<code>currentUser.delete()</code>のようなコードは user 情報そのものが必要になりますが、こういう処理をしたい場合はその都度 respositories/session.ts の中で currentUser(firebase.User 型のオブジェクト)を作り、delete()メソッドを呼び出すと良いです。
+このメソッドはイベントをトリガーに呼び出すため初期化が済んだ後に呼ばれるので null であることはないはずです。</p>
+<pre><code class="language-ts:title=repositories/session.ts">deleteUser: () =&gt; {
+  Firebase.instance.auth.currentUser.delete()
+},
+</code></pre>
+<p>利用ケースが想像できないのですが(TIPS: user 情報をどう使うかといった例は <a href="https://firebase.google.com/docs/auth/web/manage-users">公式 Doc</a>にまとまっている)、もしアプリの初期化のタイミングで認証ユーザー情報そのものが欲しいと言う場合は、先に 述べた onAuthStateChanged を使って user 情報を取得しましょう。</p>
+<h2>おわりに</h2>
+<h3>正直めんどくさいし便利な hooks を使いたいんだが（特に認証）</h3>
+<p>そうです。
+めんどくさいです。
+剥がしたときのクッションをわざわざ挟んでいるからめんどくさくなるのは当然です。</p>
+<p>「開発スピードを出したくて Firebase を使ってるのにそんなガチガチに固め出したらその強みが薄まるじゃん」という批判もあるでしょう。
+「また Firebase で実用に耐えれてるうちは一気にインフラ入れ替えても移行できそうだし、全部作り替えるようなイメージでいまドカンと作ってしまっても大丈夫そう」と思うかもしれません。</p>
+<p>おっしゃる通りです、それは痛いほど分かります。
+なので分離を強制したいわけではないですが、とはいえ剥がす可能性も考え firebase に依存したコードを書く前に依存を分離を一度考えてみる価値はあると思っています。
+<strong>不便を感じてから firebase べっとりコードを書くことへの移行もできるので、一度 firebase に依存しないコードで挑戦してみて段階的に firebase 依存のコードを増やしていっても良いでしょう。</strong></p>
+<h4>user 情報を持ち回らないことの懸念</h4>
+<p>やはり userId だけでなく、firebase.User を持ち回りたい気持ちはあります。
+今のところ持ち回らなくても困っていませんが、<a href="https://firebase.google.com/docs/auth/web/manage-users">currentUser が持つメソッド</a>を見ると、これを初期化時に呼び出すこともあるのではないかなと不安になってきます。</p>
+<p>react-firebase-hooks/auth を使えば null じゃない Firebase.User をシンプルな方法で確実に入手できる保証があるので、正直なところ「良いなぁ」っていう気持ちはあります。
+いまは userId だけを持ち回る方式で困っていないので代案は考えていませんが、もしかしたらこの制約は緩める時が来るのかもなとは思ってます。
+(完全に Firebase を隠蔽しなくてもちょっとくらいだったら依存してもいいかなとも思っています。現実世界では移行するための時間やテスト工数もあるはずなので。)</p>
+<h3>sample code</h3>
+<p>sample プロジェクトは<a href="https://github.com/ojisan-toybox/fb-store-auth-practice">こちら</a>です。</p>
+<p><img src="sample.png" alt="sampleプロジェクト" /></p>
+<p>(注)</p>
+<ul>
+<li>firestore の collection 名 'user' と 'post' 配下に R/W 権限を振ってます。</li>
+<li>無料枠を使い潰すと止まります。</li>
+<li>予告なく停止しますので、試したい方は自分の firebase プロジェクトを使ってお試しください。</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

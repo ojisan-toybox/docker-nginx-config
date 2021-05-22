@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ソースコードからOGPを生成しシェアするOgp as a Serviceを作った(そして飽きたのでコードを公開する)</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="エンジニア向け OGP 画像作成サービスを作りました。サービスはこれで、ソースコードは">
+    <meta property="og:title" content="ソースコードからOGPを生成しシェアするOgp as a Serviceを作った(そして飽きたのでコードを公開する)">
+    <meta property="og:image" content="https://blog.ojisan.io//share-ogp/visual.png">
+    <meta property="og:description" content="エンジニア向け OGP 画像作成サービスを作りました。サービスはこれで、ソースコードは">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ソースコードからOGPを生成しシェアするOgp as a Serviceを作った(そして飽きたのでコードを公開する)">
+    <meta name="twitter:description" content="エンジニア向け OGP 画像作成サービスを作りました。サービスはこれで、ソースコードは">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-31</time>
+      <h1>ソースコードからOGPを生成しシェアするOgp as a Serviceを作った(そして飽きたのでコードを公開する)</h1>
+    </div>
+    <div class="post-contents"><p>エンジニア向け OGP 画像作成サービスを作りました。
+サービスは<a href="https://ogpng.vercel.app/">これ</a>で、ソースコードは<a href="https://github.com/sadnessOjisan/ogpng">これ</a>です。</p>
+<p><img src="ogpng.png" alt="ogpng" /></p>
+<p>ソースコード(HTML, JSX)から OGP 画像を生成し、それをシェアできるサービスです。
+各種ソースコードを HTML に変換、それを DOM 上に埋め込んで展開、 その DOM を画像化して永続化、その永続化パスを OGP 画像として展開という形です。</p>
+<p>特徴的なのは OGP の生成は専用 API がないやり方です。
+<a href="/dynamic-ogp">絶対にお金を払いたくない精神での動的 OGP 生成は辛い</a>でいうパターン 1 の場合です。</p>
+<h2>開発の動機</h2>
+<ul>
+<li>普通に自分がほしかった</li>
+<li>ワンチャン一発当てて買収、もしくはこれを作ってる会社に拾われたかった。</li>
+</ul>
+<h2>なぜ公開するか</h2>
+<ul>
+<li>やる気を失った</li>
+<li>飽きた</li>
+</ul>
+<p>あと、これめちゃくちゃ便利なはずだし、欲しいものだし、マネタイズもできるので誰か引き継いでくれると嬉しいです。
+<strong>これから React + Next を始める人にとってもいい教材になりそうだと思ってます。</strong></p>
+<h2>コードの解説</h2>
+<p>勉強になりそうなところ、詰まりそうなところをピックアップします。
+飽きていることもあり手が抜かれてたり汚くなってるところもあります。
+<strong>許してください。</strong></p>
+<h3>Editor は react-monaco-editor</h3>
+<p>ブラウザ上で動く Editor を作る時 monaco editor が便利です。
+VSCode のコアになっているエディタです。</p>
+<pre><code class="language-tsx">&lt;MonacoEditor
+  language={mode === &quot;HTML&quot; ? &quot;html&quot; : &quot;jsx&quot;}
+  // theme=&quot;vs&quot;
+  value={text}
+  options={{ minimap: { enabled: false } }}
+  onChange={str =&gt; {
+    edit(str)
+    if (mode === &quot;HTML&quot;) {
+      setHTML(str)
+    } else if (mode === &quot;JSX&quot;) {
+      try {
+        setHTML(convert(str))
+      } catch {
+        setHTML(str)
+      }
+    }
+  }}
+  editorDidMount={() =&gt; {
+    // @ts-ignore
+    window.MonacoEnvironment.getWorkerUrl = (moduleId, label) =&gt; {
+      if (label === &quot;json&quot;) return &quot;/_next/static/json.worker.js&quot;
+      if (label === &quot;css&quot;) return &quot;/_next/static/css.worker.js&quot;
+      if (label === &quot;html&quot;) return &quot;/_next/static/html.worker.js&quot;
+      if (label === &quot;typescript&quot; || label === &quot;javascript&quot;)
+        return &quot;/_next/static/ts.worker.js&quot;
+      return &quot;/_next/static/editor.worker.js&quot;
+    }
+  }}
+/&gt;
+</code></pre>
+<h4>language</h4>
+<p>補完やハイライトが聞くようになります。</p>
+<h4>onChange</h4>
+<p>入力時のハンドリングを行います。
+input や textarea のそれと同じです。
+中にある <code>convert</code> は JSX =&gt; HTML のコンパイルです。</p>
+<h4>editorDidMount</h4>
+<p>mount 時の初期設定です。
+monaco は worker を使って補完などを行います。
+Editor に対して何言語が描かれるかを教えてあげることでそれに該当する worker を読み込みます。
+(LSP が使えるようになるんだと思います(確信はない), TS で monaco 上で補完が効くのは worker が読み込んでる tsserver だった気がする)</p>
+<p>ただこの worker はこちらで用意する必要があり、それが次紹介する config です。</p>
+<p>ex) /_next/static/json.worker.js</p>
+<h3>MonacoWebpackPlugin</h3>
+<pre><code class="language-js">const withCSS = require(&quot;@zeit/next-css&quot;)
+const MonacoWebpackPlugin = require(&quot;monaco-editor-webpack-plugin&quot;)
+
+module.exports = withCSS({
+  webpack: config =&gt; {
+    config.module.rules.push({
+      test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
+      use: {
+        loader: &quot;url-loader&quot;,
+        options: {
+          limit: 100000,
+        },
+      },
+    })
+
+    config.plugins.push(
+      new MonacoWebpackPlugin({
+        // Add languages as needed...
+        languages: [&quot;javascript&quot;, &quot;typescript&quot;, &quot;html&quot;],
+        filename: &quot;static/[name].worker.js&quot;,
+      })
+    )
+    return config
+  },
+  env: { NEXT_PUBLIC_DEPLOY_ENV: process.env.DEPLOY_ENV },
+})
+</code></pre>
+<h4><a href="https://github.com/microsoft/monaco-editor-webpack-plugin">MonacoWebpackPlugin</a></h4>
+<blockquote>
+<p>A plugin to simplify loading the Monaco Editor with webpack.</p>
+</blockquote>
+<p>各種 worker のコードをビルド時に出力してくれます。</p>
+<h3>Compile</h3>
+<p>Monaco に打たれた JSX 文字列(React.Element 文字列)を HTML に変換する処理です。
+babel-standalone と <code>ReactDOMServer.renderToString(el)</code> を使っています。</p>
+<p>詳しくは <a href="https://blog.ojisan.io/jsx-preview">ブラウザ上で JSX をコンパイルしてプレビュー環境を作る</a> をご覧ください。</p>
+<h3>Firebase 周り</h3>
+<p>storage だけ使っています。</p>
+<p>直接ソースコードに APIKEY を埋め込んでいますが、無料プランなので使いすぎる止まります。
+ご自身で APIKEY を用意してお試しください。</p>
+<h4>画像保存</h4>
+<pre><code class="language-ts">import Firebase from &quot;../infrastructure/Firebase&quot;
+import CLOUD_STORAGE_KEYS from &quot;../constatns/cloudStorageKeys&quot;
+
+export const saveOgp = (imageId: string, image: any): Promise&lt;{ e: any }&gt; =&gt; {
+  const storage = Firebase.instance.storage
+  const storageRef = storage.ref()
+  const ogpRef = storageRef.child(`${CLOUD_STORAGE_KEYS.OGP}/${imageId}`)
+  return ogpRef
+    .put(image)
+    .then(snapshot =&gt; {
+      console.log(&quot;snapshot&quot;, snapshot)
+    })
+    .catch(e =&gt; {
+      console.log(&quot;ERROR&quot;, e)
+      return { e }
+    })
+}
+</code></pre>
+<p>この imageId は適当な変数です。</p>
+<pre><code class="language-ts">export const generateRandomId = () =&gt; {
+  return Math.random().toString(36).slice(-8)
+}
+</code></pre>
+<p>といったような関数で生成されています。
+画像名の衝突を避けるためのコードです。</p>
+<h4>画像取得</h4>
+<pre><code class="language-ts">export const getOgpUrl = (imageId: string) =&gt; {
+  const storage = Firebase.instance.storage
+  const pathReferenceRef = storage.ref(`${CLOUD_STORAGE_KEYS.OGP}/${imageId}`)
+  return pathReferenceRef
+    .getDownloadURL()
+    .then((url: string) =&gt; url)
+    .catch(e =&gt; console.log(&quot;ERROR&quot;, e))
+}
+</code></pre>
+<p><code>generateRandomId</code> で作った ID を指定すると画像を取得できます。
+画像 ID は画像保存後にその ID を URL に持って遷移しているため、そこから ID を取り出しこの API を呼び出すと画像 URL を取得できます。</p>
+<h3>SSR 時の OGP 展開</h3>
+<p>NextJS の Dynamic Routing を使って各種詳細ページを作っています。</p>
+<pre><code class="language-tsx">import * as React from &quot;react&quot;
+import Head from &quot;next/head&quot;
+import Link from &quot;next/link&quot;
+import createHostingURL from &quot;../helper/createHostingURL&quot;
+import cloudStorageKeys from &quot;../constatns/cloudStorageKeys&quot;
+import env from &quot;../helper/env&quot;
+import createGcsURL from &quot;../helper/createGcsURL&quot;
+import { GetServerSideProps, NextPage } from &quot;next&quot;
+
+export default function Result(props: NextPage &amp; { pid: string }) {
+  const [url, setURL] = React.useState(&quot;&quot;)
+  React.useEffect(() =&gt; {
+    setURL(window.location.href)
+  }, [])
+  const appEnv = env()
+  return (
+    &lt;div className=&quot;wrapper&quot;&gt;
+      &lt;Head&gt;
+        &lt;title&gt;{&quot;created OGP&quot;}&lt;/title&gt;
+        &lt;meta
+          property=&quot;og:image&quot;
+          content={`${createGcsURL(appEnv)}/${cloudStorageKeys.OGP}/${
+            props.pid
+          }`}
+        /&gt;
+        &lt;meta
+          property=&quot;og:url&quot;
+          content={`${createHostingURL(appEnv)}/${props.pid}`}
+        /&gt;
+        &lt;meta property=&quot;og:type&quot; content=&quot;article&quot; /&gt;
+        &lt;meta
+          property=&quot;og:description&quot;
+          content={`ogpngは、プログラミングからOGP画像を生成しシェアできるサービスです。`}
+        /&gt;
+
+        &lt;meta name=&quot;twitter:card&quot; content=&quot;summary_large_image&quot; /&gt;
+        &lt;meta
+          name=&quot;twitter:description&quot;
+          content={`ogpngは、プログラミングからOGP画像を生成しシェアできるサービスです。`}
+        /&gt;
+        &lt;meta
+          name=&quot;twitter:image&quot;
+          content={`${createGcsURL(env())}/${cloudStorageKeys.OGP}/${
+            props.pid
+          }`}
+        /&gt;
+      &lt;/Head&gt;
+      &lt;h1&gt;生成された画像&lt;/h1&gt;
+      &lt;img
+        src={`${createGcsURL(env())}/${cloudStorageKeys.OGP}/${props.pid}`}
+      &gt;&lt;/img&gt;
+      &lt;a href={`https://twitter.com/intent/tweet?text=${url}`}&gt;
+        &lt;button&gt;
+          OGP画像をシェアする
+          &lt;img src=&quot;/twitter.svg&quot; className=&quot;icon&quot;&gt;&lt;/img&gt;
+        &lt;/button&gt;
+      &lt;/a&gt;
+      &lt;Link href=&quot;/&quot;&gt;
+        &lt;button&gt;←TOPに戻る&lt;/button&gt;
+      &lt;/Link&gt;
+    &lt;/div&gt;
+  )
+}
+
+export const getServerSideProps: GetServerSideProps = async context =&gt; {
+  const { pid } = context.query
+  return { props: { pid } }
+}
+</code></pre>
+<h4>記事 ID 取得</h4>
+<pre><code class="language-ts">export const getServerSideProps: GetServerSideProps = async context =&gt; {
+  const { pid } = context.query
+  return { props: { pid } }
+}
+</code></pre>
+<h3>取得した ID を元に meta タグで OGP 展開</h3>
+<pre><code class="language-tsx">&lt;Head&gt;
+  &lt;title&gt;{&quot;created OGP&quot;}&lt;/title&gt;
+  &lt;meta
+    property=&quot;og:image&quot;
+    content={`${createGcsURL(appEnv)}/${cloudStorageKeys.OGP}/${props.pid}`}
+  /&gt;
+  &lt;meta
+    property=&quot;og:url&quot;
+    content={`${createHostingURL(appEnv)}/${props.pid}`}
+  /&gt;
+  &lt;meta property=&quot;og:type&quot; content=&quot;article&quot; /&gt;
+  &lt;meta
+    property=&quot;og:description&quot;
+    content={`ogpngは、プログラミングからOGP画像を生成しシェアできるサービスです。`}
+  /&gt;
+
+  &lt;meta name=&quot;twitter:card&quot; content=&quot;summary_large_image&quot; /&gt;
+  &lt;meta
+    name=&quot;twitter:description&quot;
+    content={`ogpngは、プログラミングからOGP画像を生成しシェアできるサービスです。`}
+  /&gt;
+  &lt;meta
+    name=&quot;twitter:image&quot;
+    content={`${createGcsURL(env())}/${cloudStorageKeys.OGP}/${props.pid}`}
+  /&gt;
+&lt;/Head&gt;
+</code></pre>
+<p>react-helmet を使えば meta タグを書き換えることができます。
+事前に記事 ID 名で画像を保存しているので記事 ID さえあれば OGP 画像を取得できます。</p>
+<h2>なぜ諦めたのか</h2>
+<p>実装の過ちにいろいろ気づいたからです。</p>
+<h3>JSX のハイライト</h3>
+<pre><code class="language-ts">new MonacoWebpackPlugin({
+  // Add languages as needed...
+  languages: [&quot;javascript&quot;, &quot;typescript&quot;, &quot;html&quot;],
+  filename: &quot;static/[name].worker.js&quot;,
+})
+</code></pre>
+<p>において JSX のサポートを見つけられませんでした。</p>
+<p>Issue などを読む限りどうやら monaco-editor をそのまま使う必要があるみたいです。</p>
+<h3>スタイリング + ニューモフィズムやりづらい</h3>
+<p>自業自得なのですがニューモフィズムが辛くなりました。
+また monaco にスタイルを当てること自体が難しかったです。
+なのにニューモフィズムなんてやろうとしたから辛くなりました。</p>
+<p>ニューモフィズムはただ流行っていたし個人アプリを使って練習しようと思って取り入れた感じです。
+多分このままやるとしんどくなるのでスタイリング周りを全部消すといいと思います。
+styled-jsx を使っているので <code>&lt;style&gt;</code>と書いてる箇所を全部消すとスタイルを全部落とせます。</p>
+<h3>Canvas 汚染の回避</h3>
+<p>画像を埋め込みたいニーズをもらったのですが、DOM =&gt; canvas 経由で画像化するのでオリジンが違う画像を読み込めない canvas 汚染にはまりました。
+これを回避するためには画像をオリジンにおく必要があり、画像アップロード機能が必要です。
+とりあえずは暫定対応として base64 に変換する導線を用意はしました。</p>
+<h3>ユーザー登録の概念が必要</h3>
+<p>画像アップロード機能を使うならユーザー登録やログインの概念が必要です。
+そしてそのまま firestore なんかも必要になるのではと思っています。</p>
+<h3>クライアントサイドでのコンパイルが最適ではない</h3>
+<p>クライアントサイドでのコンパイルではなく、worker の上でコンパイルしたいです。
+出力画像用のコード量が増えると、OGP 画像する際の画面遷移が遅くなりそうです。</p>
+<h2>考えていた勝ち筋(とらぬ狸の皮算用)</h2>
+<p>万能 Ogp as a Service を目指す。</p>
+<h3>ニーズ</h3>
+<h4>記事の OGP は大事</h4>
+<p>目を引くので欲しいです。実際のところ必須な案件が増えていると思います。
+ビジネスサイドでのニーズの高まりも感じています。</p>
+<h4>とはいえ OGP 生成大変</h4>
+<p>ただ、自由度高く OGP 作るのは難しいです。
+node-canvas もありますが canvas 慣れしていない人にとっては難しそうです。</p>
+<h3>ソリューション</h3>
+<p><a href="https://github.com/vercel/og-image">vercel/og-image</a> を API 化・エディタ埋め込みできるものを目指します。</p>
+<h4>自由度の高い画像を生成できるようにする</h4>
+<ul>
+<li>HTML + CSS</li>
+<li>JSX</li>
+<li>Vue</li>
+<li>Canvas(node-canvas 含め)</li>
+<li>WebGL(Shader)</li>
+</ul>
+<p>とくに node-canvas 以外にもいろんな選択肢で作れるのが欲しいものです。</p>
+<p>さらに欲をいうと No Code で作れると嬉しいです。</p>
+<h4>API ベースで画像を作れるようになる</h4>
+<p>OGP を手軽に作れるようになりたいです。
+エンドポイントに文字列を送るだけで画像になるなら嬉しいです。</p>
+<h4>画像テンプレートを作る</h4>
+<p>自分の好きな画像と組み合わせたいです。
+その画像を複数保存できるようにしておくと良いでしょう。</p>
+<p>いわゆる No Code 的なやつですね。</p>
+<h3>マネタイズ</h3>
+<p>運用はタダで動かせるので、ちょっとでも広告費が入れば不労所得になります。
+うまい棒くらいは変えると思います。</p>
+<h2>誰か挑戦してみませんか？</h2>
+<p>Twitter とか Issue で質問を投げてくれると答えられる範囲で答えます。
+もし 1 穴当てたらほんの少しのお気持ちで焼肉的なものに連れて行ってくれると嬉しいです。</p>
+<h2>参考資料</h2>
+<ul>
+<li><a href="https://ogpng.vercel.app/">ogpng(サービス)</a></li>
+<li><a href="https://github.com/sadnessOjisan/ogpng">実装</a></li>
+<li><a href="/jsx-preview">ブラウザ上で JSX をコンパイルしてプレビュー環境を作る</a></li>
+<li><a href="/dynamic-ogp">絶対にお金を払いたくない精神での動的 OGP 生成は辛い</a></li>
+<li><a href="https://github.com/vercel/og-image">vercel/og-image</a></li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,2226 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>preact コードリーディング</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="preact なんとなく理解した記念ブログです。もともと React を読むつもりが挫折したので慣れるために preact を読みました。">
+    <meta property="og:title" content="preact コードリーディング">
+    <meta property="og:image" content="https://blog.ojisan.io//preact-reading/visual.png">
+    <meta property="og:description" content="preact なんとなく理解した記念ブログです。もともと React を読むつもりが挫折したので慣れるために preact を読みました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="preact コードリーディング">
+    <meta name="twitter:description" content="preact なんとなく理解した記念ブログです。もともと React を読むつもりが挫折したので慣れるために preact を読みました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-02</time>
+      <h1>preact コードリーディング</h1>
+    </div>
+    <div class="post-contents"><p>preact なんとなく理解した記念ブログです。
+もともと React を読むつもりが挫折したので慣れるために preact を読みました。
+おかげで仮想 DOM の悲鳴が聞こえるようになりました。</p>
+<h2>preact とは</h2>
+<p>React の軽量版・サブセットです。</p>
+<p>公式では</p>
+<blockquote>
+<p>Fast 3kB React alternative with the same modern API. Components &amp; Virtual DOM.</p>
+</blockquote>
+<p>と説明されています。</p>
+<p>(p)react には、</p>
+<ul>
+<li>状態を持て、書き換えも可能である</li>
+<li>状態を書き換えるとそれに対応して HTML が書き換わる</li>
+</ul>
+<p>という特徴があります。
+それがどのようにして実現されているのかを見ていきましょう。</p>
+<h2>前提となる知識</h2>
+<p>preact のコードリーディングを進める上では VNode というオブジェクトに慣れる必要があります。
+これは JSX を仮想 DOM に変換したものですので、仮想 DOM とは何かという復習から始めましょう。</p>
+<h3>仮想 DOM とは何か</h3>
+<p>仮想 DOM はこれまでブラウザが持っていたリアル DOM ツリーを、JavaScript のオブジェクトとして表現したものです。</p>
+<p>たとえば、</p>
+<pre><code class="language-html">&lt;div&gt;
+  &lt;p&gt;hello world&lt;/p&gt;
+&lt;/div&gt;
+</code></pre>
+<p>を</p>
+<pre><code class="language-js">{
+  type: 'div',
+  childrens: [{
+    type: &quot;p&quot;,
+    childrens: [
+      {type: null, childrens: [&quot;hello world&quot;]}
+    ]
+  }]
+}
+</code></pre>
+<p>のように表現したものです。</p>
+<p>このように表現すると、部分的に変更を適用しやすくなり、本物の DOM を操作するときの計算コスト（HTML の解析、DOM ツリーの再構築など）を節約することができます。</p>
+<p>仮想 DOM については、<a href="https://twitter.com/bc_rikko">＠bc_rikko</a>さんの <a href="https://kuroeveryday.blogspot.com/2018/11/how-to-create-virtual-dom-framework.html">自作フレームワークをつくって学ぶ 仮想 DOM 実践入門</a> にとてもわかりやすくチュートリアル形式でまとまっていますのでこちらを見ると良いでしょう。</p>
+<h3>jsx と h 関数</h3>
+<p>preact もいわゆる仮想 DOM 系のライブラリです。
+そのデータ構造は VNode と呼ばれるオブジェクトに従いますが、これを作る関数が h 関数 です。</p>
+<pre><code class="language-js">import { h, render } from &quot;https://unpkg.com/preact?module&quot;
+
+const app = h(&quot;h1&quot;, null, &quot;Hello World!&quot;)
+
+render(app, document.body)
+</code></pre>
+<p>これはいわば React でいうところの <code>createElement</code> です。
+この h という名前は <a href="https://github.com/Matt-Esch/virtual-dom">virtual-dom</a> というライブラリから来ているらしいです。</p>
+<p>ただ h は見辛い点もあるので、そこで使われるのが お馴染みの jsx です。
+先ほどのコードは、</p>
+<pre><code class="language-jsx">import { h, render } from &quot;https://unpkg.com/preact?module&quot;
+
+const app = &lt;h1&gt;Hello World!&lt;/h1&gt;
+
+render(app, document.body)
+</code></pre>
+<p>としても書けます。</p>
+<p>そして h 関数の引数は <code>h(type, props, ...children)</code> となっており、props を持たせることもできます。
+そのため例えば、</p>
+<pre><code class="language-js">h(&quot;div&quot;, { id: &quot;foo&quot; }, &quot;Hello!&quot;)
+</code></pre>
+<p>は、</p>
+<pre><code class="language-jsx">&lt;div id=&quot;foo&quot;&gt;Hello!&lt;/div&gt;
+</code></pre>
+<p>と同じです。</p>
+<p>この挙動は JSX のネストがあっても、イベントハンドラを設定しても同様に動作します。
+諸々の実験は<a href="https://github.com/ojisan-toybox/preact-h-babel">こちら</a>でできるようにしましたので、jsx と h 関数の関係がよくわからない方は試してみてください。</p>
+<p>preact の内部では jsx は h 関数に変換されて VNode 形式でデータをやりとりされるので、コードリーディングする上では直接見ることはありません。
+しかし props や children の描画や探索をライブラリが行う以上、それらの動きをトレースするためには元々はどういう構造のコードだったかを考えないと読み進めれないと思います。
+なので VNode, h, jsx の変換に慣れる必要があると思いますので、自信がない方はもろもろ実験して感覚を掴んでください。</p>
+<h2>preact の全体感</h2>
+<p>コードリーディングを始める前に preact の全体感を解説します。</p>
+<h3>ビルド</h3>
+<p><a href="https://github.com/developit/microbundle">microbundle</a> というツールで行われています。
+これは rollup のラッパーで作者が preact のビルド設定をデフォルトに設定したものです。
+package.json のフィールドをみてビルドをしてくれるため、zero config でビルドできます。</p>
+<pre><code class="language-json:title=package.json">{
+  &quot;name&quot;: &quot;foo&quot;, // your package name
+  &quot;source&quot;: &quot;src/foo.js&quot;, // your source code
+  &quot;main&quot;: &quot;dist/foo.js&quot;, // where to generate the CommonJS/Node bundle
+  &quot;module&quot;: &quot;dist/foo.module.js&quot;, // where to generate the ESM bundle
+  &quot;unpkg&quot;: &quot;dist/foo.umd.js&quot;, // where to generate the UMD bundle (also aliased as &quot;umd:main&quot;)
+  &quot;scripts&quot;: {
+    &quot;build&quot;: &quot;microbundle&quot;, // compiles &quot;source&quot; to &quot;main&quot;/&quot;module&quot;/&quot;unpkg&quot;
+    &quot;dev&quot;: &quot;microbundle watch&quot; // re-build when source files change
+  }
+}
+</code></pre>
+<p>上の例だと、source から main へビルドしてくれます。</p>
+<h3>言語</h3>
+<p>preact は JavaScript で実装されています。
+TypeScript ではありません。
+ただし JSDoc に型情報があり、型を出力しています。</p>
+<pre><code class="language-js">/**
+ * Render a Preact virtual node into a DOM element
+ * @param {import('./index').ComponentChild} vnode The virtual node to render
+ * @param {import('./internal').PreactElement} parentDom The DOM element to
+ * render into
+ * @param {Element | Text} [replaceNode] Optional: Attempt to re-use an
+ * existing DOM tree rooted at `replaceNode`
+ */
+export function render(vnode, parentDom, replaceNode) {}
+</code></pre>
+<p>そのためライブラリの利用者側では型の補完を効かせながら開発できますが、preact 自体には型はついていません。
+内部 API は JSDoc の型も間違っていたりもします。</p>
+<h3>DOM の情報を持ち回るデータ構造</h3>
+<p>要素は VNode という形式で回されます。
+これは preact 内部での要素表現です。
+これを引数にとったり出力したりなどします。</p>
+<p>VNode の定義はこうです。</p>
+<pre><code class="language-ts">// preact というname space で定義されている VNode. ユーザー向け.
+interface VNode&lt;P = {}&gt; {
+  type: ComponentType&lt;P&gt; | string
+  props: P &amp; { children: ComponentChildren }
+  key: Key
+  ref?: Ref&lt;any&gt; | null
+  startTime?: number
+  endTime?: number
+}
+
+// 内部APIで使う VNode
+export interface VNode&lt;P = {}&gt; extends preact.VNode&lt;P&gt; {
+  type: string | ComponentFactory&lt;P&gt;
+  props: P &amp; { children: preact.ComponentChildren }
+  _children: Array&lt;VNode&lt;any&gt;&gt; | null
+  _parent: VNode | null
+  _depth: number | null
+  _dom: PreactElement | null
+  _nextDom: PreactElement | null
+  _component: Component | null
+  _hydrating: boolean | null
+  constructor: undefined
+  _original?: VNode | null
+}
+</code></pre>
+<p>簡単な例をあげると、</p>
+<pre><code class="language-jsx">&lt;div id=&quot;foo&quot;&gt;Hello!&lt;/div&gt;
+</code></pre>
+<p>は、</p>
+<pre><code class="language-js">h(&quot;div&quot;, { id: &quot;foo&quot; }, &quot;Hello!&quot;)
+</code></pre>
+<p>となり、h が返す VNode は</p>
+<pre><code class="language-js">const vnode = {
+  type: &quot;div&quot;
+  props: { id: &quot;foo&quot; }
+  _children:  [{...}]
+  _parent:  null
+  _depth:  null
+  _dom:  null
+  _nextDom:  null
+  _component: null
+  _hydrating:  null
+  constructor: undefined
+}
+</code></pre>
+<p>となります。</p>
+<h3>preact の仕組み</h3>
+<p>さて、裏側に VNode がいることがわかれば preact が何をしているのかを理解することは難しくありません。</p>
+<p>preact が行っていることは、DOM を VNode で表現しなにかしらの状態変化が起きた時に新旧の VNode に差分があった箇所を検知してその箇所の DOM を書き換えることです。
+その新旧 VNode の比較は diff 関数と呼ばれるもので行われます。
+この diff 関数は VNode の子要素の差分を調べる関数 diffChildren を呼び出しており、この diffChildren も diff を呼び出すことで、<strong>DOM ツリーに対して再帰的に diff を取っていき、差分があった場所の DOM を書き換えます</strong>。</p>
+<h3>呼出し関係</h3>
+<p>関数単位で考えるとこのような呼び出し関係になります。</p>
+<p><img src="call.png" alt="呼び出し関係" /></p>
+<p>意外とシンプルですね。（デフォルメした図なので・・・）</p>
+<p>ファイル自体も多くはなく、大まかな挙動は単純なものです。</p>
+<p><img src="./src.png" alt="src配下の主要なフォルダ一覧" /></p>
+<h2>コードリーディング</h2>
+<p>render から読み進めていきましょう。
+目標は、</p>
+<pre><code class="language-jsx">import { h, render, Component } from &quot;preact&quot;
+
+class App extends Component {
+  state = {
+    age: 19,
+  }
+
+  componentDidMount() {
+    this.setState({ age: 12 })
+  }
+
+  render() {
+    return h(&quot;h1&quot;, null, `${this.state.age}才`)
+  }
+}
+
+render(h(App, null, null), document.body)
+</code></pre>
+<p>がどうして動作するかを理解することです。</p>
+<p>つまり、</p>
+<ul>
+<li>state を書き換える方法</li>
+<li>state が書き換わった時に再レンダリングがされること</li>
+</ul>
+<p>がどのように実現されているかをみていきます。</p>
+<h3>注意</h3>
+<p>hydrate, context, ref など上記の目標に関わらないところは説明の都合上読み飛ばします。</p>
+<h3>render を起点にする</h3>
+<p><code>index.js</code> から <code>render</code> が export されているのでそこからコードを追っていきます。</p>
+<p>render の実装はこうなっています。</p>
+<pre><code class="language-js:title=render.js">import { EMPTY_OBJ, EMPTY_ARR } from &quot;./constants&quot;
+import { commitRoot, diff } from &quot;./diff/index&quot;
+import { createElement, Fragment } from &quot;./create-element&quot;
+import options from &quot;./options&quot;
+
+const IS_HYDRATE = EMPTY_OBJ
+
+export function render(vnode, parentDom, replaceNode) {
+  if (options._root) options._root(vnode, parentDom)
+  let isHydrating = replaceNode === IS_HYDRATE
+  let oldVNode = isHydrating
+    ? null
+    : (replaceNode &amp;&amp; replaceNode._children) || parentDom._children
+  vnode = createElement(Fragment, null, [vnode])
+  let commitQueue = []
+  diff(
+    parentDom,
+    ((isHydrating ? parentDom : replaceNode || parentDom)._children = vnode),
+    oldVNode || EMPTY_OBJ,
+    EMPTY_OBJ,
+    parentDom.ownerSVGElement !== undefined,
+    replaceNode &amp;&amp; !isHydrating
+      ? [replaceNode]
+      : oldVNode
+      ? null
+      : parentDom.childNodes.length
+      ? EMPTY_ARR.slice.call(parentDom.childNodes)
+      : null,
+    commitQueue,
+    replaceNode || EMPTY_OBJ,
+    isHydrating
+  )
+
+  commitRoot(commitQueue, vnode)
+}
+</code></pre>
+<p>まず、render はユーザーからは</p>
+<pre><code class="language-js">render(&lt;App /&gt;, document.getElement(&quot;body&quot;))
+</code></pre>
+<p>などのようにして呼ばれます。</p>
+<p>render ではこの <code>&lt;App /&gt;</code> が</p>
+<pre><code class="language-js">vnode = createElement(Fragment, null, [vnode])
+</code></pre>
+<p>を通して VNode という形式に変換されます。</p>
+<p>そして</p>
+<pre><code class="language-js">diff(
+  parentDom,
+  ((isHydrating ? parentDom : replaceNode || parentDom)._children = vnode),
+  oldVNode || EMPTY_OBJ,
+  EMPTY_OBJ,
+  parentDom.ownerSVGElement !== undefined,
+  replaceNode &amp;&amp; !isHydrating
+    ? [replaceNode]
+    : oldVNode
+    ? null
+    : parentDom.childNodes.length
+    ? EMPTY_ARR.slice.call(parentDom.childNodes)
+    : null,
+  commitQueue,
+  replaceNode || EMPTY_OBJ,
+  isHydrating
+)
+</code></pre>
+<p>で、parentDOM に対して VNode から DOM のツリーを作ります。
+この diff 自体は ツリーを作るための関数ではないのですが、差分更新を行った結果ツリーができあがるので初回の render 呼び出しで呼ばれます。</p>
+<p>三項演算子や OR でごちゃごちゃしていますが、hydrate がされない初回レンダリングだと、</p>
+<pre><code class="language-js">diff(
+  parentDom,
+  vnode,
+  EMPTY_OBJ,
+  EMPTY_OBJ,
+  EMPTY_ARR.slice.call(parentDom.childNodes),
+  commitQueue,
+  EMPTY_OBJ
+)
+</code></pre>
+<p>として呼ばれます。</p>
+<p>そして最後に</p>
+<pre><code class="language-js">commitRoot(commitQueue, vnode)
+</code></pre>
+<p>にて、HTML ができたあとに各コンポーネントが持っていた componentDidMount などの関数を実行します。
+それらの処理は diff を取る時に commitQueue に詰め込まれているので、それを commitRoot に渡します。</p>
+<p>render 自体は diff と commitRoot という関数を呼び出すことが大きな仕事で複雑なものはありません。</p>
+<h3>diff で差分を比較していく</h3>
+<p>diff 関数は次のようになっています。
+この関数が根幹の起点になるためかなり長いです。</p>
+<p>全体像は<a href="https://github.com/preactjs/preact/blob/master/src/diff/index.js">こちら</a>ですが、長すぎて追いにくいので大事なところ以外削って、分岐の条件などをみやすくします。
+これから読んでいくコードはこのような関数です。</p>
+<pre><code class="language-js:title=diff/index.js">export function diff(
+  parentDom,
+  newVNode,
+  oldVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  oldDom,
+  isHydrating
+) {
+  newType = newVNode.type
+
+  try {
+    // labelという機能.
+    outer: if (typeof newType == &quot;function&quot;) {
+      // 渡されたVNodeのtypeがコンポーネントの場合
+      let c, isNew, oldProps, oldState, snapshot, clearProcessingException
+      let newProps = newVNode.props
+
+      if (oldVNode._component) {
+        c = newVNode._component = oldVNode._component
+        clearProcessingException = c._processingException = c._pendingError
+      } else {
+        // 渡されたVNodeのtypeがfunctionであればComponentFactoryなので分岐
+        // ClassComponent じゃなくて FC の可能性もあるのでその分岐
+        if (&quot;prototype&quot; in newType &amp;&amp; newType.prototype.render) {
+          newVNode._component = c = new newType(newProps, componentContext)
+        } else {
+          newVNode._component = c = new Component(newProps, componentContext)
+          c.constructor = newType
+          c.render = doRender
+        }
+
+        // 作ったコンポーネントに値を詰め込む
+        c.props = newProps
+        if (!c.state) c.state = {}
+        isNew = c._dirty = true
+        c._renderCallbacks = []
+      } // この 処理により必ず _nextState はなんらかの値を持つ。c.stateの初期値は {}
+
+      if (c._nextState == null) {
+        c._nextState = c.state
+      }
+
+      oldProps = c.props
+      oldState = c.state
+
+      if (isNew) {
+        // 新しく渡ってきたコンポーネントの場合(VNodeがfunctionでないとき)
+        if (
+          newType.getDerivedStateFromProps == null &amp;&amp;
+          c.componentWillMount != null
+        ) {
+          c.componentWillMount()
+        }
+
+        if (c.componentDidMount != null) {
+          c._renderCallbacks.push(c.componentDidMount)
+        }
+      } else {
+        // コンポーネントを新しく作らなかった場合(VNodeがfunctionのとき)
+        if (
+          newType.getDerivedStateFromProps == null &amp;&amp;
+          newProps !== oldProps &amp;&amp;
+          c.componentWillReceiveProps != null
+        ) {
+          c.componentWillReceiveProps(newProps, componentContext)
+        }
+
+        // 再レンダリング抑制
+        if (
+          (!c._force &amp;&amp;
+            c.shouldComponentUpdate != null &amp;&amp;
+            c.shouldComponentUpdate(
+              newProps,
+              c._nextState,
+              componentContext
+            ) === false) ||
+          newVNode._original === oldVNode._original
+        ) {
+          if (c._renderCallbacks.length) {
+            commitQueue.push(c)
+          }
+
+          reorderChildren(newVNode, oldDom, parentDom)
+          break outer
+        }
+
+        if (c.componentWillUpdate != null) {
+          c.componentWillUpdate(newProps, c._nextState, componentContext)
+        }
+
+        if (c.componentDidUpdate != null) {
+          c._renderCallbacks.push(() =&gt; {
+            c.componentDidUpdate(oldProps, oldState, snapshot)
+          })
+        }
+      }
+
+      let renderResult = isTopLevelFragment ? tmp.props.children : tmp
+
+      // 子コンポーネントの差分を取る
+      diffChildren(
+        parentDom,
+        Array.isArray(renderResult) ? renderResult : [renderResult],
+        newVNode,
+        oldVNode,
+        globalContext,
+        isSvg,
+        excessDomChildren,
+        commitQueue,
+        oldDom,
+        isHydrating
+      )
+    } else if (
+      excessDomChildren == null &amp;&amp;
+      newVNode._original === oldVNode._original
+    ) {
+      // typeがfunctionでない &amp;&amp; 過剰なchildren(excessDomChildren) がない場合
+      newVNode._children = oldVNode._children
+      newVNode._dom = oldVNode._dom
+    } else {
+      // typeがfunctionでない &amp;&amp; 過剰なchildren(excessDomChildren) がある場合
+      newVNode._dom = diffElementNodes(
+        oldVNode._dom,
+        newVNode,
+        oldVNode,
+        globalContext,
+        isSvg,
+        excessDomChildren,
+        commitQueue,
+        isHydrating
+      )
+    }
+  } catch (e) {
+    // 元に戻す
+    newVNode._original = null
+    if (isHydrating || excessDomChildren != null) {
+      newVNode._dom = oldDom
+      newVNode._hydrating = !!isHydrating
+      excessDomChildren[excessDomChildren.indexOf(oldDom)] = null
+    }
+    options._catchError(e, newVNode, oldVNode)
+  }
+
+  return newVNode._dom
+}
+</code></pre>
+<p>では、これらを 1 つ 1 つ見ていきましょう。</p>
+<h4>newType で更新したいコンポーネントのタイプを知る</h4>
+<p>まず最初に</p>
+<pre><code class="language-js">newType = newVNode.type
+</code></pre>
+<p>が定義されます。
+この newVNode は差分を取りたい VNode です。</p>
+<p>そして VNode は <code>&quot;div&quot;</code> や 関数(コンポーネント)を type に持てるのでした。
+そのためこの <code>newType</code> は <code>string | ComponentFactory&lt;P&gt;;</code> を取りうります。
+ComponentFactory は JavaScript の世界では function ですが、これは ClassComponent, FunctionComponent であることを示します。</p>
+<p>実際 preact の上では</p>
+<pre><code class="language-ts">export type ComponentFactory&lt;P&gt; =
+  | preact.ComponentClass&lt;P&gt;
+  | FunctionalComponent&lt;P&gt;
+</code></pre>
+<p>という型定義になっています。</p>
+<p>このタイプによって処理が大きく変わるので最初にフラグとして持っています。</p>
+<h4>見慣れない label 構文</h4>
+<p>タイプによる分岐の説明に入る前に</p>
+<pre><code class="language-js">outer: if (typeof newType == 'function') {
+</code></pre>
+<p>についてみましょう。</p>
+<p>JS でこんな JSON みたいなことを生で書けましたっけ？
+これは <strong>label という機能</strong>で、break したときにここに戻すみたいなことができます。</p>
+<p>FYI: https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Statements/label</p>
+<p>goto みたいものなので普段はあまり使われてはいません。</p>
+<h4>diff を取る対象による分岐</h4>
+<p>その分岐は</p>
+<pre><code class="language-js:title=diff/index.js">if (typeof newType == &quot;function&quot;) {
+  // no op
+} else if (
+  excessDomChildren == null &amp;&amp;
+  newVNode._original === oldVNode._original
+) {
+  // no op
+} else {
+  // no op
+}
+</code></pre>
+<p>となっており、<code>typeof newType == &quot;function&quot;</code> がとても重要です。</p>
+<p>これは <strong>diff を取る対象がコンポーネントかどうか</strong> という意味です。</p>
+<h4>diff を取る対象がコンポーネントの場合</h4>
+<p>VNode にある情報を使ってコンポーネントを作ります。</p>
+<pre><code class="language-js:title=diff/index.js">if (oldVNode._component) {
+  c = newVNode._component = oldVNode._component
+  clearProcessingException = c._processingException = c._pendingError
+} else {
+  // 渡されたVNodeのtypeがfunctionであればComponentFactoryなので分岐
+  // ClassComponent じゃなくて FC の可能性もあるのでその分岐
+  if (&quot;prototype&quot; in newType &amp;&amp; newType.prototype.render) {
+    newVNode._component = c = new newType(newProps, componentContext)
+  } else {
+    newVNode._component = c = new Component(newProps, componentContext)
+    c.constructor = newType
+    c.render = doRender
+  }
+
+  // 作ったコンポーネントに値を詰め込む
+  c.props = newProps
+  if (!c.state) c.state = {}
+  c.context = componentContext
+  c._globalContext = globalContext
+  isNew = c._dirty = true
+  c._renderCallbacks = []
+} // この 処理により必ず _nextState はなんらかの値を持つ。c.stateの初期値は {}
+
+if (c._nextState == null) {
+  c._nextState = c.state
+}
+</code></pre>
+<p>もしすでにコンポーネントがあるのならばそれを使いまわし、なければ新しく作ります。
+たとえば</p>
+<pre><code class="language-js">c = newVNode._component = oldVNode._component
+</code></pre>
+<p>にあるように、すでに VNode がコンポーネントを持っていたらそれを使います。
+これは<strong>state の変更など同一コンポーネントにおける差分更新をしたいとき</strong>にお世話になります。</p>
+<p>新しく作る場合、その新しい VNode の type がコンポーネントかどうかに着目します。
+もしそれがコンポーネントならばその constructor を呼び出して使いまわし、そうでなければ Component のインスタンスを作ります。</p>
+<pre><code class="language-js:title=diff/index.js">if (&quot;prototype&quot; in newType &amp;&amp; newType.prototype.render) {
+  newVNode._component = c = new newType(newProps, componentContext)
+} else {
+  newVNode._component = c = new Component(newProps, componentContext)
+  c.constructor = newType
+  c.render = doRender
+}
+</code></pre>
+<p>diff は render 以外からも呼ばれるので、newType にコンポーネントクラスのコンストラクタが渡されている場合もあるためです。</p>
+<p>もし 新しく Component インスタンスを作った場合は必要な値を初期化します。</p>
+<pre><code class="language-js:title=diff/index.js">// 作ったコンポーネントに値を詰め込む
+c.props = newProps
+if (!c.state) c.state = {}
+isNew = c._dirty = true
+c._renderCallbacks = []
+</code></pre>
+<p>そして、コンポーネントを使いまわした場合 &amp; 新しく作った場合の共通の初期化を行います。</p>
+<pre><code class="language-js:title=diff/index.js">// この 処理により必ず _nextState はなんらかの値を持つ。c.stateの初期値は {}
+if (c._nextState == null) {
+  c._nextState = c.state
+}
+
+oldProps = c.props
+oldState = c.state
+</code></pre>
+<h4>一部ライフサイクルイベントの実行</h4>
+<p>次にライフサイクルの実行を行います。
+ライフサイクルイベントには componentWillReceiveProps など差分更新のタイミングで実行するものもあります。
+反対に componentDidMount は diff を取った後に実行するのでここでは実行されません。</p>
+<pre><code class="language-js:title=diff/index.js">if (isNew) {
+  // 新しく渡ってきたコンポーネントの場合(VNodeがfunctionでないとき)
+  if (
+    newType.getDerivedStateFromProps == null &amp;&amp;
+    c.componentWillMount != null
+  ) {
+    c.componentWillMount()
+  }
+
+  if (c.componentDidMount != null) {
+    c._renderCallbacks.push(c.componentDidMount)
+  }
+} else {
+  // コンポーネントを新しく作らなかった場合(VNodeがfunctionのとき)
+  if (
+    newType.getDerivedStateFromProps == null &amp;&amp;
+    newProps !== oldProps &amp;&amp;
+    c.componentWillReceiveProps != null
+  ) {
+    c.componentWillReceiveProps(newProps, componentContext)
+  }
+
+  // 再レンダリング抑制
+  if (
+    (!c._force &amp;&amp;
+      c.shouldComponentUpdate != null &amp;&amp;
+      c.shouldComponentUpdate(newProps, c._nextState, componentContext) ===
+        false) ||
+    newVNode._original === oldVNode._original
+  ) {
+    if (c._renderCallbacks.length) {
+      commitQueue.push(c)
+    }
+
+    reorderChildren(newVNode, oldDom, parentDom)
+    break outer
+  }
+
+  if (c.componentWillUpdate != null) {
+    c.componentWillUpdate(newProps, c._nextState, componentContext)
+  }
+
+  if (c.componentDidUpdate != null) {
+    c._renderCallbacks.push(() =&gt; {
+      c.componentDidUpdate(oldProps, oldState, snapshot)
+    })
+  }
+}
+</code></pre>
+<p>isNew つまりコンポーネントが新規作成ならば、<code>componentWillMount</code> と <code>componentDidMount</code> を実行します。</p>
+<p>ここで注目すべきは <code>componentDidMount</code> です。即時実行せずに renderQueue に詰め込んでいます。
+これはマウントされた後に実行したいからです。
+くわしくは commitRoot の説明でみていきましょう。</p>
+<p>このコードブロックで面白いのは、<code>shouldComponentUpdate</code> です。
+パフォチューの文脈で</p>
+<ul>
+<li>再レンダリングするとその子もされる</li>
+<li>再レンダリング抑制すればその子のレンダリングを止められる</li>
+</ul>
+<p>という話を聞いたことはないでしょうか。</p>
+<p>その挙動をまさしく再現しているのが次のコードです。</p>
+<pre><code class="language-js:title=diff/index.js">// 再レンダリング抑制
+if (
+  (!c._force &amp;&amp;
+    c.shouldComponentUpdate != null &amp;&amp;
+    c.shouldComponentUpdate(newProps, c._nextState, componentContext) ===
+      false) ||
+  newVNode._original === oldVNode._original
+) {
+  if (c._renderCallbacks.length) {
+    commitQueue.push(c)
+  }
+
+  reorderChildren(newVNode, oldDom, parentDom)
+  break outer
+}
+</code></pre>
+<p><code>shouldComponentUpdate</code> があればこの時点で break しています。
+このブロックの先には diffChildren があるのですが、それを実行しなくて済んでいるわけです。
+つまり子の再レンダリングが抑制できています。</p>
+<h4>子要素の差分を取る</h4>
+<p>そして大事な処理が</p>
+<pre><code class="language-js">diffChildren(
+  parentDom,
+  Array.isArray(renderResult) ? renderResult : [renderResult],
+  newVNode,
+  oldVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  oldDom,
+  isHydrating
+)
+</code></pre>
+<p>です。</p>
+<p>これは コンポーネントの children に対して diff を取る処理です。
+<strong>diff を取る対象がコンポーネント(type=='function'の分岐の場合)の場合、実は diff という関数で diff をとっているのは <code>diffChildren</code> を呼び出すことです。</strong>
+diff を取る対象がコンポーネントであれば、必ずその子要素がいるからです。</p>
+<p>この <code>diffChildren</code> は内部で <code>diff</code> を呼び（つまり関数を跨いだ再帰をしている）次第に diff を取る対象が primitivie な場合である分岐に入っていきます。
+詳しくは diffChildren の説明で解説します。</p>
+<p>この diffChildren が実行されると、あとは if の分岐から出て、<code>return newVNode._dom;</code> が実行されます。つまり差分をとった後の DOM が返されるわけです。
+この newVNode._dom が差分をとった DOM になるのは、diff を取る中で引数を破壊的変更していくからなのですが、それについても後から見ていきます。</p>
+<h4>diff を取る対象が primitive の場合</h4>
+<p>diff を取る対象が primitive の場合のコードブロックは次の通りです。</p>
+<pre><code class="language-js:title=diff/index.js">else if (excessDomChildren == null &amp;&amp; newVNode._original === oldVNode._original) {
+  // 基本的にはこの分岐には入らないから考えない
+  newVNode._children = oldVNode._children
+  newVNode._dom = oldVNode._dom
+} else {
+  // typeがfunctionでない &amp;&amp; 過剰なchildren(excessDomChildren) がある場合
+  newVNode._dom = diffElementNodes(
+    oldVNode._dom,
+    newVNode,
+    oldVNode,
+    globalContext,
+    isSvg,
+    excessDomChildren,
+    commitQueue,
+    isHydrating
+  )
+}
+</code></pre>
+<p>この diffElementNodes は一体なんでしょうか。</p>
+<pre><code class="language-js">newVNode._dom = diffElementNodes(
+  oldVNode._dom,
+  newVNode,
+  oldVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  isHydrating
+)
+</code></pre>
+<p>これは vnode の差分を比較し、その差分を反映した dom を返す関数です。
+これもあとで詳しく見ていきましょう。</p>
+<p>この関数も呼ばれると引数の DOM を改変し、最後に <code>return newVNode._dom</code> が実行されて <code>diff</code> が終了します。</p>
+<h4>diff が呼び出す関数を読む</h4>
+<p>お疲れ様です。
+ここまでで diff は読めました。
+しかし diff 関数自体は diff をとっているわけではなく、<code>diffChildren</code> と <code>diffElementNodes</code> といった本命が別にいることがわかりました。</p>
+<p>これからそれらを読んでいきましょう。
+先にいうと、 <code>diffChildren</code> は内部で diff を呼び出し続け DOM ツリーを再帰的に辿り、その結果いつかは葉にたどり着くと <code>diffElementNodes</code> が呼ばれる分岐に入ります。
+そのため差分更新の本丸はこの <code>diffElementNodes</code>なのでこちらから見ていきましょう。</p>
+<h3>diffElementNodes</h3>
+<p><code>diffElementNodes</code> は 要素の props を比較して、更新があればそれを DOM に反映する処理の起点となるものです。
+<code>diffElementNodes</code> の定義はこうなっています。</p>
+<pre><code class="language-js:title=diff/index.js">function diffElementNodes(
+  dom,
+  newVNode,
+  oldVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  isHydrating
+) {
+  let i
+
+  // 比較対象の抽出
+  let oldProps = oldVNode.props
+  let newProps = newVNode.props
+
+  // svg かどうかで変わる処理があるのでフラグとして持つ
+  isSvg = newVNode.type === &quot;svg&quot; || isSvg
+
+  if (excessDomChildren != null) {
+    for (i = 0; i &lt; excessDomChildren.length; i++) {
+      const child = excessDomChildren[i]
+      if (
+        child != null &amp;&amp;
+        ((newVNode.type === null
+          ? child.nodeType === 3
+          : child.localName === newVNode.type) ||
+          dom == child)
+      ) {
+        dom = child
+        excessDomChildren[i] = null
+        break
+      }
+    }
+  }
+
+  // dom がないときは作る
+  if (dom == null) {
+    if (newVNode.type === null) {
+      return document.createTextNode(newProps)
+    }
+
+    dom = isSvg
+      ? document.createElementNS(&quot;http://www.w3.org/2000/svg&quot;, newVNode.type)
+      : document.createElement(
+          newVNode.type,
+          newProps.is &amp;&amp; { is: newProps.is }
+        )
+    excessDomChildren = null
+    isHydrating = false
+  }
+
+  if (newVNode.type === null) {
+    if (oldProps !== newProps &amp;&amp; (!isHydrating || dom.data !== newProps)) {
+      dom.data = newProps
+    }
+  } else {
+    // 更新するVNode typeがなんらかの要素である場合
+    if (excessDomChildren != null) {
+      excessDomChildren = EMPTY_ARR.slice.call(dom.childNodes)
+    }
+
+    oldProps = oldVNode.props || EMPTY_OBJ
+
+    // props の diff を取って DOM に反映する関数. この関数は 実DOM を直接操作する
+    diffProps(dom, newProps, oldProps, isSvg, isHydrating)
+
+    i = newVNode.props.children
+
+    // 新propsにchildrenがあるのならばchildrenに対しても差分を取る
+    // newVNode.typeが存在する分岐の中にいるので、何かしらのchildren(=i)は持っている
+    diffChildren(
+      dom,
+      Array.isArray(i) ? i : [i],
+      newVNode,
+      oldVNode,
+      globalContext,
+      newVNode.type === &quot;foreignObject&quot; ? false : isSvg,
+      excessDomChildren,
+      commitQueue,
+      EMPTY_OBJ,
+      isHydrating
+    )
+
+    // form周りの扱い. input 要素が value や checked を持っている場合の扱い
+    if (
+      &quot;value&quot; in newProps &amp;&amp;
+      (i = newProps.value) !== undefined &amp;&amp;
+      (i !== dom.value || (newVNode.type === &quot;progress&quot; &amp;&amp; !i))
+    ) {
+      setProperty(dom, &quot;value&quot;, i, oldProps.value, false)
+    }
+    if (
+      &quot;checked&quot; in newProps &amp;&amp;
+      (i = newProps.checked) !== undefined &amp;&amp;
+      i !== dom.checked
+    ) {
+      setProperty(dom, &quot;checked&quot;, i, oldProps.checked, false)
+    }
+  }
+
+  return dom
+}
+</code></pre>
+<p>それでは一つずつ見ていきましょう。</p>
+<h4>フラグや変数のセット</h4>
+<p>比較に使う変数を取り出します。</p>
+<pre><code class="language-js:title=diff/index.js">let i
+
+// 比較対象の抽出
+let oldProps = oldVNode.props
+let newProps = newVNode.props
+
+// svg かどうかで変わる処理があるのでフラグとして持つ
+isSvg = newVNode.type === &quot;svg&quot; || isSvg
+</code></pre>
+<h4>初回レンダリング</h4>
+<p>反映させるべき DOM がない場合は作ります。
+これは主に初回レンダリング、もしくは要素追加による再レンダリングのときの分岐です。</p>
+<pre><code class="language-js:title=diff/index.js">if (dom == null) {
+  if (newVNode.type === null) {
+    return document.createTextNode(newProps)
+  }
+
+  dom = isSvg
+    ? document.createElementNS(&quot;http://www.w3.org/2000/svg&quot;, newVNode.type)
+    : document.createElement(newVNode.type, newProps.is &amp;&amp; { is: newProps.is })
+  excessDomChildren = null
+  isHydrating = false
+}
+</code></pre>
+<p>面白いのは</p>
+<pre><code class="language-js">if (newVNode.type === null) {
+  return document.createTextNode(newProps)
+}
+</code></pre>
+<p>です。</p>
+<p>VNode.type が null のときは</p>
+<pre><code class="language-js">h(&quot;div&quot;, null, [3])
+</code></pre>
+<p>のようなもので、JSX でいう</p>
+<pre><code class="language-js">const C = () =&gt; {
+  return 3
+}
+</code></pre>
+<p>のようなコンポーネントです。</p>
+<p>この場合は <code>createTextNode</code> が呼ばれます。
+DOM の要素は <code>Node | Text</code> で識別ますが、その Text がこれに該当します。</p>
+<h4>要素のレンダリング</h4>
+<p>そして、</p>
+<pre><code class="language-js:title=diff/index.js">if (newVNode.type === null) {
+  if (oldProps !== newProps &amp;&amp; (!isHydrating || dom.data !== newProps)) {
+    dom.data = newProps
+  }
+} else {
+  ...
+}
+</code></pre>
+<p>と続きます。</p>
+<p>これは VNode がなんらかの要素を持っていればレンダリングする分岐です。
+こ k での newVNode.type は &quot;div&quot; や &quot;h1&quot; などを想定しており、else 節を詳しくみていきましょう。</p>
+<h4>差分の比較と DOM への反映</h4>
+<pre><code class="language-js:title=diff/index.js">oldProps = oldVNode.props || EMPTY_OBJ
+
+// props の diff を取って DOM に反映する関数. この関数は 実DOM を直接操作する
+diffProps(dom, newProps, oldProps, isSvg, isHydrating)
+
+i = newVNode.props.children
+
+// 新propsにchildrenがあるのならばchildrenに対しても差分を取る
+// newVNode.typeが存在する分岐の中にいるので、何かしらのchildren(=i)は持っている
+diffChildren(
+  dom,
+  Array.isArray(i) ? i : [i],
+  newVNode,
+  oldVNode,
+  globalContext,
+  newVNode.type === &quot;foreignObject&quot; ? false : isSvg,
+  excessDomChildren,
+  commitQueue,
+  EMPTY_OBJ,
+  isHydrating
+)
+
+return dom
+</code></pre>
+<p>diffProps で、props の 差分を比較します。
+この関数は 後述する <code>setProperty</code> をを呼び出すことで実 DOM を直接操作を内部で行っており、<strong>差分があった箇所の DOM を実際に変更する役割をになっています。</strong></p>
+<p>そして続く <code>diffChildren</code> で、props に children があればそれを比較します。
+ちなみに children は createElement 経由で VNode が作られた場合 props に埋め込まれます。</p>
+<pre><code class="language-js:title=create-element.js">if (children != null) {
+  normalizedProps.children = children
+}
+</code></pre>
+<p><code>i = newVNode.props.children</code>　はその children を取り出しています。</p>
+<h4>form 要素への特別対応</h4>
+<p>続くコードでは form 要素への対応をします。</p>
+<pre><code class="language-js:title=diff/index.js">// form周りの扱い. input 要素が value や checked を持っている場合の扱い
+if (
+  &quot;value&quot; in newProps &amp;&amp;
+  (i = newProps.value) !== undefined &amp;&amp;
+  (i !== dom.value || (newVNode.type === &quot;progress&quot; &amp;&amp; !i))
+) {
+  setProperty(dom, &quot;value&quot;, i, oldProps.value, false)
+}
+if (
+  &quot;checked&quot; in newProps &amp;&amp;
+  (i = newProps.checked) !== undefined &amp;&amp;
+  i !== dom.checked
+) {
+  setProperty(dom, &quot;checked&quot;, i, oldProps.checked, false)
+}
+</code></pre>
+<p>setProperty でそれぞれの value, checked をピンポイントで渡すようにしています。</p>
+<p>このようにして編集した DOM を最終的に return します。
+<strong>diffProps などは その呼び出し先の関数の中で修正済み DOM をオブジェクトを破壊的変更することで上書いてくれているので、それらの関数の呼び出し後に DOM を返すだけで、新しい構築済み DOM を返すことができます。</strong></p>
+<h4>まとめると</h4>
+<p>いろいろ処理が長かったですが、<code>diffProps</code> というのが DOM 更新のための DOM 操作をする関数です。
+これを呼び出すことが大きな仕事です。
+この関数はその編集後 DOM を return しています。</p>
+<h3>差分の比較と要素の反映をする関数たち</h3>
+<p><code>diffElementNodes</code> が呼び出していた 差分の比較と要素の反映をする関数たちを見ていきましょう。
+これらは <code>diffElementNodes</code> 以外からも呼ばれる関数なので覚えておきましょう。</p>
+<h4>diffProps で適切に setProperty を呼び出す</h4>
+<p>diffProps は 新旧の props を比較して、差分があればその差分を 後述する setProperty を使って上書く関数です。</p>
+<pre><code class="language-js:title=diff/props.js">export function diffProps(dom, newProps, oldProps, isSvg, hydrate) {
+  let i
+
+  for (i in oldProps) {
+    if (i !== &quot;children&quot; &amp;&amp; i !== &quot;key&quot; &amp;&amp; !(i in newProps)) {
+      setProperty(dom, i, null, oldProps[i], isSvg)
+    }
+  }
+
+  for (i in newProps) {
+    if (
+      (!hydrate || typeof newProps[i] == &quot;function&quot;) &amp;&amp;
+      i !== &quot;children&quot; &amp;&amp;
+      i !== &quot;key&quot; &amp;&amp;
+      i !== &quot;value&quot; &amp;&amp;
+      i !== &quot;checked&quot; &amp;&amp;
+      oldProps[i] !== newProps[i]
+    ) {
+      setProperty(dom, i, newProps[i], oldProps[i], isSvg)
+    }
+  }
+}
+</code></pre>
+<p>たとえば key や value といった props の種類に応じては setProperty を読んでいないことが確認できます。</p>
+<h4>setProperty で差分更新を DOM に適用する</h4>
+<p>その名の通り、props を要素に埋め込む関数です。
+<strong>差分更新を適用する直接的な関数です</strong></p>
+<pre><code class="language-js:title=diff/props.js">export function setProperty(dom, name, value, oldValue, isSvg) {
+  let useCapture, nameLower, proxy
+
+  if (isSvg &amp;&amp; name == &quot;className&quot;) name = &quot;class&quot;
+
+  if (name === &quot;style&quot;) {
+    if (typeof value == &quot;string&quot;) {
+      dom.style.cssText = value
+    } else {
+      if (typeof oldValue == &quot;string&quot;) {
+        dom.style.cssText = oldValue = &quot;&quot;
+      }
+
+      if (oldValue) {
+        for (name in oldValue) {
+          if (!(value &amp;&amp; name in value)) {
+            setStyle(dom.style, name, &quot;&quot;)
+          }
+        }
+      }
+
+      if (value) {
+        for (name in value) {
+          if (!oldValue || value[name] !== oldValue[name]) {
+            setStyle(dom.style, name, value[name])
+          }
+        }
+      }
+    }
+  } else if (name[0] === &quot;o&quot; &amp;&amp; name[1] === &quot;n&quot;) {
+    useCapture = name !== (name = name.replace(/Capture$/, &quot;&quot;))
+    nameLower = name.toLowerCase()
+    if (nameLower in dom) name = nameLower
+    name = name.slice(2)
+
+    if (!dom._listeners) dom._listeners = {}
+    dom._listeners[name + useCapture] = value
+
+    proxy = useCapture ? eventProxyCapture : eventProxy
+    if (value) {
+      if (!oldValue) dom.addEventListener(name, proxy, useCapture)
+    } else {
+      dom.removeEventListener(name, proxy, useCapture)
+    }
+  } else if (
+    name !== &quot;list&quot; &amp;&amp;
+    name !== &quot;tagName&quot; &amp;&amp;
+    name !== &quot;form&quot; &amp;&amp;
+    name !== &quot;type&quot; &amp;&amp;
+    name !== &quot;size&quot; &amp;&amp;
+    name !== &quot;download&quot; &amp;&amp;
+    name !== &quot;href&quot; &amp;&amp;
+    !isSvg &amp;&amp;
+    name in dom
+  ) {
+    dom[name] = value == null ? &quot;&quot; : value
+  } else if (typeof value != &quot;function&quot; &amp;&amp; name !== &quot;dangerouslySetInnerHTML&quot;) {
+    if (name !== (name = name.replace(/xlink:?/, &quot;&quot;))) {
+      if (value == null || value === false) {
+        dom.removeAttributeNS(
+          &quot;http://www.w3.org/1999/xlink&quot;,
+          name.toLowerCase()
+        )
+      } else {
+        dom.setAttributeNS(
+          &quot;http://www.w3.org/1999/xlink&quot;,
+          name.toLowerCase(),
+          value
+        )
+      }
+    } else if (value == null || (value === false &amp;&amp; !/^ar/.test(name))) {
+      dom.removeAttribute(name)
+    } else {
+      dom.setAttribute(name, value)
+    }
+  }
+}
+</code></pre>
+<p>ケースの分岐があり、それぞれ DOM の編集方法が書かれているので読みやすいですね。</p>
+<p>この関数 <code>setProperty(dom, name, value, oldValue, isSvg)</code> は、<code>diffProps</code> からは</p>
+<pre><code class="language-js:title=diff/props.js">for (i in newProps) {
+  // 新旧propsに差分があるとsetProperty
+  if (
+    (!hydrate || typeof newProps[i] == &quot;function&quot;) &amp;&amp;
+    i !== &quot;children&quot; &amp;&amp;
+    i !== &quot;key&quot; &amp;&amp;
+    i !== &quot;value&quot; &amp;&amp;
+    i !== &quot;checked&quot; &amp;&amp;
+    oldProps[i] !== newProps[i]
+  ) {
+    setProperty(dom, i, newProps[i], oldProps[i], isSvg)
+  }
+}
+</code></pre>
+<p>などとして呼ばれます。
+DOM を直接書き換えるヘルパーとしても見ていいかもしれません。</p>
+<p>ちなみに name は props オブジェクトの key であり、value は props オブジェクトの値です。
+それを踏まえた上で読んでみましょう。</p>
+<h4>style への props 適用</h4>
+<p><code>if (name === &quot;style&quot;) {</code> では、<code>setStyle(dom.style, name, value[name])</code> が呼ばれています。</p>
+<p>この <code>setStyle</code> は</p>
+<pre><code class="language-js:title=diff/props.js">function setStyle(style: CSSStyleDeclaration, key, value) {
+  if (key[0] === &quot;-&quot;) {
+    style.setProperty(key, value)
+  } else if (value == null) {
+    style[key] = &quot;&quot;
+  } else if (typeof value != &quot;number&quot; || IS_NON_DIMENSIONAL.test(key)) {
+    style[key] = value
+  } else {
+    style[key] = value + &quot;px&quot;
+  }
+}
+</code></pre>
+<p>といった関数で、<code>dom.style</code> に対して CSS のセット（=DOM の更新）をしています。</p>
+<pre><code class="language-jsx">&lt;div style={{ margin: 16 }}&gt;&lt;/div&gt;
+</code></pre>
+<p>のように px を使わなくても動く理由もこのコードから分かって面白いですね。</p>
+<h4>イベントハンドラへの props 適用</h4>
+<p><code>else if (name[0] === &quot;o&quot; &amp;&amp; name[1] === &quot;n&quot;) {</code> では、</p>
+<pre><code class="language-js:title=diff/props.js">if (value) {
+  if (!oldValue) dom.addEventListener(name, proxy, useCapture)
+} else {
+  dom.removeEventListener(name, proxy, useCapture)
+}
+</code></pre>
+<p>と言った風にイベントリスナーの登録が行われています。</p>
+<p><code>else if (name[0] === &quot;o&quot; &amp;&amp; name[1] === &quot;n&quot;) {</code> のような分岐になっているのは <code>onXXX</code> をランタイムで見つけ出すときのパフォーマンスが良いかららしいです。</p>
+<h4>name への props 適用</h4>
+<pre><code class="language-js:title=diff/props.js">else if (
+    name !== &quot;list&quot; &amp;&amp;
+    name !== &quot;tagName&quot; &amp;&amp;
+    name !== &quot;form&quot; &amp;&amp;
+    name !== &quot;type&quot; &amp;&amp;
+    name !== &quot;size&quot; &amp;&amp;
+    name !== &quot;download&quot; &amp;&amp;
+    name !== &quot;href&quot; &amp;&amp;
+    !isSvg &amp;&amp;
+    name in dom
+) {}
+</code></pre>
+<p>という分岐では、DOM 組み込み以外の値を更新します。
+つまり JSX や VNode における props の更新の分岐です。</p>
+<h4>value がないときへの props 適用</h4>
+<p><code>else if ( value == null ||</code> の分岐では、<code>&lt;a href={false}&gt;&lt;/a&gt;</code> などが当たります。
+この場合</p>
+<pre><code class="language-js">dom.removeAttribute(name)
+</code></pre>
+<p>としてその要素は消します。</p>
+<p>これはとても嬉しい機能で、例えば</p>
+<pre><code class="language-js">&lt;Hoge data={isData &amp;&amp; data} /&gt;
+</code></pre>
+<p>などとしても <code>data=false</code> が渡らないことに役立ってくれます。</p>
+<h4>それ以外への props 適用 (HTML 要素の property 更新)</h4>
+<p>この場合は DOM 組み込みの値の更新の分岐です。
+<code>href</code> や <code>type</code> などがこれにあたります。
+つまり props ではなく HTML 要素の property 更新に使います。</p>
+<h3>diffChildren で再帰的に diff を取っていく</h3>
+<p><code>diffChildren</code>は<code>diff</code> や <code>diffElementNodes</code> から呼ばれる関数です。
+子要素のそれぞれに対して diff を実行して掘っていく役割を持ちます。
+全体を示すとこのような感じになります。</p>
+<pre><code class="language-js:title=diff/children.js">export function diffChildren(
+  parentDom,
+  renderResult,
+  newParentVNode,
+  oldParentVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  oldDom,
+  isHydrating
+) {
+  let i, j, oldVNode, childVNode, newDom, firstChildDom, refs
+  let oldChildren = (oldParentVNode &amp;&amp; oldParentVNode._children) || EMPTY_ARR
+
+  let oldChildrenLength = oldChildren.length
+  if (oldDom == EMPTY_OBJ) {
+    if (excessDomChildren != null) {
+      oldDom = excessDomChildren[0]
+    } else if (oldChildrenLength) {
+      oldDom = getDomSibling(oldParentVNode, 0)
+    } else {
+      oldDom = null
+    }
+  }
+
+  newParentVNode._children = []
+  for (i = 0; i &lt; renderResult.length; i++) {
+    // props.children から child を取り出す
+    childVNode = renderResult[i]
+
+    if (childVNode == null || typeof childVNode == &quot;boolean&quot;) {
+      // JSXの中に{null}とか{true}を入れてる場合の挙動
+      childVNode = newParentVNode._children[i] = null
+    } else if (typeof childVNode == &quot;string&quot; || typeof childVNode == &quot;number&quot;) {
+      // JSXの中に{1}とか{&quot;1&quot;}を入れてる場合の挙動
+      childVNode = newParentVNode._children[i] = createVNode(
+        null,
+        childVNode,
+        null,
+        null,
+        childVNode
+      )
+    } else if (Array.isArray(childVNode)) {
+      // JSXの中に{[1, &lt;div&gt;hoge&lt;/div&gt;]}などを入れてる場合の挙動
+      childVNode = newParentVNode._children[i] = createVNode(
+        Fragment,
+        { children: childVNode },
+        null,
+        null,
+        null
+      )
+    } else if (childVNode._dom != null || childVNode._component != null) {
+      // JSXの中に&lt;div&gt;hoge&lt;/div&gt;などコンポーネントを入れ子にしている場合の挙動
+      childVNode = newParentVNode._children[i] = createVNode(
+        childVNode.type,
+        childVNode.props,
+        childVNode.key,
+        null,
+        childVNode._original
+      )
+    } else {
+      childVNode = newParentVNode._children[i] = childVNode
+    }
+
+    if (childVNode == null) {
+      // loopから抜けて次のloopに移る
+      continue
+    }
+
+    // 作りだしたVNodeの親が何か記録する
+    childVNode._parent = newParentVNode
+    childVNode._depth = newParentVNode._depth + 1
+
+    oldVNode = oldChildren[i]
+
+    // oldChildren から oldVNode と一致したものを見つけて削除する(undefinedを代入)
+    if (
+      oldVNode === null ||
+      (oldVNode &amp;&amp;
+        childVNode.key == oldVNode.key &amp;&amp;
+        childVNode.type === oldVNode.type)
+    ) {
+      oldChildren[i] = undefined
+    } else {
+      for (j = 0; j &lt; oldChildrenLength; j++) {
+        oldVNode = oldChildren[j]
+        // children のうち key と type が一致したものがあれば children の比較をしない (break する)
+        if (
+          oldVNode &amp;&amp;
+          childVNode.key == oldVNode.key &amp;&amp;
+          childVNode.type === oldVNode.type
+        ) {
+          oldChildren[j] = undefined
+          break
+        }
+        oldVNode = null
+      }
+    }
+
+    // 上の比較で key や type が異なっていた場合は oldVNode は null なので、
+    // oldVNode は EMPTY_OBJ として diffを取る.
+    // key やtype が一致していれば oldVNode は oldChildren[j] で、この値を使って diff を取る。
+    oldVNode = oldVNode || EMPTY_OBJ
+
+    // diffElementNodes が適用された DOM がここに入る
+    newDom = diff(
+      parentDom,
+      childVNode,
+      oldVNode,
+      globalContext,
+      isSvg,
+      excessDomChildren,
+      commitQueue,
+      oldDom,
+      isHydrating
+    )
+
+    if (newDom != null) {
+      if (firstChildDom == null) {
+        firstChildDom = newDom
+      }
+
+      // DOM操作
+      // diff -&gt; diffElementNodes を行った DOM を挿入する
+      oldDom = placeChild(
+        parentDom,
+        childVNode,
+        oldVNode,
+        oldChildren,
+        excessDomChildren,
+        newDom,
+        oldDom
+      )
+      if (!isHydrating &amp;&amp; newParentVNode.type == &quot;option&quot;) {
+        parentDom.value = &quot;&quot;
+      } else if (typeof newParentVNode.type == &quot;function&quot;) {
+        newParentVNode._nextDom = oldDom
+      }
+    } else if (
+      oldDom &amp;&amp;
+      oldVNode._dom == oldDom &amp;&amp;
+      oldDom.parentNode != parentDom
+    ) {
+      // oldDomはこの後使わないので多分不要（？）
+      oldDom = getDomSibling(oldVNode)
+    }
+  }
+
+  newParentVNode._dom = firstChildDom
+
+  if (excessDomChildren != null &amp;&amp; typeof newParentVNode.type != &quot;function&quot;) {
+    for (i = excessDomChildren.length; i--; ) {
+      if (excessDomChildren[i] != null) removeNode(excessDomChildren[i])
+    }
+  }
+
+  // for ループの中で使用済みのものには undefined が詰め込まれているはず。
+  // それでも余っているものをここでunmountする
+  for (i = oldChildrenLength; i--; ) {
+    if (oldChildren[i] != null) unmount(oldChildren[i], oldChildren[i])
+  }
+}
+</code></pre>
+<p>それでは 1 つずつ見ていきましょう。</p>
+<h4>oldDOM がないときの処理</h4>
+<p>oldDOM が<code>{}</code>のときの初期化処理です。</p>
+<pre><code class="language-js:title=diff/children.js">if (oldDom == EMPTY_OBJ) {
+  if (excessDomChildren != null) {
+    oldDom = excessDomChildren[0]
+  } else if (oldChildrenLength) {
+    oldDom = getDomSibling(oldParentVNode, 0)
+  } else {
+    oldDom = null
+  }
+}
+</code></pre>
+<p>この分岐に入ることがあるのかとは思いますが、<code>diffChildren</code> は <code>diffElementNodes</code> から呼ばれたときは oldDOM には <code>EMPTY_OBJ</code> が渡されています。
+<code>diffElementNodes</code> はただの value になり、attach される DOM がないからです。</p>
+<p>ただそもそも oldDOM が使われるケースは excessDomChildren が生まれている状況くらいでしかないので、読み飛ばしても問題はないです。</p>
+<h4>children の一要素に対する操作</h4>
+<p>そして次に子要素の配列から一つずつ子要素を取り出して diff を取る処理をします。</p>
+<pre><code class="language-js:title=diff/children.js">for (i = 0; i &lt; renderResult.length; i++) {
+  // props.children から child を取り出す
+  childVNode = renderResult[i]
+  ...
+}
+</code></pre>
+<p>では、そのループの中を見ていきましょう</p>
+<h4>child から VNode の作成</h4>
+<p>子要素として入っている childVNode から VNode を作ります。
+もともと childVNode という変数であるものの、これはただの 値(createElement に渡される JSON そのもの)であるためです。
+そのもともと childVNode に入っていた値によって作るべき VNode が異なるのでこのような分岐になっています。</p>
+<pre><code class="language-js:title=diff/children.js">if (childVNode == null || typeof childVNode == &quot;boolean&quot;) {
+  // JSXの中に{null}とか{true}を入れてる場合の挙動
+  childVNode = newParentVNode._children[i] = null
+} else if (typeof childVNode == &quot;string&quot; || typeof childVNode == &quot;number&quot;) {
+  // JSXの中に{1}とか{&quot;1&quot;}を入れてる場合の挙動
+  childVNode = newParentVNode._children[i] = createVNode(
+    null,
+    childVNode,
+    null,
+    null,
+    childVNode
+  )
+} else if (Array.isArray(childVNode)) {
+  // JSXの中に{[1, &lt;div&gt;hoge&lt;/div&gt;]}などを入れてる場合の挙動
+  childVNode = newParentVNode._children[i] = createVNode(
+    Fragment,
+    { children: childVNode },
+    null,
+    null,
+    null
+  )
+} else if (childVNode._dom != null || childVNode._component != null) {
+  // JSXの中に&lt;div&gt;hoge&lt;/div&gt;などコンポーネントを入れ子にしている場合の挙動
+  childVNode = newParentVNode._children[i] = createVNode(
+    childVNode.type,
+    childVNode.props,
+    childVNode.key,
+    null,
+    childVNode._original
+  )
+} else {
+  childVNode = newParentVNode._children[i] = childVNode
+}
+</code></pre>
+<h4>子の親を登録</h4>
+<p>作り出した VNode にその親コンポーネントを登録します。</p>
+<pre><code class="language-js">// 作りだしたVNodeの親が何か記録する
+childVNode._parent = newParentVNode
+childVNode._depth = newParentVNode._depth + 1
+</code></pre>
+<p>これは兄弟要素を辿る時に必要となる情報です。
+子が自分の親が持つ children 配列を走査することができるようになります。</p>
+<h4>比較されなかったコンポーネントを削除する準備</h4>
+<p>このブロック自体は、oldChildren から oldVNode と一致したものを見つけて削除する(undefined を代入)ものです。
+ただそれに加えて、oldVNode と比較されなかったコンポーネントを削除する準備もしています。</p>
+<pre><code class="language-js:title=diff/children.js">oldVNode = oldChildren[i]
+
+if (
+  oldVNode === null ||
+  (oldVNode &amp;&amp;
+    childVNode.key == oldVNode.key &amp;&amp;
+    childVNode.type === oldVNode.type)
+) {
+  oldChildren[i] = undefined
+} else {
+  for (j = 0; j &lt; oldChildrenLength; j++) {
+    oldVNode = oldChildren[j]
+    // children のうち key と type が一致したものは children の比較をしない (break する)
+    if (
+      oldVNode &amp;&amp;
+      childVNode.key == oldVNode.key &amp;&amp;
+      childVNode.type === oldVNode.type
+    ) {
+      oldChildren[j] = undefined
+      break
+    }
+    oldVNode = null
+  }
+}
+
+// 上の比較で key や type が異なっていた場合は oldVNode は null なので、
+// oldVNode は EMPTY_OBJ として diffを取る
+// key やtype が一致していれば oldVNode は oldChildren[j] で、この値を使って diff を取る。
+oldVNode = oldVNode || EMPTY_OBJ
+</code></pre>
+<p><code>childVNode.key == oldVNode.key</code> のときに <code>oldChildren[i] = undefined</code> が実行されます。　
+この処理が大事で、この関数の最後に</p>
+<pre><code class="language-js">for (i = oldChildrenLength; i--; ) {
+  if (oldChildren[i] != null) unmount(oldChildren[i], oldChildren[i])
+}
+</code></pre>
+<p>が呼ばれて、key が一致したコンポーネントのそれ以降の兄弟コンポーネントは全て(undefined が代入されなかったもの) unmount されます。
+DOM ツリーの操作が発生するためパフォーマンスは悪化します。
+ちゃんと key は割り振りましょう！</p>
+<h4>子要素に対して diff を取る</h4>
+<p>oldVNode に対して childVNode との diff を取り、変更を適用した DOM を入手します。</p>
+<pre><code class="language-js:title=diff/children.js">// diffElementNodes が適用された DOM がここに入る
+newDom = diff(
+  parentDom,
+  childVNode,
+  oldVNode,
+  globalContext,
+  isSvg,
+  excessDomChildren,
+  commitQueue,
+  oldDom,
+  isHydrating
+)
+</code></pre>
+<p>そして、DOM があれば <code>placeChild</code> でその DOM を DOM ツリーに挿入します。</p>
+<pre><code class="language-js">if (newDom != null) {
+  if (firstChildDom == null) {
+    firstChildDom = newDom
+  }
+
+  // DOM操作
+  // diff -&gt; diffElementNodes を行った DOM を挿入する
+  oldDom = placeChild(
+    parentDom,
+    childVNode,
+    oldVNode,
+    oldChildren,
+    excessDomChildren,
+    newDom,
+    oldDom
+  )
+
+  // option tag の場合
+  if (!isHydrating &amp;&amp; newParentVNode.type == &quot;option&quot;) {
+    parentDom.value = &quot;&quot;
+  } else if (typeof newParentVNode.type == &quot;function&quot;) {
+    newParentVNode._nextDom = oldDom
+  }
+} else if (
+  oldDom &amp;&amp;
+  oldVNode._dom == oldDom &amp;&amp;
+  oldDom.parentNode != parentDom
+) {
+  // no op
+}
+</code></pre>
+<h4>不要な children を削除</h4>
+<p>関数の最後では 不要な children を削除します。</p>
+<pre><code class="language-js:title=diff/children.js">// excessDomChildren はいまのところない想定なので解説しない
+if (excessDomChildren != null &amp;&amp; typeof newParentVNode.type != &quot;function&quot;) {
+  for (i = excessDomChildren.length; i--; ) {
+    if (excessDomChildren[i] != null) removeNode(excessDomChildren[i])
+  }
+}
+
+// for ループの中で使用済みのものには undefined が詰め込まれているはず。
+// それでも余っているものをここでunmountする
+for (i = oldChildrenLength; i--; ) {
+  if (oldChildren[i] != null) unmount(oldChildren[i], oldChildren[i])
+}
+</code></pre>
+<p>oldChildren には key が一致していた場合にはその一致した child 以降の child に対して undefined が代入されていません。
+そのようにして代入されなかったものが unmount されます。
+具体的には unmount 時のライフサイクルの実行と DOM ツリーからの削除がされます。</p>
+<h3>DOM 操作</h3>
+<p>diffChildren や diffElementNode では DOM ツリーの操作を行う関数を呼び出していました。
+それらが具体的にはどのような操作をしているのかを見ていきましょう。</p>
+<h4>placeChild で要素の追加</h4>
+<p>newDOM を DOM ツリーに追加する操作、もしくは newDOM を oldDOM の兄弟として置く操作をします。</p>
+<pre><code class="language-js:title=diff/children.js">export function placeChild(
+  parentDom,
+  childVNode,
+  oldVNode,
+  oldChildren,
+  excessDomChildren,
+  newDom,
+  oldDom
+) {
+  let nextDom
+  if (childVNode._nextDom !== undefined) {
+    nextDom = childVNode._nextDom
+
+    childVNode._nextDom = undefined
+  } else if (
+    excessDomChildren == oldVNode ||
+    newDom != oldDom ||
+    newDom.parentNode == null
+  ) {
+    outer: if (oldDom == null || oldDom.parentNode !== parentDom) {
+      parentDom.appendChild(newDom)
+      nextDom = null
+    } else {
+      for (
+        let sibDom = oldDom, j = 0;
+        (sibDom = sibDom.nextSibling) &amp;&amp; j &lt; oldChildren.length;
+        j += 2
+      ) {
+        if (sibDom == newDom) {
+          break outer
+        }
+      }
+      parentDom.insertBefore(newDom, oldDom)
+      nextDom = oldDom
+    }
+  }
+
+  if (nextDom !== undefined) {
+    oldDom = nextDom
+  } else {
+    oldDom = newDom.nextSibling
+  }
+
+  return oldDom
+}
+</code></pre>
+<p>大事なのは <code>if(oldDom == null || oldDom.parentNode !== parentDom)</code> の分岐です。
+この分岐が true であれば兄弟要素を持たないので appendChild, false であれば兄弟要素を持つので <code>insertBefore</code> が呼ばれます。</p>
+<h4>getDomSibling で兄弟 DOM を取得</h4>
+<p>自分の親の子が持つ DOM を順番にみていき、要素があればそれを返します。
+つまり自分の兄弟要素を取得し返す関数です。</p>
+<pre><code class="language-js:title=component.js">export function getDomSibling(vnode, childIndex) {
+  if (childIndex == null) {
+    return vnode._parent
+      ? getDomSibling(vnode._parent, vnode._parent._children.indexOf(vnode) + 1)
+      : null
+  }
+
+  let sibling
+  for (; childIndex &lt; vnode._children.length; childIndex++) {
+    sibling = vnode._children[childIndex]
+
+    if (sibling != null &amp;&amp; sibling._dom != null) {
+      return sibling._dom
+    }
+  }
+  return typeof vnode.type == &quot;function&quot; ? getDomSibling(vnode) : null
+}
+</code></pre>
+<h4>removeNode で DOM Node を削除</h4>
+<p>自分自身を自分の親 Node から消す処理です。</p>
+<pre><code class="language-js:title=util.js">export function removeNode(node) {
+  let parentNode = node.parentNode
+  if (parentNode) parentNode.removeChild(node)
+}
+</code></pre>
+<p>ここでの node は DOM 要素です。
+VNode オブジェクトが持つ <code>_dom: PreactElement | null;</code> が渡される想定です。</p>
+<h4>unmount でコンポーネントの unmount 処理</h4>
+<p>componentWillUnmount があればそれを実行し、removeNode を呼び出して DOM ツリーから vnode._dom を消す関数です。</p>
+<pre><code class="language-js:title=diff/index.js">export function unmount(vnode, parentVNode, skipRemove) {
+  let r
+  if (options.unmount) options.unmount(vnode)
+
+  if ((r = vnode.ref)) {
+    if (!r.current || r.current === vnode._dom) applyRef(r, null, parentVNode)
+  }
+
+  let dom
+  if (!skipRemove &amp;&amp; typeof vnode.type != &quot;function&quot;) {
+    skipRemove = (dom = vnode._dom) != null
+  }
+  vnode._dom = vnode._nextDom = undefined
+
+  if ((r = vnode._component) != null) {
+    if (r.componentWillUnmount) {
+      try {
+        r.componentWillUnmount()
+      } catch (e) {
+        options._catchError(e, parentVNode)
+      }
+    }
+
+    r.base = r._parentDom = null
+  }
+
+  if ((r = vnode._children)) {
+    for (let i = 0; i &lt; r.length; i++) {
+      if (r[i]) unmount(r[i], parentVNode, skipRemove)
+    }
+  }
+
+  if (dom != null) removeNode(dom)
+}
+</code></pre>
+<p>注目すべきは</p>
+<pre><code class="language-js">if ((r = vnode._children)) {
+  for (let i = 0; i &lt; r.length; i++) {
+    if (r[i]) unmount(r[i], parentVNode, skipRemove)
+  }
+}
+</code></pre>
+<p>で、自分の子に対して再帰的に unmount を実行します。
+これによりツリー上である要素を unmount すればその子要素は全て unmount されます。</p>
+<h3>TIPS: diffElementNode と diffChildren の使い分け</h3>
+<p>diffChildren が再帰的に diffElementNode を呼び出して差分更新をしかけることはここまでの説明でお分かりいただけると思います。</p>
+<p>では視点を変えて呼び出している DOM 操作関数ベースで考えてみましょう。
+<code>diffElementNode</code> は、<code>diffProps</code>, <code>setProperty</code> を呼び出しています。
+これらは共に DOM の プロパティを書き換える関数です。(というよりそもそも diffProps は setProperty を呼び出している。)</p>
+<p>対して <code>diffChildren</code> は <code>placeChild</code> と <code>removeNode</code> を呼び出しています。
+これらは共に DOM への追加削除を行うものです。</p>
+<p>つまり、<strong>diffElementNode は DOM の Node の値を書き換え、diffChildren は DOM ツリーの構造を変える</strong>と考えると良いでしょう。</p>
+<h3>commitRoot で renderQueue の ライフサイクルメソッドを実行する</h3>
+<p>ここまででライフサイクルイベントを <code>renderQueue</code> に詰めた処理をみたと思います。</p>
+<p>それを実行するのが commitRoot というもので、たとえば render では diff の後に呼ばれています。</p>
+<pre><code class="language-js">export function commitRoot(commitQueue, root) {
+  if (options._commit) options._commit(root, commitQueue)
+
+  commitQueue.some(c =&gt; {
+    try {
+      commitQueue = c._renderCallbacks
+      c._renderCallbacks = []
+      commitQueue.some(cb =&gt; {
+        cb.call(c)
+      })
+    } catch (e) {
+      options._catchError(e, c._vnode)
+    }
+  })
+}
+</code></pre>
+<p>commitQueue にはコンポーネントが詰め込まれているので、そのコンポーネントが持つ <code>_renderCallbacks</code> を実行するのが役目です。
+たとえば diff では componentDidMount をこの _renderCallbacks に詰め込んでいます。</p>
+<pre><code class="language-js:title=diff/index.js">if (c.componentDidMount != null) {
+  c._renderCallbacks.push(c.componentDidMount)
+}
+</code></pre>
+<p>そのため diff の後で呼び出すことで mount 直後のイベント発火が実現できます。</p>
+<h3>状態を書き換えたときの再レンダリングを見て行こう</h3>
+<p>ここまでで目標であった、</p>
+<ul>
+<li>state を書き換える方法</li>
+<li>state が書き換わった時に再レンダリングがされること</li>
+</ul>
+<p>の一部が明らかになりました。</p>
+<p>すくなくとも preact においてレンダリングがどのようにされるかが明らかになっています。
+ここからはどのようにして状態を書き換えるかを見ていきましょう。</p>
+<p>preact では state や props の値が変わるとそれを表示している箇所とその子要素で再レンダリングが発生します。
+そして state は なにかしらの外部イベントによって書き換えられ、props の変更はそれを伝搬することで発生します。
+その結果起きる再レンダリングをどのように実現しているのかについてです。</p>
+<h4>state を書き換えるトリガー</h4>
+<p>大きく考えると、イベントハンドラとライフサイクルが考えられます。</p>
+<p>イベントハンドラからの書き換えは、</p>
+<pre><code class="language-jsx">class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  render() {
+    return (
+      &lt;div&gt;
+        &lt;button
+          onClick={() =&gt; {
+            this.setState(state + 1)
+          }}
+        &gt;
+          add
+        &lt;/button&gt;
+        {this.state.cnt}
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p>こういうコードが考えられます。これは、</p>
+<pre><code class="language-js">class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  render() {
+    return h(
+      &quot;div&quot;,
+      null,
+      h(
+        &quot;button&quot;,
+        {
+          onClick: () =&gt; {
+            this.setState(state + 1)
+          },
+        },
+        &quot;add&quot;
+      ),
+      this.state.cnt
+    )
+  }
+}
+</code></pre>
+<p>のように変換され、</p>
+<pre><code class="language-js">onClick: () =&gt; {
+  this.setState(state + 1)
+}
+</code></pre>
+<p>を props として扱います。</p>
+<p>そして、 setPropery の</p>
+<pre><code class="language-js">if (name[0] === &quot;o&quot; &amp;&amp; name[1] === &quot;n&quot;) {
+  useCapture = name !== (name = name.replace(/Capture$/, &quot;&quot;))
+  nameLower = name.toLowerCase()
+  if (nameLower in dom) name = nameLower
+  name = name.slice(2)
+
+  if (!dom._listeners) dom._listeners = {}
+  dom._listeners[name + useCapture] = value
+
+  proxy = useCapture ? eventProxyCapture : eventProxy
+  if (value) {
+    if (!oldValue) dom.addEventListener(name, proxy, useCapture)
+  } else {
+    dom.removeEventListener(name, proxy, useCapture)
+  }
+}
+</code></pre>
+<p>この部分に拾われることで、クリックされたときに <code>this.setState(this.state + 1)</code> される仕組みが出来上がります。</p>
+<p>また、ライフサイクルを通じて書き換えることもできます。
+たとえば、</p>
+<pre><code class="language-jsx">class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  componentDidMount() {
+    this.setState(this.state + 1)
+  }
+
+  render() {
+    return &lt;div&gt;{this.state.cnt}&lt;/div&gt;
+  }
+}
+</code></pre>
+<p>は</p>
+<pre><code class="language-js">class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  componentDidMount() {
+    this.setState(this.state + 1)
+  }
+
+  render() {
+    return h(&quot;div&quot;, null, this.state.cnt)
+  }
+}
+</code></pre>
+<p>と変換され、 <code>componentDidMount</code> が呼ばれるタイミング（preact の内部上では <code>commitRoot</code>）で<code>this.setState(this.state + 1)</code>を呼び出すことができます。</p>
+<h4>ライフサイクルをどのタイミングで実行するか</h4>
+<p>ライフサイクルイベントは ユーザーが Component に定義した関数を拾ってライブラリ側が実行します。
+たとえば componentDidMount だと</p>
+<pre><code class="language-js">if (c.componentDidMount != null) {
+  // 次のstateをここで詰め込む。
+  console.log(&quot;&lt;diff&gt; c.componentDidMount&quot;, c.componentDidMount)
+  c._renderCallbacks.push(c.componentDidMount)
+}
+</code></pre>
+<p>を <code>diff</code> 関数の中で実行し、実行したい関数を <code>c._renderCallbacks</code> という配列に詰めていきます。
+この _renderCallbacks は <code>commitRoot</code> にて実行されます。
+commitRoot は render が終わった後に実行されるフェーズなので、componentDidMount からすれば都合が良いためです。</p>
+<pre><code class="language-js:title=diff/index.js">export function commitRoot(commitQueue, root) {
+  if (options._commit) options._commit(root, commitQueue)
+
+  commitQueue.some(c =&gt; {
+    try {
+      commitQueue = c._renderCallbacks
+      c._renderCallbacks = []
+      commitQueue.some(cb =&gt; {
+        cb.call(c)
+      })
+    } catch (e) {
+      options._catchError(e, c._vnode)
+    }
+  })
+}
+</code></pre>
+<p>render の前に実行したいライフサイクルは diff 関数 の中で DOM 反映系の関数を呼び出す前に実行されています。</p>
+<pre><code class="language-js">// Invoke pre-render lifecycle methods
+if (isNew) {
+  if (
+    newType.getDerivedStateFromProps == null &amp;&amp;
+    c.componentWillMount != null
+  ) {
+    c.componentWillMount()
+  }
+
+  if (c.componentDidMount != null) {
+    c._renderCallbacks.push(c.componentDidMount)
+  }
+} else {
+  if (
+    newType.getDerivedStateFromProps == null &amp;&amp;
+    newProps !== oldProps &amp;&amp;
+    c.componentWillReceiveProps != null
+  ) {
+    c.componentWillReceiveProps(newProps, componentContext)
+  }
+
+  if (c.componentWillUpdate != null) {
+    c.componentWillUpdate(newProps, c._nextState, componentContext)
+  }
+
+  if (c.componentDidUpdate != null) {
+    c._renderCallbacks.push(() =&gt; {
+      c.componentDidUpdate(oldProps, oldState, snapshot)
+    })
+  }
+}
+</code></pre>
+<p>そのためユーザーは Class の定義時にこれらのライフサイクル関数の実装を定義しておけば、あとは preact が実行してくれるというわけです。
+この中で this.setState を呼べば、state の変更を呼び出すことができます。</p>
+<h4>setState がなにをやっているか</h4>
+<p>では、イベントハンドラやライフサイクルメソッドから呼び出せる <code>setState</code> は何をしているのかみていきましょう。
+<code>this.setState</code> は <code>Component.prototype.setState</code> です。
+それはこのように定義されています。</p>
+<pre><code class="language-js:title=component.js">Component.prototype.setState = function (update, callback) {
+  let s
+  if (this._nextState != null &amp;&amp; this._nextState !== this.state) {
+    s = this._nextState
+  } else {
+    s = this._nextState = assign({}, this.state)
+  }
+
+  // 関数渡しに対応するコードは省略
+
+  if (update) {
+    assign(s, update)
+  }
+
+  if (update == null) return
+
+  if (this._vnode) {
+    if (callback) this._renderCallbacks.push(callback)
+    enqueueRender(this)
+  }
+}
+</code></pre>
+<p><code>setStaet</code> は <code>this.setState(2)</code> などとして渡されるので、<code>update</code>に更新対象が入ると考えてください。</p>
+<p>大事なのは</p>
+<pre><code class="language-js">s = this._nextState = assign({}, this.state)
+</code></pre>
+<p>です。ここで s と this._nextState に<code>assign({}, this.state)</code> の結果を代入しています
+この <code>assign({}, this.state)</code> は</p>
+<pre><code class="language-js">export function assign(obj, props) {
+  for (let i in props) obj[i] = props[i]
+  return /** @type {O &amp; P} */ (obj)
+}
+</code></pre>
+<p>で、オブジェクトを破壊しつつコピーしてくれるものです。</p>
+<p>そのためその下にある</p>
+<pre><code class="language-js">if (update) {
+  assign(s, update)
+}
+</code></pre>
+<p>を実行すると、update 値で s と<code>this._nextState</code>を書き換えます。</p>
+<p>そして破壊（上書き）された this を持ったまま</p>
+<pre><code class="language-js">if (this._vnode) {
+  if (callback) this._renderCallbacks.push(callback)
+  enqueueRender(this)
+}
+</code></pre>
+<p>が実行されます。</p>
+<h4>enqueueRender で再レンダリング</h4>
+<p>この enqueueRender こそが再レンダリングの入り口です。
+引数の c は Compoennt で、_nextState に次に書き換わる state の値が保持されています。</p>
+<pre><code class="language-js:title=component.js">export function enqueueRender(c) {
+  if (
+    (!c._dirty &amp;&amp;
+      (c._dirty = true) &amp;&amp;
+      rerenderQueue.push(c) &amp;&amp;
+      !process._rerenderCount++) ||
+    prevDebounce !== options.debounceRendering
+  ) {
+    prevDebounce = options.debounceRendering
+    ;(prevDebounce || defer)(process)
+  }
+}
+
+function process() {
+  let queue
+  while ((process._rerenderCount = rerenderQueue.length)) {
+    queue = rerenderQueue.sort((a, b) =&gt; a._vnode._depth - b._vnode._depth)
+    rerenderQueue = []
+    queue.some(c =&gt; {
+      if (c._dirty) renderComponent(c)
+    })
+  }
+}
+</code></pre>
+<p><code>process</code> が重要でレンダリングの順序を決めています。
+_depth は diff を取る時に加算されていっている値です。</p>
+<h4>renderComponent</h4>
+<p>この関数は内部で<code>diff</code> を呼び出しているので再レンダリングして DOM を書き換えることができます。</p>
+<pre><code class="language-js:title=component.js">function renderComponent(component) {
+  let vnode = component._vnode,
+    oldDom = vnode._dom,
+    parentDom = component._parentDom
+
+  if (parentDom) {
+    let commitQueue = []
+    const oldVNode = assign({}, vnode)
+    oldVNode._original = oldVNode
+
+    let newDom = diff(
+      parentDom,
+      vnode,
+      oldVNode,
+      component._globalContext,
+      parentDom.ownerSVGElement !== undefined,
+      vnode._hydrating != null ? [oldDom] : null,
+      commitQueue,
+      oldDom == null ? getDomSibling(vnode) : oldDom,
+      vnode._hydrating
+    )
+    commitRoot(commitQueue, vnode)
+
+    if (newDom != oldDom) {
+      updateParentDomPointers(vnode)
+    }
+  }
+}
+</code></pre>
+<p>このとき、_nextState はその diff を取った時に diff 関数内部の</p>
+<pre><code class="language-js">c._nextState
+</code></pre>
+<p>などのコードから取得できるようになります。</p>
+<h2>目標は達成したのでまとめる</h2>
+<p>ここまでの知識で、</p>
+<ul>
+<li>state を書き換える方法</li>
+<li>state が書き換わった時に再レンダリングがされること</li>
+</ul>
+<p>が分かります。</p>
+<p>preact のレンダリングは、ツリーを diff -&gt; diffChildren -&gt; diffElement を再帰的に呼び出していくことで DOM ツリーの追加・編集をすることで実現しています。
+state は ライフサイクルなどを通して、ユーザーが setState を発火させて書き換えることができます。
+preact はライフサイクル関数を自動で実行してくれるので、ユーザーはクラス定義に処理したい内容を書くだけで良いです。
+特に setState がユーザーから呼ばれると次の状態を_nextState としてコンポーネントに保持され、その状態で renderComponent, diff が実行されて再レンダリングが発火します。</p>
+<p>長々と説明しましたが、まとめるとこういった感じになると思います。</p>
+<h2>読む上で出てくるであろう疑問とその答え</h2>
+<p>説明の流れの都合上で省略したものの大事な概念だったり、疑問に思うであろうことがあるので、それらをまとめます。</p>
+<h3>VNode.type が function だとどうなるのか</h3>
+<p>VNode の定義は、extends を全部分解した上で表現するとこうなります。</p>
+<pre><code class="language-ts">export interface VNode&lt;P = {}&gt; {
+  type: string | ComponentFactory&lt;P&gt;
+  props: P &amp; { children: preact.ComponentChildren }
+  _children: Array&lt;VNode&lt;any&gt;&gt; | null
+  _parent: VNode | null
+  _depth: number | null
+  _dom: PreactElement | null
+  _nextDom: PreactElement | null
+  _component: Component | null
+  _hydrating: boolean | null
+  constructor: undefined
+  _original?: VNode | null
+  key: Key
+  ref?: Ref&lt;any&gt; | null
+  startTime?: number
+  endTime?: number
+}
+</code></pre>
+<p>そして diff のコード内では、</p>
+<pre><code class="language-js">typeof vnode.type == &quot;function&quot;
+</code></pre>
+<p>というコードが何回か出てきました。
+これは何をしているのでしょうか。</p>
+<p>それは、<strong>vnode がコンポーネントかどうかを判断</strong>しています。
+preact の内部では VNode とコンポーネントは別物であることを覚えておいてください。</p>
+<p>この vnode.type の型定義は <code>type: string | ComponentFactory&lt;P&gt;</code> となっています。</p>
+<h4>type: string の場合</h4>
+<p>string の場合は <code>&quot;div&quot;</code> や <code>&quot;span&quot;</code> が入ります。</p>
+<p>つまり、</p>
+<pre><code class="language-jsx">&lt;div&gt;hello&lt;/div&gt;
+</code></pre>
+<p>や</p>
+<pre><code class="language-js">h(&quot;div&quot;, null, &quot;hello&quot;)
+</code></pre>
+<p>などのコードは VNode として扱われた時に</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;div&quot;
+}
+</code></pre>
+<p>として string を持ちます。
+では、<code>ComponentFactory&lt;P&gt;</code>はどういうものでしょうか？</p>
+<h4>type: ComponentFactory<P> の場合</h4>
+<p>型定義を見てみると、</p>
+<pre><code class="language-ts">export type ComponentFactory&lt;P&gt; =
+  | preact.ComponentClass&lt;P&gt;
+  | FunctionalComponent&lt;P&gt;
+</code></pre>
+<p>として定義されています。</p>
+<p>つまりクラスコンポーネント、もしくは 関数コンポーネントを指しています。
+そして Component Class は JavaScript 上では関数として作られているので、それに対して <code>typeof</code> を取ると <code>'function'</code> として扱われます。</p>
+<h4>class コンポーネントと h 関数</h4>
+<p>では、<code>ComponentFactory</code> を VNode として扱うためにはどのようなコードを書く必要があるのでしょうか。
+それはずばりこのようなコードです。</p>
+<pre><code class="language-jsx">import { h, Fragment, Component } from &quot;preact&quot;
+import { useState } from &quot;preact/compat&quot;
+
+class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  render() {
+    return &lt;div&gt;{this.state.cnt}&lt;/div&gt;
+  }
+}
+
+const TestComponent = () =&gt; {
+  const [state, setState] = useState(0)
+
+  return (
+    &lt;&gt;
+      &lt;div&gt;
+        &lt;span&gt;count: &lt;/span&gt;
+        &lt;span&gt;{state}&lt;/span&gt;
+      &lt;/div&gt;
+      3{false}
+      {&quot;3&quot;}
+      &lt;Hoge&gt;&lt;/Hoge&gt;
+    &lt;/&gt;
+  )
+}
+</code></pre>
+<p>この <code>Hoge</code> がまさしくそうで、これを h 関数で書き直すとこうなります。</p>
+<pre><code class="language-js">import { h, Fragment, Component } from &quot;preact&quot;
+import { useState } from &quot;preact/compat&quot;
+
+class Hoge extends Component {
+  constructor() {
+    this.state = {
+      cnt: 0,
+    }
+  }
+
+  render() {
+    return h(&quot;div&quot;, null, this.state.cnt)
+  }
+}
+
+const TestComponent = () =&gt; {
+  const [state, setState] = useState(0)
+  return h(
+    Fragment,
+    null,
+    h(&quot;div&quot;, null, h(&quot;span&quot;, null, &quot;count: &quot;), h(&quot;span&quot;, null, state)),
+    &quot;3&quot;,
+    false,
+    &quot;3&quot;,
+    h(Hoge, null)
+  )
+}
+</code></pre>
+<p>この <code>h(Hoge, null)</code> がまさしくそうです。
+あきらかに <code>h(&quot;div&quot;, null, h(&quot;span&quot;, null, &quot;count: &quot;), h(&quot;span&quot;, null, state)),</code> と様子が違います。
+(p)react では Element と Component は明確に区別され、その区別がこのようにして現れています。
+<code>&lt;div&gt;hello&lt;/div&gt;</code>のようなコードは Element であり、 Component ではありません。</p>
+<p>そのため、<code>type: string | ComponentFactory&lt;P&gt;</code>は Element と Component を分別しているとみることもできます。</p>
+<h3>新コンポーネントを作った後に oldProps = c.props したら意味がないのでは</h3>
+<p>diff.js における話です。</p>
+<pre><code class="language-js:title=diff/index.js">if (oldVNode._component) {
+  c = newVNode._component = oldVNode._component
+  clearProcessingException = c._processingException = c._pendingError
+} else {
+  // Instantiate the new component
+  if (&quot;prototype&quot; in newType &amp;&amp; newType.prototype.render) {
+    newVNode._component = c = new newType(newProps, componentContext)
+  } else {
+    newVNode._component = c = new Component(newProps, componentContext)
+    c.constructor = newType
+    c.render = doRender
+  }
+}
+
+oldProps = c.props
+oldState = c.state
+</code></pre>
+<p>上のコードにおいて、 <code>newVNode._component = c = new newType(newProps, componentContext)</code> や <code>newVNode._component = c = new Component(newProps, componentContext)</code>を実行すると c の props には newProps が入ります。
+その後に <code>oldProps = c.props</code> とすると <code>oladProps</code> と <code>newProps</code> が同一に見えます。
+そんなことして大丈夫なのでしょうか？それを見ていきましょう。</p>
+<p>まず oldProps, newProps はこのコードが呼ばれた段階であまり使わなくなります。
+唯一使うのは、</p>
+<pre><code class="language-js:title=diff/index.js">if (
+  newType.getDerivedStateFromProps == null &amp;&amp;
+  newProps !== oldProps &amp;&amp;
+  c.componentWillReceiveProps != null
+) {
+  c.componentWillReceiveProps(newProps, componentContext)
+}
+</code></pre>
+<p>のタイミングです。このときの比較の条件で使います。
+このとき <code>newProps !== oldProps</code> が絶対に false になってこの処理が呼ばれないように見えますが、実際には大丈夫です。</p>
+<p>そもそも <code>componentWillReceiveProps</code> は新規コンポーネント作成に対しては呼ばれないものです。
+ループの親を辿れば次のコードが見つかるはずです。</p>
+<pre><code class="language-js:title=diff/index.js">if (isNew) {
+  // no op
+} else {
+  ...
+  if (
+    newType.getDerivedStateFromProps == null &amp;&amp;
+    newProps !== oldProps &amp;&amp;
+    c.componentWillReceiveProps != null
+  ) {
+    c.componentWillReceiveProps(newProps, componentContext)
+  }
+}
+</code></pre>
+<p>そして oldProps = c.props は新規コンポーネント作成でしか呼ばれないためです。
+それは isNew のフラグを追ってみましょう。</p>
+<pre><code class="language-js:title=diff/index.js">if (oldVNode._component) {
+  c = newVNode._component = oldVNode._component
+  clearProcessingException = c._processingException = c._pendingError
+} else {
+  // 渡されたVNodeのtypeがfunctionであればComponentFactoryなので分岐
+  // ClassComponent じゃなくて FC の可能性もあるのでその分岐
+  if (&quot;prototype&quot; in newType &amp;&amp; newType.prototype.render) {
+    newVNode._component = c = new newType(newProps, componentContext)
+  } else {
+    newVNode._component = c = new Component(newProps, componentContext)
+    c.constructor = newType
+    c.render = doRender
+  }
+
+  isNew = c._dirty = true
+}
+</code></pre>
+<p>どうやら <code>if (oldVNode._component)</code> の else 節でこの flg が立つようです。
+そしてそのフラグが立つときは <code>oldVNode._component</code> がないとき、つまりコンポーネントの新規作成時のみです。
+そのため <code>newProps !== oldProps</code> のコードが出る分岐には入らないので、<code>newProps</code> と <code>oldProps</code> が同一になろうが破壊されようが問題はありません。</p>
+<h3>なんで再帰構造になっているのか</h3>
+<p>木を辿るためです。
+呼び出し図を再掲すると、</p>
+<p><img src="./call.png" alt="呼び出し図" /></p>
+<p>のように diffChildren を経由して diff が再帰しています。</p>
+<p>そして diffChildren を繰り返し呼ぶことで DOM ツリーを操作し、変更対象がコンポーネントを持たないのならば diffElementNode を呼び出すことで DOM Node のプロパティを更新します。</p>
+<h3>newVNode.type === null のような分岐になるのはどのようなときか</h3>
+<p>VNode が null になる場面はどういうときなのでしょうか。</p>
+<p><code>createVNode</code> から辿ってみると、diffChildren に該当するコードがあります。</p>
+<pre><code class="language-js:title=children.js">if (childVNode == null || typeof childVNode == &quot;boolean&quot;) {
+  childVNode = newParentVNode._children[i] = null
+} else if (typeof childVNode == &quot;string&quot; || typeof childVNode == &quot;number&quot;) {
+  childVNode = newParentVNode._children[i] = createVNode(
+    null,
+    childVNode,
+    null,
+    null,
+    childVNode
+  )
+} else if (Array.isArray(childVNode)) {
+  ...
+}
+</code></pre>
+<p>つまり、入れ子の要素が Element ではなく string, number のような primitive な場合に作られる VNode です。</p>
+<p>たとえば、</p>
+<pre><code class="language-jsx">&lt;&gt;
+  {3}
+  {&quot;3&quot;}
+&lt;/&gt;
+</code></pre>
+<p>のようなものです。</p>
+<h2>おわりに</h2>
+<p>ContextAPI, Hooks(もしくは compat) の説明をしていないのにこんなに容量が膨らんでびっくりしています。
+今回説明したものは preact の core になるもので(ビルドのコマンドも <code>build:core</code> になってる！)、ここさえ理解していれば compat はこれらを呼び出す関数群と見れるので、compat の理解も楽だし山場は超えれていると思います。
+そのうち compat 周りの記事も書いたり、React 本体のコードリーディングに挑戦したいです！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

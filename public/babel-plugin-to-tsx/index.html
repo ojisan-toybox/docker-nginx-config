@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Babel の Plugin で .tsx をビルドする</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="@babel/preset-typescript を使わず、@babel/plugin-transform-typescript で React + TSX をビルドしてみましょう。">
+    <meta property="og:title" content="Babel の Plugin で .tsx をビルドする">
+    <meta property="og:image" content="https://blog.ojisan.io//babel-plugin-to-tsx/visual.png">
+    <meta property="og:description" content="@babel/preset-typescript を使わず、@babel/plugin-transform-typescript で React + TSX をビルドしてみましょう。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Babel の Plugin で .tsx をビルドする">
+    <meta name="twitter:description" content="@babel/preset-typescript を使わず、@babel/plugin-transform-typescript で React + TSX をビルドしてみましょう。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-29</time>
+      <h1>Babel の Plugin で .tsx をビルドする</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://babeljs.io/docs/en/babel-preset-typescript">@babel/preset-typescript</a> を使わず、<a href="https://babeljs.io/docs/en/babel-plugin-transform-typescript">@babel/plugin-transform-typescript</a> で React + TSX をビルドしてみましょう。</p>
+<p>@babel/preset-typescript の公式ドキュメントには</p>
+<blockquote>
+<p>This preset is recommended if you use TypeScript, a typed superset of JavaScript. It includes the following plugins: @babel/plugin-transform-typescript</p>
+</blockquote>
+<p>とあるので、@babel/plugin-transform-typescript を使うとビルドできそうですが、それだけだとは動きません。</p>
+<pre><code class="language-js:title=babel.config.js">module.exports = {
+  plugins: [
+    &quot;@babel/plugin-transform-typescript&quot;,
+    &quot;@babel/plugin-transform-react-jsx&quot;,
+  ],
+  presets: [&quot;@babel/env&quot;],
+}
+</code></pre>
+<pre><code class="language-sh"># babel-loader でビルドするという前提
+$ npx webpack
+
+ERROR in ./src/index.tsx
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: /toybox/plugin-with-isTSX/src/index.tsx: Unexpected token, expected &quot;,&quot; (4:27)
+
+  2 | import * as ReactDOM from &quot;react-dom&quot;;
+  3 |
+&gt; 4 | ReactDOM.render(&lt;div&gt;hello world&lt;/div&gt;, document.getElementById(&quot;root&quot;));
+</code></pre>
+<p><a href="https://babeljs.io/docs/en/babel-plugin-transform-typescript#istsx">ドキュメント</a>や<a href="https://github.com/babel/babel/blob/main/packages/babel-preset-typescript/src/index.js#L48">実装</a>を見てみると、preset はファイルが tsx かどうかのフラグを渡しており、この設定を忘れていると preset を plugin で置き換えても動きません。</p>
+<p>そのためフラグを渡すように書き換えると、</p>
+<pre><code class="language-js:title=babel.config.js">module.exports = {
+  plugins: [
+    [&quot;@babel/plugin-transform-typescript&quot;, { isTSX: true }],
+    &quot;@babel/plugin-transform-react-jsx&quot;,
+  ],
+  presets: [&quot;@babel/env&quot;],
+}
+</code></pre>
+<pre><code class="language-sh">$ npx webpack
+
+[webpack-cli] Compilation finished
+Hash: fa7edfa667f1198f0b7b
+Version: webpack 4.44.2
+Time: 609ms
+Built at: 10/29/2020 5:50:09 AM
+     Asset       Size  Chunks             Chunk Names
+  build.js    129 KiB       0  [emitted]  main
+index.html  145 bytes          [emitted]
+Entrypoint main = build.js
+[0] ./node_modules/react/index.js 190 bytes {0} [built]
+[1] ./node_modules/object-assign/index.js 2.06 KiB {0} [built]
+[2] ./node_modules/react-dom/index.js 1.33 KiB {0} [built]
+[3] ./src/index.tsx 183 bytes {0} [built]
+[4] ./node_modules/react/cjs/react.production.min.js 6.3 KiB {0} [built]
+[5] ./node_modules/react-dom/cjs/react-dom.production.min.js 118 KiB {0} [built]
+[6] ./node_modules/scheduler/index.js 198 bytes {0} [built]
+[7] ./node_modules/scheduler/cjs/scheduler.production.min.js 4.72 KiB {0} [built]
+Child HtmlWebpackCompiler:
+                          Asset   Size  Chunks  Chunk Names
+    __child-HtmlWebpackPlugin_0  4 KiB       0  HtmlWebpackPlugin_0
+    Entrypoint HtmlWebpackPlugin_0 = __child-HtmlWebpackPlugin_0
+    [0] ./node_modules/html-webpack-plugin/lib/loader.js!./src/index.html 420 bytes {0} [built]
+</code></pre>
+<p>うまく動きます。</p>
+<h2>まとめ</h2>
+<p>babel の preset はいわば plugin の詰め合わせだが、preset 側がなんかしらのオプションを設定してくれているので、ただ plugin に置き換えるだけでは動きません。
+何かしらの最小構成を作りたい時は plugin を使うことになると思いますが、わざわざ plugin を使うのならばこういうオプションに気をつけたいです。</p>
+<h2>サンプルコード</h2>
+<p>https://github.com/ojisan-toybox/plugin-with-isTSX</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

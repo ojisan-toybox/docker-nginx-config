@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>firebaseでのパスワードログイン機能の実装をやりきるためのTips</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Firebase Authentification は OAuth 2.0 フローにのっとったログイン方法以外にも Email/Password を使ったログイン方法も提供しています。">
+    <meta property="og:title" content="firebaseでのパスワードログイン機能の実装をやりきるためのTips">
+    <meta property="og:image" content="https://blog.ojisan.io//firebase-auth-ipass-login/visual.png">
+    <meta property="og:description" content="Firebase Authentification は OAuth 2.0 フローにのっとったログイン方法以外にも Email/Password を使ったログイン方法も提供しています。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="firebaseでのパスワードログイン機能の実装をやりきるためのTips">
+    <meta name="twitter:description" content="Firebase Authentification は OAuth 2.0 フローにのっとったログイン方法以外にも Email/Password を使ったログイン方法も提供しています。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-10</time>
+      <h1>firebaseでのパスワードログイン機能の実装をやりきるためのTips</h1>
+    </div>
+    <div class="post-contents"><p>Firebase Authentification は OAuth 2.0 フローにのっとったログイン方法以外にも Email/Password を使ったログイン方法も提供しています。
+このログイン形式をちゃんと使おうとすると、これまでは Provider が担ってくれていたパスワードの編集、パスワードの再発行、メールリンクでのログイン、アドレスの本人確認など様々なことを考慮しなければいけません。</p>
+<p>この記事ではそういった考慮をした Email / Password ログインに挑戦します。
+基本的には<a href="https://firebase.google.com/docs/auth/web/manage-users">manage-users</a>, <a href="https://firebase.google.com/docs/auth/web/password-auth">password-auth</a>, <a href="https://firebase.google.com/docs/auth/web/email-link-auth">email-link-auth</a>といった公式ドキュメントを読むと IPASS ログインに必要なことは書いてあるのですが、<strong>action URL を自前で用意するフローを採用するとそれらのドキュメントで賄えなくなり試行錯誤をたくさんしなければいけない場面が出てくる</strong>ので、それに対する回避策をまとめてみました。</p>
+<p>諸々の機能が試せるページはこちらに用意していますので、気になる機能の挙動とコードを見比べながら読むとイメージがつくかと思います。</p>
+<p>サンプルページ: https://fir-auth-ipass-yarikiru.web.app/</p>
+<p>ソースコード: https://github.com/ojisan-toybox/firebase-ipass-login</p>
+<p><img src="./signin.png" alt="singnin" /></p>
+<h2>Email と Password を使ったサインアップ</h2>
+<p>これは簡単ですね。
+<code>createUserWithEmailAndPassword(email, password)</code>というメソッドでサインアップできます。
+ただ <strong>password が 6 文字未満だと弱すぎるパスワードということで弾かれる</strong>ので、クライアント側でも同様のバリデーションを入れておくなどの配慮をしてあげるとよいでしょう。</p>
+<pre><code class="language-tsx">&lt;form
+  onSubmit={async e =&gt; {
+    e.preventDefault()
+    const target = e.target as any
+    const email = target.email.value as string
+    const password = target.password.value as string
+    const auth = firebase.auth()
+    try {
+      await auth.createUserWithEmailAndPassword(email, password)
+    } catch (e) {
+      // FIXME: カスタムエラーオブジェクトを作ってinstance of で絞り込もう
+      alert(JSON.stringify(e.message))
+    }
+  }}
+  style={{ display: &quot;flex&quot;, flexDirection: &quot;column&quot; }}
+&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;email&lt;/label&gt;
+  &lt;input name=&quot;email&quot; type=&quot;email&quot;&gt;&lt;/input&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;
+    password(Password should be at least 6 characters)
+  &lt;/label&gt;
+  &lt;input name=&quot;password&quot; type=&quot;password&quot;&gt;&lt;/input&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;confirm&lt;/label&gt;
+  {/* firebase関係ないから書いていないけどここでpasswordのconfirmを挟むようにしよう! */}
+  &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<h2>Email と Password を使ったサインイン</h2>
+<p>これも簡単ですね。
+<code>signInWithEmailAndPassword(email, password)</code> とすることでサインインができます。</p>
+<pre><code class="language-tsx">&lt;form
+  onSubmit={e =&gt; {
+    e.preventDefault()
+    const target = e.target as any
+    const email = target.email.value as string
+    const password = target.password.value as string
+    firebase
+      .auth()
+      .signInWithEmailAndPassword(email, password)
+      .then(d =&gt; {
+        console.log(&quot;success &gt; d&quot;, d)
+      })
+      .catch(e =&gt; {
+        alert(e.message)
+      })
+  }}
+  style={{ display: &quot;flex&quot;, flexDirection: &quot;column&quot; }}
+&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;email&lt;/label&gt;
+  &lt;input name=&quot;email&quot; type=&quot;email&quot;&gt;&lt;/input&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;password&lt;/label&gt;
+  &lt;input name=&quot;password&quot; type=&quot;password&quot;&gt;&lt;/input&gt;
+  &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<h2>サインイン情報の表示</h2>
+<p>サインインしたあとの情報は firebase auth のライブラリが持つ user オブジェクト を通してアクセスできます。</p>
+<pre><code class="language-tsx">&lt;div&gt;
+  &lt;h2&gt;## ユーザー状態&lt;/h2&gt;
+  &lt;p&gt;メールアドレス: {user.email}&lt;/p&gt;
+  &lt;p&gt;
+    メールアドレス確認状態:
+    {user.emailVerified ? &quot;メール認証済み&quot; : &quot;アドレス未認証&quot;}
+  &lt;/p&gt;
+&lt;/div&gt;
+</code></pre>
+<p>他にもどのようなプロパティが生えているかは<a href="https://firebase.google.com/docs/reference/js/firebase.User">ドキュメント</a>をご確認ください。</p>
+<p>ここが null のときは ログインしていないか、SDK の初期化が済んでいないかのどちらかですので、分岐を入れてあげましょう。</p>
+<p>サンプル実装では user 情報を取得するために react-firebase-hooks/auth を利用しています。</p>
+<pre><code class="language-tsx">const Session = () =&gt; {
+  const [user] = useAuthState(firebase.auth());
+
+  return (
+    &lt;div&gt;
+      {!user &amp;&amp; (
+        &lt;section&gt;
+  ...
+}
+</code></pre>
+<h2>メールアドレスが本人のものか確認する</h2>
+<p>登録されたメールアドレスが本人のものかどうかを確認しましょう。
+実は<strong>今の状態はそのメールアドレスの所有者でなくても登録できてしまう仕組みになっています。</strong>
+そのため先にメールアドレスをとるといった嫌がらせ的な攻撃をうける可能性もあったり、実装次第では他のログインフローでログインしたユーザーのアカウントをのっとったりもできてしまいます。</p>
+<p>そこでその登録されたメールアドレスにメールを送ってそこへ送られたリンクをクリックさせることによる本人確認を行いましょう。
+そのリンクを送る処理が <code>user.sendEmailVerification();</code> です。</p>
+<p>これを実行するとユーザーにメールが届きます。</p>
+<p><img src="./confirmail.png" alt="確認メール" /></p>
+<p>それをクリックすると本人確認が完了します。</p>
+<p><img src="./authed.png" alt="認証されたことをUIで示す" /></p>
+<h2>メールリンクでログインする</h2>
+<p>パスワードでのログインではなく、メールリンクでのログインフローを用意したいこともあると思います。
+例えば Slack などはマジックリンクログインが実装されていたり、そういったフローをしたいといった要望をうけるかもしれません。
+Firebase にはそれを実現する機能があります。
+それが <code>sendSignInLinkToEmail(email, actionCodeSettings)</code> です。</p>
+<p>コードの全容は下の通りですが、action といった概念やログインフローに関する注意があるので解説します。</p>
+<pre><code class="language-tsx">&lt;form
+  onSubmit={e =&gt; {
+    e.preventDefault()
+    const target = e.target as any
+    const email = target.email.value as string
+    const actionCodeSettings = {
+      // Firebase Consoleで予め許可リストに登録したリダイレクトURLを指定する
+      url: REDIRECT_URL,
+      // 今は必ず true.
+      handleCodeInApp: true,
+    }
+    firebase
+      .auth()
+      .sendSignInLinkToEmail(email, actionCodeSettings)
+      .then(function () {
+        window.localStorage.setItem(&quot;emailForSignIn&quot;, email)
+      })
+      .catch(function (error) {
+        // Some error occurred, you can inspect the code: error.code
+      })
+  }}
+  style={{ display: &quot;flex&quot;, flexDirection: &quot;column&quot; }}
+&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;email&lt;/label&gt;
+  &lt;input name=&quot;email&quot; type=&quot;email&quot;&gt;&lt;/input&gt;
+  &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<h3>actionCodeSettings とはなにか</h3>
+<p>sendSignInLinkToEmail をしたときに actionCodeSettings を渡しています。
+これは状態・継続 URL を渡す仕組みで、メールで送られれるリンクに何かしらの状態を埋め込めます。
+何かしらのリンク先からの復旧先 URL やアプリへのディープリンクを埋め込めます。
+またこの設定を渡さなくてもトークンや action の識別子はデフォルトで渡されます。</p>
+<p>actionCodeSettings の取りうる値は<a href="https://firebase.google.com/docs/auth/web/passing-state-in-email-actions?hl=ja#passing_statecontinue_url_in_email_actions">メールアクションで状態 / 続行 URL を渡す</a>を参照してください。
+埋め込まれるトークンについては後述のパスワード再設定の節で説明します。（これは大きな混乱ポイントになると思うのですが、Firebase ではメールリンク認証、パスワード再設定などの行為はアクションという単位で抽象化されており、そのアクションを捌く仕組みに同一の機能を用います。）</p>
+<h3>メールリンククリック後のログインフローとそのハンドリング</h3>
+<p>アクションリンクを踏むとトークンを持った状態で継続 URL へと自動でリダイレクトします。
+そのリダイレクト先は通常フローでユーザーが来た場合と、メールから来た場合があるのでそれを識別したいです。
+それは URL を parse すればわかることなのですが、<code>auth().isSignInWithEmailLink(url)</code> というメソッドを実行するだけでも識別できるようになっています。
+ここが true であればメールリンクログインをしていくことになるので後続処理を書いていきましょう。
+その中でメールリンクログインのために <code>signInWithEmailLink(email, emailLink)</code> の email が欲しい(emaillink は window.location.href で手に入る)ので、これを入手します。</p>
+<pre><code class="language-tsx">if (firebase.auth().isSignInWithEmailLink(window.location.href)) {
+            // 同一デバイスからのログインであれば事前にセットしたemailを使ってログインできる
+            let email = window.localStorage.getItem(&quot;emailForSignIn&quot;);
+            if (!email) {
+                // session fixationを防ぐためにメアドの入力必要
+                email = window.prompt(&quot;Please provide your email for confirmation&quot;);
+            }
+...
+</code></pre>
+<h3>email はローカルストレージに持っておくと便利</h3>
+<p>そしてあらかじめメールを送るときに <code>window.localStorage.setItem(&quot;emailForSignIn&quot;, email)</code> をしていたと思うので、このアドレスを今取り出します。
+もしアドレスがない場合に備えて<code>window.prompt</code> でその場で入力させることもできます。</p>
+<pre><code class="language-tsx">let email = window.localStorage.getItem(&quot;emailForSignIn&quot;)
+if (!email) {
+  // session fixationを防ぐためにメアドの入力必要
+  email = window.prompt(&quot;Please provide your email for confirmation&quot;)
+}
+</code></pre>
+<h2>ユーザー情報を変更する</h2>
+<p>メールアドレスとパスワードの変更を試みます。</p>
+<p><img src="./singined.png" alt="サインイン後のページ" /></p>
+<h3>メールアドレスの変更</h3>
+<p><code>user.updateEmail(email)</code> とすれば変更できます。</p>
+<p>このとき、新しいアドレスに対して確認メールが流れてきますが、認証機能の内側ではメールアドレスの変更はされています。
+そのため変更後に画面を更新するとメールアドレスが変わっていることを確認できるはずです。
+ただし、一度メールアドレス確認をしていてもメールアドレスを変更すると確認したか(<code>user.emailVerified</code>)は false に戻るので注意しましょう。
+これは変更時に送られてきたリンクをクリックして確認すると true に戻せます。</p>
+<h3>パスワードの変更</h3>
+<p><code>user.updatePassword(newPassword)</code> とすることで変更できます。
+こちらは確認メールなどもなく、送信するだけで自由に変更できます。</p>
+<h2>パスワード忘れへの対応</h2>
+<p>認証機能を備えるとなると、パスワード忘れのユーザーに対する対応もしなければいけません。
+OAuth 2.0 フローにのっとった認証・認可であればこの手続きを provider に丸投げできるのですが、自サイトでパスワード認証をする場合は逃れられないので頑張りましょう。</p>
+<h3>ドロップインな設定</h3>
+<p><code>firebase.auth().sendPasswordResetEmail(user.email);</code> を呼び出すことで、指定したメールアドレスにパスワードの再設定画面を送ることができます。
+送られてきたメールを開くとこのような画面が表示されます。</p>
+<p><img src="./reset.png" alt="ビルトインなリセット画面" /></p>
+<p>ここで新しいパスワードを入力すると変更ができます。</p>
+<h3>カスタマイズした設定画面を使う</h3>
+<p>ただ上記のやり方は 2 つ問題があります。</p>
+<ul>
+<li>デザインが統一されない</li>
+<li>password の confirm ができない</li>
+</ul>
+<p>そこで、再設定画面をカスタマイズします。</p>
+<p>再設定画面が決められた画面で表示されたのはその URL が表示されるようにメールに埋め込まれていたからです。
+この URL は <strong>アクション URL</strong> と呼ばれ、</p>
+<ul>
+<li>パスワードのリセット</li>
+<li>アカウントのアドレス変更</li>
+<li>マジックリンクログイン</li>
+</ul>
+<p>を実行するためのリンクです。
+これは Firebase Authentification の設定画面から編集することができます。
+そこで独自に作る action ページを /action とすることにして、ここに /action と書きます。</p>
+<p><img src="./actionsetting.png" alt="action URL を変更する画面" /></p>
+<p>こうすることで自作した /action ページに誘導できます。</p>
+<p>次にその action ページを実装します。</p>
+<p>先にコードの全容を書くとこうなります。</p>
+<pre><code class="language-tsx:title=src/pages/action.tsx">import { h } from &quot;preact&quot;
+import { useState, useEffect } from &quot;preact/hooks&quot;
+import firebase from &quot;firebase&quot;
+
+// URLから指定したクエリのバリューを抜き出す関数
+const getParameterByName = (name: string) =&gt; {
+  const url = window.location.href
+  name = name.replace(/[\[\]]/g, &quot;\\$&amp;&quot;)
+  var regex = new RegExp(&quot;[?&amp;]&quot; + name + &quot;(=([^&amp;#]*)|&amp;|#|$)&quot;),
+    results = regex.exec(url)
+  if (!results) return null
+  if (!results[2]) return &quot;&quot;
+  return decodeURIComponent(results[2].replace(/\+/g, &quot; &quot;))
+}
+
+/**
+ * 諸々のactionを行うためのページ
+ */
+const Action = () =&gt; {
+  const [state, setState] = useState&lt;{
+    mode: string
+    actionCode: string
+  } | null&gt;(null)
+  useEffect(() =&gt; {
+    const mode = getParameterByName(&quot;mode&quot;)
+    const actionCode = getParameterByName(&quot;oobCode&quot;)
+    if (!mode || !actionCode) {
+      throw new Error(&quot;invalid url&quot;)
+    }
+    setState({
+      mode,
+      actionCode,
+    })
+  }, [])
+
+  return (
+    &lt;div&gt;
+      {state?.mode === &quot;resetPassword&quot; ? (
+        &lt;div&gt;
+          &lt;form
+            onSubmit={e =&gt; {
+              e.preventDefault()
+              const target = e.target as any
+              const newPassword = target.password.value as string
+              firebase
+                .auth()
+                .verifyPasswordResetCode(state.actionCode)
+                .then(function (email) {
+                  firebase
+                    .auth()
+                    .confirmPasswordReset(state.actionCode, newPassword)
+                    .then(async resp =&gt; {
+                      // ログインページか継続ページに戻すか、このページで直接ログインさせる
+                      await firebase
+                        .auth()
+                        .signInWithEmailAndPassword(email, newPassword)
+                      window.location.href = &quot;/&quot;
+                      alert(&quot;success&quot;)
+                    })
+                    .catch(function (error) {
+                      // エラーの原因としてはトークンの有効期限切れ、もしくは弱すぎるパスワード
+                      alert(error.message)
+                    })
+                })
+            }}
+          &gt;
+            &lt;label style={{ display: &quot;block&quot; }}&gt;new password&lt;/label&gt;
+            &lt;input name=&quot;password&quot; type=&quot;password&quot;&gt;&lt;/input&gt;
+            &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+          &lt;/form&gt;
+        &lt;/div&gt;
+      ) : state?.mode === &quot;signIn&quot; ? (
+        &quot;now singining...&quot;
+      ) : (
+        &lt;div&gt;error: modeが選択されていない不正なURLです。&lt;/div&gt;
+      )}
+    &lt;/div&gt;
+  )
+}
+
+export default Action
+</code></pre>
+<p><img src="./actionUI.png" alt="actionページのUI" /></p>
+<p>たくさんの処理を行っていますが、各ステップを一つずつ解説していきます。</p>
+<h3>URL から必要な情報を集める</h3>
+<p>設定した action URL には mode, oobCode, apiKey, continueUrl が付随してきます。</p>
+<h4>mode</h4>
+<p>アクション URL はいろんなアクションを受け取る共通な URL です。
+メールアドレス変更、パスワード変更、マジックリンクログインでも使われます。
+そのためどのアクションから遷移したのかを知れるように URL に mode というのが埋め込まれます。
+例えば、</p>
+<ul>
+<li>resetPassword</li>
+<li>signIn</li>
+<li>verifyEmail</li>
+</ul>
+<p>が該当します。
+いまはパスワード変更なので、<code>resetPassword</code> というのが埋め込まれているはずです。</p>
+<h4>oobCode</h4>
+<p>いわゆるワンタイムパスワードです。
+このトークンを使うとパスワードの変更ができるようになり、一度使うと使えなくなるものです。</p>
+<h4>continueUrl</h4>
+<p>継続 URL と呼ばれるもので、リンク送信時に action setting を渡しているとこの機能が使えます。
+これはパスワード変更後にどのページへ戻すかを表しています。
+継続 URL と呼ばれているのはパスワードの変更が必ずしも決まった箇所から行われるとは限らないからです。
+例えば何か重要な設定をしているときにパスワードが古いことを促してそこで変えさせるといったフローを取らせたいときに、変更後にもともと行っていた作業に戻すときに使えます。</p>
+<h3>token を確かめる</h3>
+<p><a href="https://firebase.google.com/docs/reference/js/firebase.auth.Auth#verifypasswordresetcode">verifyPasswordResetCode</a>というメソッドでその token が正しいかを検証します。
+もし正しければその token が送られたメールアドレスを得られます。</p>
+<h3>新パスワードを設定する</h3>
+<p>トークンと設定したいパスワード文字列を <code>confirmPasswordReset(code, password)</code> に渡すと新しいパスワードをセットできます。
+その後後続処理に続きますが、ここでトークンが間違っていたり、パスワードが弱い(6 文字未満)だと catch 節に入るので注意しましょう。</p>
+<h3>新パスワードでログインする</h3>
+<p>パスワードの変更に成功しても、まだログインには成功していないので元のページに戻ってもログインはされておらずそこでまたパスワードを打ち込む二度手間になります。
+そこでこのページでログインしてから元のページに戻すと体験も良いでしょう。
+<code>verifyPasswordResetCode</code> の結果としてメールアドレスが取得できているはずなので、<code>signInWithEmailAndPassword(email, newPassword)</code>を呼び出してログインします。
+ログイン成功後は 元のページへとリダイレクトなりで戻しましょう。</p>
+<h2>実際に作るとハマるであろう落とし穴</h2>
+<h3>action link は一つしか設定できない</h3>
+<p>パスワード再設定画面をカスタムしたいとして独自設定画面を作り、そこを action URL としてメールテンプレートを書き換えると、メールリンクログインのアクション URL も書き換わってしまいます。
+設定画面にも「カスタムアクション URL はメールテンプレート全てに適用されます」と書かれています。</p>
+<p><img src="./actionsetting.png" alt="action URL を変更する画面" /></p>
+<p>そのためパスワード再設定画面をカスタムするならば必然的にメールリンクログインの画面もカスタムする必要があります。</p>
+<p>今回の場合だとメールリンクログインをする処理を /action に移す必要があります。</p>
+<pre><code class="language-tsx:title=src/pages/action">// magic link を使ったログインフロー
+useEffect(() =&gt; {
+  if (firebase.auth().isSignInWithEmailLink(window.location.href)) {
+    // 同一デバイスからのログインであれば事前にセットしたemailを使ってログインできる
+    let email = window.localStorage.getItem(&quot;emailForSignIn&quot;)
+    if (!email) {
+      // session fixationを防ぐためにメアドの入力必要
+      email = window.prompt(&quot;Please provide your email for confirmation&quot;)
+    }
+    if (!email) {
+      throw new Error(&quot;email should be&quot;)
+    }
+    // The client SDK will parse the code from the link for you.
+    firebase
+      .auth()
+      .signInWithEmailLink(email, window.location.href)
+      .then(function (result) {
+        // 認証成功時の処理
+        window.localStorage.removeItem(&quot;emailForSignIn&quot;)
+        window.location.href = &quot;/&quot;
+      })
+      .catch(function (error) {
+        alert(&quot;すでに利用されているワンタイムパスワードです。&quot;)
+        console.error(error)
+      })
+  }
+}, [])
+</code></pre>
+<pre><code class="language-tsx">import { h, render } from &quot;preact&quot;
+import { Router, Route } from &quot;preact-router&quot;
+import Session from &quot;./pages/session&quot;
+import Action from &quot;./pages/action&quot;
+
+const Main = () =&gt; {
+  return (
+    &lt;Router&gt;
+      &lt;Route path=&quot;/&quot; component={Session}&gt;&lt;/Route&gt;
+      &lt;Route path=&quot;/action&quot; component={Action}&gt;&lt;/Route&gt;
+    &lt;/Router&gt;
+  )
+}
+
+render(&lt;Main&gt;&lt;/Main&gt;, document.body)
+</code></pre>
+<h3>アクション画面のカスタマイズが必要になる</h3>
+<p>ビルトインなアクション画面を使えば actionURL 周りの制御が不要になるのですが、おそらくこの画面は受入れらないはずです。</p>
+<p><img src="./reset.png" alt="ビルトインなリセット画面" /></p>
+<p>自社で作ったものと明らかにテイストが異なり怪しさが生まれるので、パスワードのようなものを入れさせるにはユーザーも心理的な戸惑いがあるはずです。
+そのため、アクション画面は自作する必要があります。</p>
+<p>そのとき自作したアクション画面ではこれまでデフォルト actionURL である /__/auth/action にあった処理がやってくれていた処理を自分で書く必要があります。
+それが actionCode(OTP)の検証とそれを使った各種処理の実行です。
+<strong>しかしアクション URL は一つしか作られないのでその各種処理は一つの URL で切り替えながら実行する必要があります。</strong></p>
+<p>その処理とは、</p>
+<ul>
+<li>メールリンクログイン</li>
+<li>パスワードの再設定</li>
+<li>メールアドレスの本人確認</li>
+</ul>
+<p>です。</p>
+<p>実際こういう分岐を書いています。</p>
+<pre><code class="language-tsx">&lt;div&gt;
+  {state?.mode === &quot;resetPassword&quot; ? (
+    &lt;div&gt;...&lt;/div&gt;
+  ) : state?.mode === &quot;signIn&quot; ? (
+    &quot;now singining...&quot;
+  ) : state?.mode === &quot;verifyEmail&quot; ? (
+    &quot;now changing...&quot;
+  ) : (
+    &lt;div&gt;error: modeが選択されていない不正なURLです。&lt;/div&gt;
+  )}
+&lt;/div&gt;
+</code></pre>
+<h4>メールアドレスの本人確認</h4>
+<p>このような処理を書きます。</p>
+<pre><code class="language-tsx">const actionCode = getParameterByName(&quot;oobCode&quot;)
+if (!actionCode) {
+  throw new Error(&quot;invalid url&quot;)
+}
+firebase
+  .auth()
+  .applyActionCode(actionCode)
+  .then(() =&gt; {
+    alert(&quot;success apply action code&quot;)
+    window.location.href = &quot;/&quot;
+  })
+</code></pre>
+<p>そして、<code>applyActionCode</code> がミソです。
+これを呼び出すことで actionCode でメールアドレスを confirm できます。</p>
+<p>action URL をカスタマイズすると公式の <a href="https://firebase.google.com/docs/auth/web/manage-users?hl=ja#send_a_user_a_verification_email">send_a_user_a_verification_email</a>が使えなくなるので注意しましょう。
+applyActionCode はその回避策です。</p>
+<h4>パスワードの再設定</h4>
+<p>このような処理を書く必要があります。</p>
+<pre><code class="language-tsx">&lt;form
+  onSubmit={e =&gt; {
+    e.preventDefault()
+    const target = e.target as any
+    const newPassword = target.password.value as string
+    firebase
+      .auth()
+      .verifyPasswordResetCode(state.actionCode)
+      .then(function (email) {
+        firebase
+          .auth()
+          .confirmPasswordReset(state.actionCode, newPassword)
+          .then(async resp =&gt; {
+            // ログインページか継続ページに戻すか、このページで直接ログインさせる
+            await firebase.auth().signInWithEmailAndPassword(email, newPassword)
+            window.location.href = &quot;/&quot;
+            alert(&quot;success&quot;)
+          })
+          .catch(function (error) {
+            // エラーの原因としてはトークンの有効期限切れ、もしくは弱すぎるパスワード
+            alert(error.message)
+          })
+      })
+  }}
+&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;new password&lt;/label&gt;
+  &lt;input name=&quot;password&quot; type=&quot;password&quot;&gt;&lt;/input&gt;
+  &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<p>この処理を実行するためには actionCode を URL を抜き取る必要があるので、この submit hundler を実行する前に URL から actionCode を抽出しておきます。</p>
+<pre><code class="language-tsx">const getParameterByName = (name: string) =&gt; {
+    const url = window.location.href;
+    name = name.replace(/[\[\]]/g, &quot;\\$&amp;&quot;);
+    var regex = new RegExp(&quot;[?&amp;]&quot; + name + &quot;(=([^&amp;#]*)|&amp;|#|$)&quot;),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return &quot;&quot;;
+    return decodeURIComponent(results[2].replace(/\+/g, &quot; &quot;));
+};
+
+...
+
+useEffect(() =&gt; {
+        const mode = getParameterByName(&quot;mode&quot;);
+        const actionCode = getParameterByName(&quot;oobCode&quot;);
+        if (!mode || !actionCode) {
+            throw new Error(&quot;invalid url&quot;);
+        }
+        setState({
+            mode,
+            actionCode,
+        });
+    }, []);
+</code></pre>
+<h4>メールリンクログイン</h4>
+<p>このような処理を書く必要があります。</p>
+<pre><code class="language-tsx">if (firebase.auth().isSignInWithEmailLink(window.location.href)) {
+  // 同一デバイスからのログインであれば事前にセットしたemailを使ってログインできる
+  let email = window.localStorage.getItem(&quot;emailForSignIn&quot;)
+  if (!email) {
+    // session fixationを防ぐためにメアドの入力必要
+    email = window.prompt(&quot;Please provide your email for confirmation&quot;)
+  }
+  if (!email) {
+    throw new Error(&quot;email should be&quot;)
+  }
+  firebase
+    .auth()
+    .signInWithEmailLink(email, window.location.href)
+    .then(function (result) {
+      // 認証成功時の処理
+      window.localStorage.removeItem(&quot;emailForSignIn&quot;)
+      window.location.href = &quot;/&quot;
+    })
+    .catch(function (error) {
+      alert(&quot;すでに利用されているワンタイムパスワードです。&quot;)
+      console.error(error)
+    })
+}
+</code></pre>
+<p>token から自分でメールアドレスを取り出してそれを使って signInWithEmailLink を呼び出す必要があります。
+これも action URL を編集することで、その action URL のページで実装しなければいけなくなった処理です。
+ちなみに action URL を編集していなければ ActionCodeSettings オブジェクトの URL に書いた URL でその処理を実装することになります。</p>
+<h3>セッションハイジャックへの対策</h3>
+<p>メールリンクを使ったログインにおいて</p>
+<pre><code class="language-tsx">let email = window.localStorage.getItem(&quot;emailForSignIn&quot;)
+if (!email) {
+  // session fixationを防ぐためにメアドの入力必要
+  email = window.prompt(&quot;Please provide your email for confirmation&quot;)
+}
+</code></pre>
+<p>といった処理を書いています。
+これは セッションハイジャックへの対策で URL にメールアドレスを含められないため、後続の<code>signInWithEmailLink(email, window.location.href)</code> に必要なメールアドレスを求めています。
+ここで localstorage が登場しているのは、ユーザーにメールアドレスを入力させるのは面倒で不自然でもあることから、自動でメールアドレスを取得させるためです。
+そのため事前に localstorage にメールアドレスを格納している必要はあり、それはメールリンクを送信するメソッドで行っています。</p>
+<pre><code class="language-tsx">&lt;form
+  onSubmit={e =&gt; {
+    e.preventDefault()
+    const target = e.target as any
+    const email = target.email.value as string
+    const actionCodeSettings = {
+      // Firebase Consoleで予め許可リストに登録した
+      // リダイレクトURLを指定することで継続URLとして使える
+      //（とはいえ今回はサインインページが決まっているので
+      // このリンクはactionページでは使わない。）
+      url: REDIRECT_URL,
+    }
+    firebase
+      .auth()
+      .sendSignInLinkToEmail(email, actionCodeSettings)
+      .then(function () {
+        window.localStorage.setItem(&quot;emailForSignIn&quot;, email)
+        alert(&quot;メールを送信しました&quot;)
+      })
+      .catch(function (error) {
+        // Some error occurred, you can inspect the code: error.code
+        alert(error.message)
+      })
+  }}
+  style={{ display: &quot;flex&quot;, flexDirection: &quot;column&quot; }}
+&gt;
+  &lt;label style={{ display: &quot;block&quot; }}&gt;email&lt;/label&gt;
+  &lt;input name=&quot;email&quot; type=&quot;email&quot;&gt;&lt;/input&gt;
+  &lt;button type=&quot;submit&quot;&gt;submit&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<h2>おわりに</h2>
+<p>いかがでしたか。
+IPASS ログインの実装は Firebase を使ってもちゃんとやりきるとなると意外と大変なのではないでしょうか。
+それでも SDK の使い方さえ覚えたら便利な機能が手に入るので頑張って覚えていきましょう。
+僕もまだまだ知らない API がたくさんあるのでもっともっと試して経験を積んでいこうと思います！</p>
+<h2>成果物</h2>
+<p>ソースコード: https://github.com/ojisan-toybox/firebase-ipass-login</p>
+<p>実装: https://fir-auth-ipass-yarikiru.web.app/</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>preact プロジェクトにstorybookを導入する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="English version is herepreact + TS + goober 環境下に storybook を入れることに苦労したのでその時のメモです。">
+    <meta property="og:title" content="preact プロジェクトにstorybookを導入する">
+    <meta property="og:image" content="https://blog.ojisan.io//preact-storybook/visual.png">
+    <meta property="og:description" content="English version is herepreact + TS + goober 環境下に storybook を入れることに苦労したのでその時のメモです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="preact プロジェクトにstorybookを導入する">
+    <meta name="twitter:description" content="English version is herepreact + TS + goober 環境下に storybook を入れることに苦労したのでその時のメモです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-01-27</time>
+      <h1>preact プロジェクトにstorybookを導入する</h1>
+    </div>
+    <div class="post-contents"><p>English version is <a href="https://dev.to/sadnessojisan/storybook-with-preact-ts-goober-4ghk">here</a></p>
+<p>preact + TS + goober 環境下に storybook を入れることに苦労したのでその時のメモです。</p>
+<h2>storybook の作成に失敗する</h2>
+<p>preact + TS + goober で何かしらのコンポーネントを作ります。</p>
+<pre><code class="language-tsx:title=button.tsx">import { h } from &quot;preact&quot;
+import { styled } from &quot;goober&quot;
+
+const _Button = styled(&quot;button&quot;)`
+  background-color: red;
+`
+
+export const Button = () =&gt; {
+  return &lt;_Button&gt;ok&lt;/_Button&gt;
+}
+</code></pre>
+<p>次にこのコンポーネントの storybook を作ります。</p>
+<pre><code class="language-sh">npx sb init
+</code></pre>
+<pre><code class="language-tsx:title=button.stories.tsx">import { h } from &quot;preact&quot;
+import { Button } from &quot;./button&quot;
+
+export default {
+  title: &quot;custom/Button&quot;,
+  component: Button,
+  argTypes: {
+    backgroundColor: { control: &quot;color&quot; },
+    onClick: { action: &quot;onClick&quot; },
+  },
+}
+
+const Template = (args: any) =&gt; &lt;Button {...args} /&gt;
+
+export const Primary = Template.bind({})
+</code></pre>
+<p>起動させます。</p>
+<pre><code>npm run storybook
+</code></pre>
+<p>そして該当のボタンを開くと</p>
+<pre><code class="language-sh">h is not defined
+ReferenceError: h is not defined
+    at Object.Template (http://192.168.0.3:6006/main.4bde6a78d76d85c8a393.bundle.js:353:3)
+    at finalStoryFn (http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:16622:32)
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:13062:21
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:14861:14
+    at wrapper (http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:12801:12)
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:13580:14
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:13594:26
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:13062:21
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:14854:12
+    at http://192.168.0.3:6006/vendors~main.4bde6a78d76d85c8a393.bundle.js:14861:14
+</code></pre>
+<p><img src="./error.png" alt="エラー画面" /></p>
+<p>といったエラーが表示されるはずです。</p>
+<p>一方で、 <code>npx sb init</code> が生成した examle story は表示されています。</p>
+<p><img src="./sampleStory.png" alt="成功画面" /></p>
+<p>一体どうしてでしょうか。</p>
+<h2>成功する例とはどのようなものか</h2>
+<p>まずそもそも preact は storybook 公式でもサポートされています。</p>
+<p>FYI: https://www.npmjs.com/package/@storybook/preact</p>
+<p>これにより <code>sb init</code> 時に自動生成させることができ、それは問題なく使えます。</p>
+<p>そこで自動生成されたファイルを見てみましょう。</p>
+<pre><code class="language-js:title=button.stories.js">/** @jsx h */
+import { h } from &quot;preact&quot;
+import PropTypes from &quot;prop-types&quot;
+import &quot;./button.css&quot;
+
+/**
+ * Primary UI component for user interaction
+ */
+export const Button = ({ primary, backgroundColor, size, label, ...props }) =&gt; {
+  const mode = primary
+    ? &quot;storybook-button--primary&quot;
+    : &quot;storybook-button--secondary&quot;
+  return (
+    &lt;button
+      type=&quot;button&quot;
+      className={[&quot;storybook-button&quot;, `storybook-button--${size}`, mode].join(
+        &quot; &quot;
+      )}
+      style={backgroundColor &amp;&amp; { backgroundColor }}
+      {...props}
+    &gt;
+      {label}
+    &lt;/button&gt;
+  )
+}
+
+Button.propTypes = {
+  /**
+   * Is this the principal call to action on the page?
+   */
+  primary: PropTypes.bool,
+  /**
+   * What background color to use
+   */
+  backgroundColor: PropTypes.string,
+  /**
+   * How large should the button be?
+   */
+  size: PropTypes.oneOf([&quot;small&quot;, &quot;medium&quot;, &quot;large&quot;]),
+  /**
+   * Button contents
+   */
+  label: PropTypes.string.isRequired,
+  /**
+   * Optional click handler
+   */
+  onClick: PropTypes.func,
+}
+
+Button.defaultProps = {
+  backgroundColor: null,
+  primary: false,
+  size: &quot;medium&quot;,
+  onClick: undefined,
+}
+</code></pre>
+<p>生成されたファイルと自分の実装とで大きな差異があるとすれば、</p>
+<ul>
+<li>TS ではなく JS である</li>
+<li>jsx pragma がついている</li>
+<li>CSS in JS を使っていない</li>
+</ul>
+<p>という点です。
+そしてこれらがまさしく、自分の手元で動かない原因でした。</p>
+<h2>jsx の設定が必要</h2>
+<h3>/** @jsx h */ とは何か</h3>
+<p><code>/** @jsx h */</code> は jsx pragma と呼ばれている記法です。
+これは コンパイラ に jsx を作り出す関数(jsx factory)が何かを伝えることができます。
+たとえば react では jsx factory は <code>createElement</code> ですが、それが preact では <code>h</code> であることはコンパイラは知らず、開発者がコンパイラに伝える必要があります。</p>
+<h3>storybook は babel でビルドする</h3>
+<p>そして アプリケーション開発時は TS を使っていたとしても、storybook は babel でビルドするため、babel の設定ファイルに jsxFactory が h であることを伝える必要がうあります。
+これを実現する方法の一つが jsx pragma ですが、直接 babel の設定ファイルに書くこともできます。
+ただし storybook の設定にそれは書かないといけません。</p>
+<pre><code class="language-js:title=main.js">module.exports = {
+  stories: [&quot;../src/**/*.stories.mdx&quot;, &quot;../src/**/*.stories.@(js|jsx|ts|tsx)&quot;],
+  addons: [&quot;@storybook/addon-links&quot;, &quot;@storybook/addon-essentials&quot;],
+  babel: async options =&gt; ({
+    ...options,
+    presets: [[&quot;@babel/typescript&quot;, { jsxPragma: &quot;h&quot; }]],
+  }),
+}
+</code></pre>
+<p>ちなみにアプリを開発しているということはすでに TS 側で jsxFacroty の設定はしているはずです。</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    ...
+    &quot;jsxFactory&quot;: &quot;h&quot;
+  }
+}
+</code></pre>
+<p>しかし storybook は babel でコンパイルするのでこの設定は読まれません。
+storybook 側の設定に書く jsxFactory の指定をする必要があったという訳ですね。</p>
+<h2>goober 　はそもそも setup が必要</h2>
+<p>いまで使っている goober はアプリケーションのエントリポイントで初期化が必要です。</p>
+<pre><code class="language-ts:title=index.tsx">import { setup } from &quot;goober&quot;
+import { h, render } from &quot;preact&quot;
+import { Button } from &quot;./button&quot;
+
+setup(h)
+
+const App = () =&gt; {
+  return (
+    &lt;div&gt;
+      &lt;Button&gt;&lt;/Button&gt;
+    &lt;/div&gt;
+  )
+}
+
+render(&lt;App&gt;&lt;/App&gt;, document.body)
+</code></pre>
+<p>storybook ではその初期化フェーズのコードは呼ばれないので、各 story ファイルで初期化(<code>setup(h)</code>)が必要です。</p>
+<pre><code class="language-js:title=button.stories.js">import { setup } from &quot;goober&quot;
+import { h } from &quot;preact&quot;
+import { Button } from &quot;./button&quot;
+
+setup(h)
+
+export default {
+  title: &quot;custom/Button&quot;,
+  component: Button,
+  argTypes: {
+    backgroundColor: { control: &quot;color&quot; },
+    onClick: { action: &quot;onClick&quot; },
+  },
+}
+
+const Template = (args: any) =&gt; &lt;Button {...args} /&gt;
+
+export const Primary = Template.bind({})
+</code></pre>
+<h2>storybook ができた</h2>
+<p>これで</p>
+<pre><code class="language-sh">npm run storybook
+</code></pre>
+<p>とすると無事に storybook が表示されます。</p>
+<p><img src="./success.png" alt="成功画面" /></p>
+<p>ソースコードはこちらです。</p>
+<p>https://github.com/ojisan-toybox/preact-storybook</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

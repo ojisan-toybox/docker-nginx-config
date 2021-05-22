@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>stylisの挙動とか仕組み</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="stylis を調べたのでそのメモ書きです。stylis は styled-components の内部で使われており、styled-components の調査をしてる中で挙動を知る必要が出てきたという理由で読んでいました。">
+    <meta property="og:title" content="stylisの挙動とか仕組み">
+    <meta property="og:image" content="https://blog.ojisan.io//exec-stylis/visual.png">
+    <meta property="og:description" content="stylis を調べたのでそのメモ書きです。stylis は styled-components の内部で使われており、styled-components の調査をしてる中で挙動を知る必要が出てきたという理由で読んでいました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="stylisの挙動とか仕組み">
+    <meta name="twitter:description" content="stylis を調べたのでそのメモ書きです。stylis は styled-components の内部で使われており、styled-components の調査をしてる中で挙動を知る必要が出てきたという理由で読んでいました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-13</time>
+      <h1>stylisの挙動とか仕組み</h1>
+    </div>
+    <div class="post-contents"><p>stylis を調べたのでそのメモ書きです。
+stylis は styled-components の内部で使われており、styled-components の調査をしてる中で挙動を知る必要が出てきたという理由で読んでいました。</p>
+<h2>stylis って何？</h2>
+<p><a href="https://stylis.js.org/">stylis</a> は light – weight css preprocessor です。</p>
+<p><img src="./stylis.png" alt="stylisのトップページ. SCSS記法からCSSに変換したときの結果が表示されている. " /></p>
+<p>上の画像の例にある通り、css preprocessor としてベンダープレフィックスの付与や、SCSS 記法を CSS に変換ができます。</p>
+<h2>内部の構造</h2>
+<pre><code class="language-js:title=src/index.js">export * from &quot;./src/Enum.js&quot;
+export * from &quot;./src/Utility.js&quot;
+export * from &quot;./src/Parser.js&quot;
+export * from &quot;./src/Prefixer.js&quot;
+export * from &quot;./src/Tokenizer.js&quot;
+export * from &quot;./src/Serializer.js&quot;
+export * from &quot;./src/Middleware.js&quot;
+</code></pre>
+<p>各モジュールの export されてる関数は全て export されています。
+そしてほぼ全部の関数が export されているので好き放題に呼び出せるのですが、tokenizer, parser などは内部でしか使わないものなので、ライブラリの利用者が使いそうな関数だけピックアップします。</p>
+<h3>compile</h3>
+<p>stylis は SCSS 記法で書かれた文字列を CSS に変換するライブラリですが、その変換処理そのものです。</p>
+<pre><code class="language-ts">import { compile } from &quot;stylis&quot;
+
+const css = `
+div {
+    .hoge {
+        color: red;
+    }
+    &amp; .hoge {
+        color: blue;
+    }
+}
+`
+
+console.log(compile(css))
+</code></pre>
+<p>これを実行するとどうなるでしょうか。
+CSS が返ってくるかと思いきや違いました。</p>
+<pre><code class="language-bash">$ node index.js
+[
+  {
+    value: 'div',
+    root: null,
+    parent: null,
+    type: 'rule',
+    props: [ 'div' ],
+    children: [],
+    line: 2,
+    column: 6,
+    length: 0,
+    return: ''
+  },
+  {
+    value: '.hoge',
+    root: null,
+    parent: {
+      value: 'div',
+      root: null,
+      parent: null,
+      type: 'rule',
+      props: [Array],
+      children: [],
+      line: 2,
+      column: 6,
+      length: 0,
+      return: ''
+    },
+    type: 'rule',
+    props: [ 'div .hoge' ],
+    children: [ [Object] ],
+    line: 3,
+    column: 12,
+    length: 0,
+    return: ''
+  },
+  {
+    value: '&amp;\f .hoge',
+    root: null,
+    parent: {
+      value: 'div',
+      root: null,
+      parent: null,
+      type: 'rule',
+      props: [Array],
+      children: [],
+      line: 2,
+      column: 6,
+      length: 0,
+      return: ''
+    },
+    type: 'rule',
+    props: [ 'div .hoge' ],
+    children: [ [Object] ],
+    line: 6,
+    column: 14,
+    length: 0,
+    return: ''
+  }
+]
+</code></pre>
+<p>AST っぽいものが帰ってきます。
+compile って AST を何らかの generator に入れた最終結果が返ってくるイメージだったのですが、そうはならなかったので個人的にはちょっと詰まりました。</p>
+<h3>stringify と serialize</h3>
+<p>そこで AST を CSS の文字列に変換する処理を挟みます。
+その役割を持つのが stringify と serialize です。</p>
+<p>公式にも下記のような例があり、これによって CSS を出力できるようです。</p>
+<pre><code class="language-js">serialize(compile(css), stringify)
+</code></pre>
+<p>つまり AST =&gt; CSS を担う鍵は serialize と stringify にありそうです。
+そこでコードを読んでみたり実行したりしてみましょう。</p>
+<pre><code class="language-js:title=src/Serializer.js">export function stringify(element, index, children, callback) {
+  switch (element.type) {
+    case IMPORT:
+    case DECLARATION:
+      return (element.return = element.return || element.value)
+    case COMMENT:
+      return &quot;&quot;
+    case RULESET:
+      element.value = element.props.join(&quot;,&quot;)
+  }
+
+  return strlen((children = serialize(element.children, callback)))
+    ? (element.return = element.value + &quot;{&quot; + children + &quot;}&quot;)
+    : &quot;&quot;
+}
+
+export function serialize(children, callback) {
+  var output = &quot;&quot;
+  var length = sizeof(children)
+
+  for (var i = 0; i &lt; length; i++)
+    output += callback(children[i], i, children, callback) || &quot;&quot;
+
+  return output
+}
+</code></pre>
+<p>となっています。</p>
+<p>ここで注意したいことは、<code>serialize(compile(css), stringify)</code> としたとき、serialize の中でコールバックとして stringify が実行されますが、 stringify は内部で serialize を stringify をコールバック関数に指定した状態で呼び出しており、 <strong>serialize と stringify が serialize の for ループが停止するまで呼び出され続けます。</strong></p>
+<p>そして serialize は stringify が繰り返し実行された結果をまとめあげる役割をになっており、stringify は 渡された AST Node の種類に応じて CSS を組み立てます。
+組み立てにおける注視すべきポイントは</p>
+<pre><code class="language-js">return strlen((children = serialize(element.children, callback)))
+  ? (element.return = element.value + &quot;{&quot; + children + &quot;}&quot;)
+  : &quot;&quot;
+</code></pre>
+<p>です。</p>
+<p>上の例で言うと、<code>element.value</code> に CSS セレクタ、 <code>children</code> に CSS の値を書けると良さそうですね。</p>
+<h4>element.props</h4>
+<p>CSS セレクタは AST の props に含まれています。</p>
+<p>最初に紹介した例を実行した AST はこうです。</p>
+<pre><code class="language-js">;[
+  {
+    value: &quot;div&quot;,
+    root: null,
+    parent: null,
+    type: &quot;rule&quot;,
+    props: [&quot;div&quot;],
+    children: [],
+    line: 2,
+    column: 6,
+    length: 0,
+    return: &quot;&quot;,
+  },
+  {
+    value: &quot;.hoge&quot;,
+    root: null,
+    parent: {
+      value: &quot;div&quot;,
+      root: null,
+      parent: null,
+      type: &quot;rule&quot;,
+      props: [Array],
+      children: [],
+      line: 2,
+      column: 6,
+      length: 0,
+      return: &quot;&quot;,
+    },
+    type: &quot;rule&quot;,
+    props: [&quot;div .hoge&quot;],
+    children: [[Object]],
+    line: 3,
+    column: 12,
+    length: 0,
+    return: &quot;&quot;,
+  },
+  {
+    value: &quot;&amp;\f .hoge&quot;,
+    root: null,
+    parent: {
+      value: &quot;div&quot;,
+      root: null,
+      parent: null,
+      type: &quot;rule&quot;,
+      props: [Array],
+      children: [],
+      line: 2,
+      column: 6,
+      length: 0,
+      return: &quot;&quot;,
+    },
+    type: &quot;rule&quot;,
+    props: [&quot;div .hoge&quot;],
+    children: [[Object]],
+    line: 6,
+    column: 14,
+    length: 0,
+    return: &quot;&quot;,
+  },
+]
+</code></pre>
+<p>props にそれらしきものがあることが確認できるはずです。</p>
+<p>そして</p>
+<pre><code class="language-js">case RULESET:
+      element.value = element.props.join(&quot;,&quot;)
+</code></pre>
+<p>として取り出せており、セレクタとして設定できることもわかると思います。
+しかし、element.value は 本当に selector だけが含まれるのでしょうか？
+switch の他の節には</p>
+<pre><code class="language-js">case IMPORT:
+    case DECLARATION:
+      return (element.return = element.return || element.value)
+</code></pre>
+<p>とあり、value は他の用途もありそうです。</p>
+<h4>elemen.value</h4>
+<p>そこで AST をもっと掘ってみましょう。
+今はただ console.log しただけなので Array や Object が潰れていますが、その中身も見てみましょう。
+debugger で inspect した部分を下記に貼り付けておきます。</p>
+<p>debugger について詳しくは https://blog.ojisan.io/how-to-read-js#debugger-%E3%81%A8-node-inspect 参照.</p>
+<pre><code class="language-js">&gt; console.log(astnode[1].children)
+&lt; [
+&lt;   {
+&lt;     value: 'color:red;',
+&lt;     root: {
+&lt;       value: '.hoge',
+&lt;       root: null,
+&lt;       parent: [Object],
+&lt;       type: 'rule',
+&lt;       props: [Array],
+&lt;       children: [Circular],
+&lt;       line: 3,
+&lt;       column: 12,
+&lt;       length: 0,
+&lt;       return: ''
+&lt;     },
+&lt;     parent: {
+&lt;       value: '.hoge',
+&lt;       root: null,
+&lt;       parent: [Object],
+&lt;       type: 'rule',
+&lt;       props: [Array],
+&lt;       children: [Circular],
+&lt;       line: 3,
+&lt;       column: 12,
+&lt;       length: 0,
+&lt;       return: ''
+&lt;     },
+&lt;     type: 'decl',
+&lt;     props: 'color',
+&lt;     children: 'red',
+&lt;     line: 4,
+&lt;     column: 20,
+&lt;     length: 5,
+&lt;     return: ''
+&lt;   }
+&lt; ]
+</code></pre>
+<p>どうやら type に decl を持った CSS の value(ここでは <code>color:red</code> )を持っています。
+つまり、value はセレクタ専用といい切れず、 <code>(element.return = element.value + &quot;{&quot; + children + &quot;}&quot;)</code> において value に セレクタが入る保証はこの情報だけでは今のところありません。</p>
+<p>ただ読み進めていくと、相互呼び出しの停止条件を満たすことで value にセレクタ以外が入ることがないことを確認できます。
+type に decl を持った CSS の children は 値(文字)なので、次の <code>serialize(element.children, callback))</code> 呼び出しの <code>element.children</code> は undefined となり、</p>
+<pre><code class="language-js">export function serialize(children, callback) {
+  var output = &quot;&quot;
+  var length = sizeof(children)
+
+  for (var i = 0; i &lt; length; i++)
+    output += callback(children[i], i, children, callback) || &quot;&quot;
+
+  return output
+}
+</code></pre>
+<p>がそのまま <code>output = &quot;&quot;</code> が出力されることとなり、</p>
+<pre><code class="language-js">return strlen((children = serialize(element.children, callback)))
+  ? (element.return = element.value + &quot;{&quot; + children + &quot;}&quot;)
+  : &quot;&quot;
+</code></pre>
+<p>の三項演算子の false 節に入り相互呼び出しが停止するため、type が rule でなければ true 節に入らず、value に セレクタ以外が入ることはありません。
+（もっとも実装からそう読み取れるだけであって、その保証がある訳ではないです。）</p>
+<p>なので、この処理で CSS の形の文字列 を組み立てていると言えます。</p>
+<h2>結論</h2>
+<p><code>serialize(compile(css), stringify)</code> で CSS を出力できる。</p>
+<pre><code class="language-ts">import { compile } from &quot;stylis&quot;
+
+const css = `
+div {
+    .hoge {
+        color: red;
+    }
+    &amp; .hoge {
+        color: blue;
+    }
+}
+`
+
+console.log(serialize(compile(css), stringify))
+</code></pre>
+<p>の結果は、</p>
+<pre><code class="language-sh">$ node index.js
+div .hoge{color:red;}div .hoge{color:blue;}
+</code></pre>
+<p>です。</p>
+<h2>ソースコード</h2>
+<p>https://github.com/ojisan-toybox/exec-stylis</p>
+<p>index.js にいろいろ SCSS を食わせて実行するとイメージが着くと思います。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

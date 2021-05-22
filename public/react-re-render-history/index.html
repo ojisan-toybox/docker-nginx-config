@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Reactのパフォーマンスチューニングの歴史をまとめてみた</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="最近 React のパフォーマンスチューニング、特に再レンダリング抑制について調べたのでそのまとめです。">
+    <meta property="og:title" content="Reactのパフォーマンスチューニングの歴史をまとめてみた">
+    <meta property="og:image" content="https://blog.ojisan.io//react-re-render-history/visual.png">
+    <meta property="og:description" content="最近 React のパフォーマンスチューニング、特に再レンダリング抑制について調べたのでそのまとめです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Reactのパフォーマンスチューニングの歴史をまとめてみた">
+    <meta name="twitter:description" content="最近 React のパフォーマンスチューニング、特に再レンダリング抑制について調べたのでそのまとめです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-13</time>
+      <h1>Reactのパフォーマンスチューニングの歴史をまとめてみた</h1>
+    </div>
+    <div class="post-contents"><p>最近 React のパフォーマンスチューニング、特に再レンダリング抑制について調べたのでそのまとめです。
+特に昔からおまじないとして書いていたことを、「なんであの書き方していたんだっけ」というのを調べてまとめました。
+古いものを調べたのは、今あるチューニング方法とその当時の解決方法を比較したかったからです。</p>
+<h2>再レンダリングとはなにか</h2>
+<p>公式に説明があったのでそのまま引用します。（https://ja.reactjs.org/docs/optimizing-performance.html#avoid-reconciliation）</p>
+<blockquote>
+<p>React では、コンポーネントの props や state が変更された場合、React は新しく返された要素と以前にレンダーされたものとを比較することで、実際の DOM の更新が必要かを判断します。それらが等しくない場合、React は DOM を更新します。</p>
+</blockquote>
+<p>この更新によるパフォーマンスの劣化が再レンダリングの問題としてよく扱われています。</p>
+<p>ここで要素を更新するだけならばレンダリングのコストは重くないように思うかもしれませんが、実際は <strong>あるコンポーネントが再レンダリングされると、その子コンポーネントもレンダリングされ</strong>、また再レンダリングが短期間に多数連続して起きる可能性もあり、コストが小さいとは限りません。
+さらに JavaScript はシングルスレッドで動作するのでここで重たい処理が挟まると UI の描画がもっさりしてきます。</p>
+<p>そのため再レンダリング問題は積み重なりによって<strong>だんだんパフォーマンスを機能不備レベルに蝕んでいく</strong>こともあり、放置できない問題です。</p>
+<h2>なにをするとパフォーマンスが向上するのか</h2>
+<p>そこでパフォーマンスチューニングをしていくのですが方針は 2 つです。</p>
+<ul>
+<li>再レンダリングの回数を減らす</li>
+<li>再レンダリング時の計算コストを減らす</li>
+</ul>
+<p>この方針に基づいて僕たちはどのようにパフォーマンスチューニングをしてきたかを復習しました。</p>
+<h2>Class Component に対するチューニング</h2>
+<p>まずは懐かしの Class Component、React ~v16.7 時代を思い出しましょう。</p>
+<h3>不要な再レンダリングをスキップする</h3>
+<p>Class Component は</p>
+<pre><code class="language-jsx">export Hoge extends React.Component{
+  render(){
+    // no op
+  }
+}
+</code></pre>
+<p>として、<code>Component</code> を <code>extends</code> したクラスの中で render を実装することで使えます。</p>
+<p>この <code>Component</code> に　再レンダリングをスキップできる機能が備わっています。</p>
+<h4>PureComponent を使う</h4>
+<p>再レンダリングを抑制するとき、<a href="https://ja.reactjs.org/docs/react-api.html#reactpurecomponent">PureComponent</a> は有力です。
+これは 新旧の <code>props</code> と <code>state</code> を比較し、異なってるときにレンダリングするコンポーネントです。
+つまり<strong>コンポーネントの state と props に変更がなければレンダリングをし直さない</strong>コンポーネントであり、これを使えば再レンダリングを防ぐことができます。
+ちなみにこのときの比較は shallow な比較(= 参照の比較)です。
+そのため React を書く時に口酸っぱく言われる「immutable に！state を直接書き換えるな、新しいオブジェクトで置き換えろ」はここにも効いてきます。</p>
+<h4>shouldComponentUpdate を利用する</h4>
+<p><code>PureComponent</code> は有力ですが、全てをそれで置き換えても必ずしもパフォーマンスが上がるとは限りません。
+なぜなら、再レンダリングのコストは下がるものの、新たに <code>props</code>/<code>state</code> の新旧比較のコストがかかるからです。</p>
+<p>そこで <a href="https://ja.reactjs.org/docs/react-component.html#shouldcomponentupdate">shouldComponentUpdate</a> を使ってこの新旧比較ロジックをオーバーライドして計算コストを節約します。</p>
+<pre><code class="language-jsx">export Hoge extends React.Component{
+  shouldComponentUpdate(nextProps, nextState){
+    // 再レンダリングさせたいときの条件でtrueを返す
+  }
+  render(){
+    // no op
+  }
+}
+</code></pre>
+<p>この <code>shouldComponentUpdate</code> の中に好きな比較条件を入れることができます。
+もし <code>state</code>/<code>props</code>の全体比較より簡単に済む比較方法があればそれを使うことで計算コストを節約できます。</p>
+<h4>PureComponent VS shouldComponentUpdate</h4>
+<p><code>PureComponent</code> と <code>shouldComponentUpdate</code> はどちらを使えばいいのでしょうか。
+<code>PureComponent</code> はいわば React 公式が実装した <code>shouldComponentUpdate</code> と言えます。</p>
+<p>イメージ的には、</p>
+<pre><code class="language-tsx">class PureComponent extends React.Component {
+    shouldComponentUpdate(nextProps, nextState) {
+        return !(shallowEqual(this.props, nextProps) &amp;&amp; shallowEqual(this.state, nextState));
+    }
+    …
+}
+</code></pre>
+<p>です。</p>
+<p>FYI: https://qiita.com/wifecooky/items/23fd1da041f707c1b78b#2-purecomponent%E3%81%A8%E3%81%AF</p>
+<p>そのため shouldComponentUpdate の方が自由度は高いですが、公式は</p>
+<blockquote>
+<p>このメソッドはパフォーマンスの最適化としてのみ存在します。バグを引き起こす可能性があるので、レンダーを「抑止する」ためにそれを使用しないでください。shouldComponentUpdate() を書く代わりに、組み込みの PureComponent を使用することを検討してください。PureComponent は props と state を浅く比較し、必要なアップデートをスキップする可能性を減らします。</p>
+</blockquote>
+<p>と言っており、危険度も高いです。
+つまり比較関数のミスによって <strong>再レンダリングしてほしいけどされない</strong>といったバグも起きうるというわけです。</p>
+<p>一方で 全部 <code>PureComponent</code> にしたらいいかというとそれも違って、組み込まれた<code>shouldComponentUpdate</code>が比較するオブジェクトが大きすぎるとそこがボトルネックになったりします。(<code>shouldComponentUpdate</code> を自分で実装しているとここは自分の好きな範囲だけで比較できるのでチューニングしやすい)。とはいえそもそも <code>shouldComponentUpdate</code> を自分で実装したとしてもそのコストが再レンダリングのコストより安いかどうかは計測しないとわからないので、どれを使うかはその時次第としか言えません。</p>
+<p>ただ通説としては、</p>
+<ul>
+<li><code>props</code>と <code>state</code>が常に変化していれば、<code>PureComponent</code>を使わず、<code>Component</code>を使うべし。（理由：shouldComponentUpdate 内の shallowEqual も時間かかる）</li>
+<li><code>props</code> と <code>state</code>があまり変わらなければ、<code>PureComponent</code>を使うべし。</li>
+<li><code>props</code>と <code>state</code>が変わらなければ、どちらでも OK.</li>
+</ul>
+<p>と言われているので、そのように従うと良いでしょう。</p>
+<p>FYI: https://qiita.com/wifecooky/items/23fd1da041f707c1b78b#2-purecomponent%E3%81%A8%E3%81%AF</p>
+<h3>アロー関数を props に即時関数で渡さない</h3>
+<p>ハンドラ登録やバケツリレーで</p>
+<pre><code class="language-tsx">return &lt;Hoge handleClick={() =&gt; this.handleClick()}&gt;&lt;/Hoge&gt;
+</code></pre>
+<p>のようにインラインでアロー関数を渡せますが、アロー関数を <code>props</code> に渡すと再レンダリングの火種になります。</p>
+<p>アロー関数を渡された側からすれば、親の <code>render</code> が呼ばれるたびに別オブジェクトして関数オブジェクトが伝わってくるからです。
+またこれは <code>PureComponent</code> を使っていても、その再レンダリング判定の実装は shallow な比較であり、別オブジェクトになると参照が変わるので再レンダリング対象と判断されてしまいます。</p>
+<h4>this.bind を使う</h4>
+<p>これを防ぐ方法は</p>
+<ul>
+<li>インラインで関数を渡さない。クラスフィールドにハンドラを作る</li>
+<li>bind する</li>
+</ul>
+<p>です。</p>
+<p>つまり、</p>
+<pre><code class="language-tsx">export class _ClassComponent extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      count: 0,
+    }
+    this.handleClick = this.hoge.bind(this)
+  }
+
+  handleClick() {
+    this.setState({ ...this.state, count: this.state.count + 1 })
+  }
+
+  render() {
+    return (
+      &lt;div&gt;
+        now is {this.state.count}
+        &lt;button onClick={this.handleClick}&gt;increment&lt;/button&gt;
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p>といった風に、<code>handleClick</code> をアロー関数で渡さずクラスフィールドに用意して、それを <code>bind</code> しましょう。</p>
+<p>React と <code>bind</code> については公式の FAQ にもまとめられています。</p>
+<p>FYI: https://ja.reactjs.org/docs/faq-functions.html</p>
+<h4>class-fields を使う</h4>
+<p>また <code>bind</code> は class-field を使えば不要です。</p>
+<pre><code class="language-tsx">class Foo extends Component {
+  handleClick = () =&gt; {}
+  render() {
+    return &lt;button onClick={this.handleClick}&gt;Click Me&lt;/button&gt;
+  }
+}
+</code></pre>
+<p>とすることができます。</p>
+<p>class-field は まだ experimental な機能なので、ビルド環境によっては Babel や tsc の追加設定は必要になるかもしれません。</p>
+<p>FYI: https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Classes</p>
+<h4>それでもやっぱり render 内でアロー使いたい</h4>
+<p>実際このように <code>bind</code> を使うのはめんどくさいところがあります。
+また環境によっては class-field も使えません。</p>
+<p>一応のところ公式は、</p>
+<blockquote>
+<p>レンダー内でアロー関数を使用しても良いのか？ 一般的には問題ありません。コールバック関数にパラメータを渡すのに最も簡単な方法です。しかしパフォーマンス上の問題が出た際には、ぜひ最適化しましょう！</p>
+</blockquote>
+<p>と言っているので、そこは気にせずに arrow を使っていいかもしれません。
+僕もよく使っています。</p>
+<p>ただ再レンダリングを抑える必要が出てきた時に、<code>PureComponent</code> を使ってもレンダリングが走っている場合はこれが犯人の可能性もあるので常に意識はしておきましょう。</p>
+<h2>Stateless Functioal Component に対するチューニング</h2>
+<p>Stateless Functioal Component(SFC) を使えるところは SFC で置き換えることもパフォーマンスチューニングです。
+なぜなら SFC はクラスコンポーネントと違ってライフサイクルがない分だけ早いからです。
+ベンチマークからも早いことが分かります。</p>
+<p>FYI: https://medium.com/missive-app/45-faster-react-functional-components-now-3509a668e69f</p>
+<p>ただ、このベンチマークは SFC をただ単純なデータで描画するだけに使っている場合なので一概に SFC の方が優れているとは言えないかもしれません。
+なぜなら <strong>SFC 単体では shouldComponentUpdate が使えないため再レンダリングは抑制できない</strong>ためです。
+この SFC を親からもらった props を元に描画、それが大量にある場合にアプリケーション全体で計測したら話が変わってくるかもしれません。</p>
+<p>そういうことを書くなら「いろんなパターンで計測してからブログ書け」と言われそうですが、今は根本から事情が変わってるので今日はやりません。
+もしなにかベンチマークの結果など知っている人がいたら教えていただけたらと思います。</p>
+<p>これは Hooks の登場でそもそも SFC(厳密には FC、理由は後述)のみを使うようになってきているので、もしかしたら今は考えなくていい問題かもしれません。</p>
+<h2>Redux に対するチューニング</h2>
+<p>Class Component 時代は 外部 <code>store</code> としては Redux を使っていました。
+そのときのチューニングテクニックを復習します。</p>
+<h3>なぜ Redux のチューニングが必要なのか</h3>
+<p>Redux は中央集権的な状態管理をします。
+その結果 <code>store</code> が膨れすぎていき、そこへの読み書きがボトルネックになったり、関心外の <code>store</code> の更新に巻き込まれた再レンダリングなどの問題が起き、Redux の使い方にもチューニングが必要になりました。</p>
+<h3>mapStateToProps を作る</h3>
+<p><code>store</code> は全アプリケーションの状態を持ちます。
+これをそのままコンポーネントに <code>connect</code> して購読すると、そのコンポーネントで必要な情報以外の更新でもそのコンポーネントで再レンダリングが起きます。
+これを解決するものが <code>mapStateToProps</code>です。
+これは state のうち自分が欲しいものだけを切り出せるもので、<code>connect</code> の第一引数です。</p>
+<pre><code class="language-tsx:title=container.tsx">const mapStateToProps = (state: any) =&gt; ({
+  cnt: state.cnt,
+})
+
+export const ClassComponent = connect(mapStateToProps, null)(_ClassComponent)
+</code></pre>
+<pre><code class="language-tsx:title=reducer.ts">const initialState = {
+  cnt: 0,
+  dummy: 100,
+}
+</code></pre>
+<p>このとき dummy の値を書き換えても <code>mapStateToProps</code> で読み込むフィールドを指定しているので再レンダリングは起きません。
+ここで <code>state.cnt</code> ではなく <code>state</code>をそのまま返していると再レンダリングは起きます。</p>
+<h3>selector のメモ化</h3>
+<p>さて、この <code>mapStateToProps</code> は単に監視対象を切り出すだけならいいのですが、なんらかの計算をするとなるとボトルネックになるかもしれません。
+たとえば、isDone が true な todos だけを visibleTodos として切り出すような場合です。
+なぜなら <strong>state の変更に応じて毎回 mapStateToProps が呼び出され、この計算が何度も走るから</strong>です。
+そこでメモ化をしてこの計算コストを節約します。
+それを可能にするものが <a href="https://github.com/reduxjs/reselect">reselect</a> です。</p>
+<p>公式の例にならうと、</p>
+<p><code>createSelector</code>でメモ化するセレクタを作り、</p>
+<pre><code class="language-ts">import { createSelector } from &quot;reselect&quot;
+
+const getVisibilityFilter = state =&gt; state.visibilityFilter
+const getTodos = state =&gt; state.todos
+
+export const getVisibleTodos = createSelector(
+  [getVisibilityFilter, getTodos],
+  (visibilityFilter, todos) =&gt; {
+    switch (visibilityFilter) {
+      case &quot;SHOW_ALL&quot;:
+        return todos
+      case &quot;SHOW_COMPLETED&quot;:
+        return todos.filter(t =&gt; t.completed)
+      case &quot;SHOW_ACTIVE&quot;:
+        return todos.filter(t =&gt; !t.completed)
+    }
+  }
+)
+</code></pre>
+<p><code>mapStateToProps</code> の中で呼び出します。</p>
+<pre><code class="language-tsx">import { connect } from &quot;react-redux&quot;
+import { toggleTodo } from &quot;../actions&quot;
+import TodoList from &quot;../components/TodoList&quot;
+import { getVisibleTodos } from &quot;../selectors&quot;
+
+const mapStateToProps = state =&gt; {
+  return {
+    todos: getVisibleTodos(state),
+  }
+}
+
+const mapDispatchToProps = dispatch =&gt; {
+  return {
+    onTodoClick: id =&gt; {
+      dispatch(toggleTodo(id))
+    },
+  }
+}
+
+const VisibleTodoList = connect(mapStateToProps, mapDispatchToProps)(TodoList)
+
+export default VisibleTodoList
+</code></pre>
+<p>これだけで使えるので、<code>mapStateToProps</code> で何か計算をしている場合は入れると良いでしょう。</p>
+<h3>アクションの発行をしすぎない</h3>
+<p>たとえば <code>redux</code> に form の要素を紐づけるのはやめましょう。
+<code>action</code> の発行のたびに <code>store</code> が書き換わるので、短時間に大量の <code>action</code> を発行するとその分再レンダリングが大量に発生します。
+よくあるのは <code>onChange</code> などを <code>store</code> に紐づけて ユーザー入力を流し込むとパフォーマンスが劣化するというものです。
+こういうのは ephemeral state に紐付けましょう。
+その問題を指摘した Formik やその根拠になった作者のコメントにも書かれています。</p>
+<blockquote>
+<p>Use React for ephemeral state that doesn't matter to the app globally and doesn't mutate in complex ways. For example, a toggle in some UI element, a form input state. Use Redux for state that matters globally or is mutated in complex ways. For example, cached users, or a post draft.</p>
+</blockquote>
+<p>FYI: https://github.com/reduxjs/redux/issues/1287</p>
+<p>また <code>redux</code> の <code>action</code> は <code>setState</code> や <code>useState</code> と違ってデフォルトではバッチ処理されないため 何も考えていないと大量の action を発行していたみたいなこともあるので注意しましょう。</p>
+<p>(バッチ処理についてはこちらを参照: https://ja.reactjs.org/docs/faq-state.html#when-is-setstate-asynchronous)</p>
+<h3>比較関数のチューニング</h3>
+<p>connect の options には <code>areStatesEqual</code>, <code>areOwnPropsEqual</code>, <code>areStatePropsEqual</code>, <code>areMergedPropsEqual</code> があります。</p>
+<p>FYI: https://react-redux.js.org/api/connect#options-object</p>
+<p>これは redux の store の更新判定に使われる関数で、いわば <code>shouldComponentUpdate</code> に近いものとも言えます。</p>
+<p>ただ公式では、</p>
+<blockquote>
+<p>While the defaults are probably appropriate 99% of the time, you may wish to override them with custom implementations for performance or other reasons.</p>
+</blockquote>
+<p>とあり、99%が使わなくても正しく動くとされているので、オーバーライドする必要はあまりないと思っています。
+末端コンポーネントに直接 <code>connect</code> してそれを再レンダリング抑制したい場合などは使いたいかもしれません。
+(自分は Container Component からデータ流し込むのでこのやり方はしたことがないです。)</p>
+<p>ちなみにこれらの扱いを間違える（例えば boolean を返さない）などをすると、<code>mapStateToProps</code> で切り出したコンポーネントも切り出し外の <code>props</code> 変更によって再レンダリングが走るなんてこともあるので扱いには注意しましょう。</p>
+<h2>Function Component に対するチューニング</h2>
+<p>やっときました、Hooks の話です。
+多分これはほぼほぼ現役な情報でいろんな人がまとめているのでそれをみた方が良いと思うので、さらっとだけ書いていきます。</p>
+<p>またここからは、いわゆるライフサイクルや state を持てる SFC(<code>useState</code>, <code>useEffect</code>を呼べるという意味) をこれまでの Stateless Functional Component と対比するため、 Function Component と呼びます。</p>
+<p>（呼び方混同するから Function Component と呼ぼうみたいな内容のツイートかブログがあった気がします。）</p>
+<h3>React.memo</h3>
+<p><a href="https://ja.reactjs.org/docs/react-api.html#reactmemo">memo</a>はいわば関数コンポーネントでも使える <code>shouldComponentUpdate</code> です。
+<code>memo</code> のおかげで <code>PureComponent</code> か <code>shouldComponentUpdate</code> か <code>Function Component</code> かと考える必要はほぼ無くなりました。</p>
+<p><code>memo</code> は</p>
+<pre><code class="language-jsx">const Button = React.memo(props =&gt; {
+  return &lt;div&gt;{props.value}&lt;/div&gt;
+})
+</code></pre>
+<p>のようにして書けます。
+<code>PureComponent</code> と同じく、新旧 <code>props</code> で浅い比較が行われます。
+また第二引数に比較関数をとることができ、<code>shouldComponentUpdate</code> 同等のこともできます。</p>
+<pre><code class="language-jsx">const Button = React.memo(
+  props =&gt; {
+    return &lt;div&gt;{props.value}&lt;/div&gt;
+  },
+  (nextProps, prevProps) =&gt; {
+    return nextProps.value === prevProps.value
+  }
+)
+</code></pre>
+<h4>memo と shouldComponentUpdate を比較した注意点</h4>
+<p>まず <code>memo</code> の比較関数 には <code>state</code> が現れません。渡されるのは新旧の <code>props</code> です。
+そのため <code>this.props</code> や <code>this.state</code> を使った比較は必要ありません。</p>
+<p>また、<code>shouldComponentUpdate</code> は再レンダリングさせたい時に true を返していましたが、<code>memo</code> では メモ化したものをそのまま返す時に true を返します。
+つまり <code>memo</code> で再レンダリングさせたい場合は false を返します。
+ここは逆になっているので注意しましょう。</p>
+<h3>useMemo</h3>
+<p><a href="https://ja.reactjs.org/docs/hooks-reference.html#usememo">useMemo</a> は変数のメモ化をする hooks です。
+その変数を作るコストが高い時に有効です。
+つまり<code>useMemo</code>は <strong>再レンダリングのコストを節約する</strong>のに役立ちます。</p>
+<pre><code class="language-ts">const memoizedValue = useMemo(() =&gt; computeExpensiveValue(a, b), [a, b])
+</code></pre>
+<p>とすればよく、作成用の関数とそれが依存する値の配列を渡すと作れます。</p>
+<h3>useCallback</h3>
+<p><a href="https://ja.reactjs.org/docs/hooks-reference.html#usecallback">useCallback</a>はメモ化したコールバック関数です。</p>
+<pre><code class="language-tsx">const memoizedCallback = useCallback(() =&gt; {
+  doSomething(a, b)
+}, [a, b])
+</code></pre>
+<p>useCallback を利用しない場合、コールバック関数は Function Component の再レンダリングの度に新しい関数インスタンスを生成します。
+そのため生成コストがかかったり、渡された子の再レンダリング発火にもつながります。
+これは <code>this.bind</code> で同等の問題を回避できる Class Component に対して <code>FC</code> を使うデメリットにもなります。</p>
+<p>そのため <code>useMemo</code> に似たこの <code>useCallback</code> は Class Component で行っていた <code>this.bind</code> への回避策だと覚えておきましょう。</p>
+<p>FYI: https://qiita.com/seya/items/8291f53576097fc1c52a#usecallbackusememo-%E8%87%AA%E4%BD%93%E3%81%AE%E5%87%A6%E7%90%86%E3%82%B3%E3%82%B9%E3%83%88%E3%82%92%E8%80%83%E3%81%88%E3%82%8B</p>
+<h2>おわりに</h2>
+<p>久しぶりに Class Component 周りを調べて懐かしい気持ちになりました。
+個人的にはひたすら意味を理解せずにコピペで乗り切っていた時代の構文なので、いろいろ謎が解けて楽しかったです。</p>
+<p>パフォーマンスチューニングはあまり得意な分野ではないので誤りがあれば指摘していただいたり、また他にも覚えておいた方がいいテクニックがあれば教えてくれると嬉しいです！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

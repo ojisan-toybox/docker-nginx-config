@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ブログに CSS in JS 環境下での スタイル分離リファクタリングを施してみた</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="そろそろブログを大幅に改修しようと思っており、その前準備をしてリファクタリングをしていました。">
+    <meta property="og:title" content="ブログに CSS in JS 環境下での スタイル分離リファクタリングを施してみた">
+    <meta property="og:image" content="https://blog.ojisan.io//s-c-refactor/visual.png">
+    <meta property="og:description" content="そろそろブログを大幅に改修しようと思っており、その前準備をしてリファクタリングをしていました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ブログに CSS in JS 環境下での スタイル分離リファクタリングを施してみた">
+    <meta name="twitter:description" content="そろそろブログを大幅に改修しようと思っており、その前準備をしてリファクタリングをしていました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-06</time>
+      <h1>ブログに CSS in JS 環境下での スタイル分離リファクタリングを施してみた</h1>
+    </div>
+    <div class="post-contents"><p>そろそろブログを大幅に改修しようと思っており、その前準備をしてリファクタリングをしていました。
+具体的には css modules からの脱却と、スタイル周りのリファクタリングをしていました。</p>
+<p>そのとき、<a href="https://qiita.com/Takepepe/items/41e3e7a2f612d7eb094a">経年劣化に耐える ReactComponent の書き方</a> と <a href="https://blog.cybozu.io/entry/2020/06/25/105457">styled-components の採用と既存資産を捨てた理由</a> という記事を参考にしました。</p>
+<p>これらは styled を一つのコンポーネントに当ててその中で SASS 記法で中にスタイルを当てていくというもので、CSS in JS 環境下において、styled と DOM を分離するテクニックとして学びがあるものでした。</p>
+<p>僕は styled-compoennts ユーザーですが、<a href="https://blog.cybozu.io/entry/2020/06/25/105457">styled-components の採用と既存資産を捨てた理由</a>でも触れられているように、</p>
+<ul>
+<li>styled なラッパーコンポーネントとかがいっぱい作られていろいろつらそう</li>
+<li>JSX に styled なコンポーネントと React コンポーネントが混ざって視認性が悪くなりそう</li>
+</ul>
+<p>という懸念は持っていました。(そのため一時期僕は styled-jsx を好んで使っていました。)</p>
+<p>ただ、</p>
+<blockquote>
+<p>styled はコンポーネントを引数に取ってスタイルをあてる以外の使い方をしない</p>
+</blockquote>
+<p>といった使い方をすることで、この手の問題は回避できそうだったので実際に試しました。
+このやり方を実際に手を動かすことで見えたことや感じたことを共有がてら書き留めます。</p>
+<h2>やったこと</h2>
+<p>よくあるお作法で作られた Component に対して次の切り出し処理をしました。</p>
+<ul>
+<li>DOM だけを返す関数を切り出す</li>
+<li>DOM にスタイリングを施す処理を切り出す</li>
+<li>スタイリングされた DOM に振る舞いを付け加える関数を切り出す</li>
+</ul>
+<p>具体的な説明は上で紹介した <a href="https://qiita.com/Takepepe/items/41e3e7a2f612d7eb094a">経年劣化に耐える ReactComponent の書き方</a>を読んでください。</p>
+<p>早い話が、こういうコンポーネントを作りました。</p>
+<pre><code class="language-tsx">interface IContainerProps {
+  data: AllBlogsQuery
+}
+
+interface IProps extends IContainerProps {
+  className?: string
+}
+
+// DOM だけを返すコンポーネント
+const Component: React.FC&lt;IProps&gt; = ({ data, className }) =&gt; {
+  return (
+    &lt;div className={className}&gt;
+      &lt;Layout&gt;
+        &lt;SEO title={data.site?.siteMetadata?.title || &quot;HOME&quot;} /&gt;
+        &lt;div className=&quot;cards&quot;&gt;
+          {data.blogs.nodes.map(node =&gt;
+            node.frontmatter?.path ? (
+              &lt;Card
+                className=&quot;card&quot;
+                key={node.frontmatter.path}
+                excerpt={node.excerpt}
+                data={node.frontmatter}
+              &gt;&lt;/Card&gt;
+            ) : (
+              &lt;div&gt;invalid data&lt;/div&gt;
+            )
+          )}
+        &lt;/div&gt;
+      &lt;/Layout&gt;
+    &lt;/div&gt;
+  )
+}
+
+// コンポーネントにスタイルを埋め込むラッパーコンポーネント
+const StyledComponent = styled(Component)`
+  &amp; .cards {
+    margin: 24px auto;
+    padding: 5px;
+    width: 90%;
+    column-count: 3;
+    column-gap: 0;
+    max-width: 1024px;
+
+    &amp; .card {
+      margin: 16px;
+      margin-top: 0;
+      -webkit-column-break-inside: avoid;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      box-shadow: 8px 12px 10px -6px rgba(0, 0, 0, 0.3);
+      display: inline-block;
+    }
+  }
+`
+
+// スタイリングされたコンポーネントにデータや振る舞いを埋め込むコンポーネント
+// Gatsby環境下では graphql から得たdataをpropsから取得できるのでそれを
+// 下位のコンポーネントに伝える役割を担う
+const ContainerComponent: React.FC&lt;IProps&gt; = ({ children, data }) =&gt; {
+  return &lt;StyledComponent data={data}&gt;{children}&lt;/StyledComponent&gt;
+}
+
+export const pageQuery = graphql`
+  query AllBlogs {
+    blogs: allMarkdownRemark {
+      ...
+    }
+
+    site {
+      ...
+    }
+  }
+`
+
+export default ContainerComponent
+</code></pre>
+<h2>気付いたこと</h2>
+<p>で、実際に書いてみた感想や感じたメリット・デメリットが次の通りです。</p>
+<h3>行数が減ってみやすい</h3>
+<p>hooks を使うようになってから 関数の中にイベントハンドラ関数をたくさん定義するといったことをして長くなったりなどしていましたが、それらを全部 ConatinerComponent に押し込めることができ、DOM と振る舞いを分離することができて読みやすくなったと思います。</p>
+<pre><code class="language-jsx">const ContainerComponent: React.FC&lt;PassedProps&gt; = props =&gt; {
+  const [isOpen, setOpen] = React.useState(false)
+  const containerProps = { isOpen, setOpen }
+  return &lt;StyledComponent {...props} {...containerProps}&gt;&lt;/StyledComponent&gt;
+}
+</code></pre>
+<h3>HTML から CSS に埋め込むためだけの props が消える</h3>
+<p>これまでは <code>&lt;Wrapper isOpen={isOpen} /&gt;</code> のようなことをしていたわけですが、HTML だけに分離すると <code>&lt;div isOpen={isOpen} /&gt;</code> と書くことになります。しかし div に isOpen はないのでこのコードは動きません。</p>
+<p>そのため container 側でフラグを全部作って埋め込むという実装になります。</p>
+<pre><code class="language-jsx">const Component: React.FC&lt;Props&gt; = (props) =&gt; {
+  const { setShowState, showState, message } = props;
+  return (
+    &lt;div className={props.className}&gt;
+      {showState ? message : &quot;&quot;}
+      &lt;button
+        onClick={() =&gt; {
+          setShowState(!showState);
+        }}
+        className=&quot;button&quot;
+      &gt;
+        toggle state
+      &lt;/button&gt;
+      &lt;ButtonA&gt;&lt;/ButtonA&gt;
+      &lt;ButtonB className={&quot;passedClass&quot;}&gt;&lt;/ButtonB&gt;
+    &lt;/div&gt;
+  );
+};
+
+...
+
+const ContainerComponent: React.FC&lt;PassedProps&gt; = (props) =&gt; {
+  const [isOpen, setOpen] = React.useState(false);
+  const containerProps = { isOpen, setOpen };
+  return &lt;StyledComponent {...props} {...containerProps}&gt;&lt;/StyledComponent&gt;;
+};
+</code></pre>
+<p>その結果、StyledComponents 内で動的計算するときに渡していた props は DOM 側からではなく Container 側に移ります。これは DOM に登場する変数が減って DOM の見通しが良くなります。</p>
+<h3>謎命名から解放される</h3>
+<p>これまでの経験上、</p>
+<pre><code class="language-tsx">const Container = styled.div``
+const ContentWrapper = styled.div``
+const StyledText = styled.p``
+</code></pre>
+<p>といった命名をする人は僕以外にもそれなりにいることを知っているのですが、今の運用では</p>
+<pre><code class="language-tsx">const StyledComponent = styled(Component)``
+</code></pre>
+<p>しか登場しないので命名で悩んだり、「これ絶対意味ない名前だろ」みたいな心配から解放されます。</p>
+<h3>同じクラス名だと衝突するので注意</h3>
+<pre><code class="language-tsx">const Component = props =&gt; {
+  return (
+    &lt;div className={props.className}&gt;
+      &lt;p className=&quot;hoge&quot;&gt;&lt;/p&gt;
+    &lt;/div&gt;
+  )
+}
+
+export const Hoge = styled(Component)`
+  &amp; .hoge {
+    color: red;
+  }
+`
+</code></pre>
+<p>をビルドすると、div タグには hash が入りますが、p タグは hoge のままです。
+そのため 外部に .hoge に対するスタイルシートがあれば衝突します。</p>
+<p>また、同一コンポーネント内で同じ className のコンポーネントがある場合も衝突します。
+「なにを当たり前のことを」と思うかもしれませんが、コンポーネントを入れ子にしていると気づけないはずです。</p>
+<pre><code class="language-tsx">const Hoge = () =&gt; {
+  return &lt;div className=&quot;piyo&quot;&gt;&lt;/div&gt;
+}
+
+const Piyo = () =&gt; {
+  return &lt;div className=&quot;piyo&quot;&gt;&lt;/div&gt;
+}
+
+const Component = props =&gt; {
+  return (
+    &lt;div className={props.className}&gt;
+      &lt;p className=&quot;piyo&quot;&gt;&lt;/p&gt;
+      &lt;Hoge /&gt;
+      &lt;Piyo /&gt;
+    &lt;/div&gt;
+  )
+}
+
+export const Fuga = styled(Component)`
+  &amp; .piyo {
+    color: red;
+  }
+`
+</code></pre>
+<p>このとき <code>&amp; &gt; .piyo</code> とすれば解決できますが、クラスの衝突が起きるという問題の本質的な解決方法ではないので、どう扱うかは考えものです。
+きっとこのルールでスタイルを書くときは「あとから触る人がこの配下にコンポーネントを作ってそれと衝突しないか？」を意識して書く必要があると思います。</p>
+<p><strong>パーツごとにスタイルを作る運用であれば全部のクラスネームが異なるため、あるスタイルの変更がその子コンポーネントに影響を及ぼすことは考えなくてよかった</strong>のですが、この運用だと衝突問題があるので対応は少し悩んでます。
+解決策は色々思いつきますが、デファクトはコレみたいな話にはなってないので、ゆっくり考えておきたいです。
+ひとまずは 直下セレクタを使ってスタイルが外に漏れないように気をつけて書いていきます。</p>
+<h3>props が自然と分離できる</h3>
+<p>外から渡される props, 自パーツが作る props と自然に分けられます。
+そしてそれらに対して型をつけると、型の表現範囲(この言い方伝われ！)が増します。
+(昔 FlowType で Redux に型を付け回っていた人だったら懐かしい気持ちになるのではないでしょうか？)</p>
+<pre><code class="language-tsx">interface IPassedProps {
+  message: string
+}
+
+interface IContainerProps {
+  state: boolean
+  setState: (state: boolean) =&gt; void
+}
+
+interface IProps extends IPassedProps, IContainerProps {
+  className?: string
+}
+
+const Component = props =&gt; {
+  return (
+    &lt;div className={props.className}&gt;
+      {props.state &amp;&amp; props.message}
+      &lt;button
+        onClick={() =&gt; {
+          setState(!state)
+        }}
+      &gt;
+        toggle
+      &lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+
+const StyledComponent = styled(Component)``
+
+const ContainerComponent: React.FC&lt;IPassedProps&gt; = props =&gt; {
+  const [state, setState] = useState(null)
+  return (
+    &lt;StyledComponent
+      state={state}
+      setState={setState}
+      {...props}
+    &gt;&lt;/StyledComponent&gt;
+  )
+}
+</code></pre>
+<p>ここでミソなのは</p>
+<pre><code class="language-tsx">interface IProps extends IPassedProps, IContainerProps {
+  className?: string
+}
+</code></pre>
+<p>です。</p>
+<p>この className は styled-components が作る className なのでユーザーが渡す訳でも container コンポーネントが作るものでもありません。
+ユーザーが自分で埋められるものではないので ? を付けています。</p>
+<p>反対にこのコンポーネントを呼び出し側から上書きさせるなら、</p>
+<pre><code class="language-tsx">interface IPassedProps {
+  message: string
+  className?: string
+}
+
+interface IContainerProps {
+  state: boolean
+  setState: (state: boolean) =&gt; void
+}
+
+interface IProps extends IPassedProps, IContainerProps {}
+</code></pre>
+<p>と、IPassedProps に移動します。
+こうすることで上書き可能であることがコンポーネント呼び出し側から分かります。</p>
+<p>ちなみに上書くときは ContainerComponent で親から className を受け取って 伝搬させる必要があるので、ContainerComponent で className をバケツリレーするのを忘れないようにしましょう。</p>
+<p>それに関してはこのように spread 演算子で props を全部渡すようにすると良いです。</p>
+<pre><code class="language-tsx">const ContainerComponent: React.FC&lt;PassedProps&gt; = props =&gt; {
+  return &lt;StyledComponent {...props}&gt;&lt;/StyledComponent&gt;
+}
+</code></pre>
+<h3>拡張しようとすると mui の API ぽくなる</h3>
+<p>これはただの感想なのですが、なんか material-ui でみた API を作っている感じがしました。
+<a href="https://material-ui.com/api/alert/#css">component api</a> を withStyles などで渡すやり方とほとんど同じでした。</p>
+<pre><code class="language-jsx">const StyledButton = withStyles({
+  root: {
+    background: &quot;linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)&quot;,
+    borderRadius: 3,
+    border: 0,
+    color: &quot;white&quot;,
+    height: 48,
+    padding: &quot;0 30px&quot;,
+    boxShadow: &quot;0 3px 5px 2px rgba(255, 105, 135, .3)&quot;,
+  },
+  label: {
+    textTransform: &quot;capitalize&quot;,
+  },
+})(Button)
+</code></pre>
+<p>特に何か嬉しくなる情報ではないのですが、別のレイヤーからスタイルを渡すテクニックとしてここにつながって自分の中では「うおー」ってなりました。</p>
+<h2>おわりに</h2>
+<p>最初このやり方を見たとき、なにか大袈裟な感じがしたし、公式の例として紹介されているものでもなかったので心配だったのですが、いざやってみると行数が減るわ、見通しが良くなるわでいいことづくしだったので、このやり方いいなって思いました。</p>
+<h2>サンプルコード</h2>
+<p>https://github.com/ojisan-toybox/separable-s-c</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

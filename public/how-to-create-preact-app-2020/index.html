@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Preactの環境構築 of 2020</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="所用で先週preactを初めて触っていたのですが、環境構築をしているときに「この情報ドキュメントにないよね？」「情報が間違ってそう？」っていうのを節々で感じた部分があって難航したので、これから環境構築する人がググった時の助けになるようメモを残しておきます。">
+    <meta property="og:title" content="Preactの環境構築 of 2020">
+    <meta property="og:image" content="https://blog.ojisan.io//how-to-create-preact-app-2020/visual.png">
+    <meta property="og:description" content="所用で先週preactを初めて触っていたのですが、環境構築をしているときに「この情報ドキュメントにないよね？」「情報が間違ってそう？」っていうのを節々で感じた部分があって難航したので、これから環境構築する人がググった時の助けになるようメモを残しておきます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Preactの環境構築 of 2020">
+    <meta name="twitter:description" content="所用で先週preactを初めて触っていたのですが、環境構築をしているときに「この情報ドキュメントにないよね？」「情報が間違ってそう？」っていうのを節々で感じた部分があって難航したので、これから環境構築する人がググった時の助けになるようメモを残しておきます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-24 09:00</time>
+      <h1>Preactの環境構築 of 2020</h1>
+    </div>
+    <div class="post-contents"><p>所用で先週<a href="https://preactjs.com/">preact</a>を初めて触っていたのですが、環境構築をしているときに「この情報ドキュメントにないよね？」「情報が間違ってそう？」っていうのを節々で感じた部分があって難航したので、これから環境構築する人がググった時の助けになるようメモを残しておきます。
+とはいえ自分が preact 初心者で自分が間違っている可能性も大いにあるので、そういうのがありましたら指摘していただけると助かります。</p>
+<p>React をある程度書いたことある人が preact に挑戦することを想定して書いています。
+主に「React でやるときのあれは preact でどうするんだっけ」という情報です。</p>
+<h2>目指すゴール</h2>
+<p>環境構築のゴールが何かというと一つには Hello World があるとは思いますが、それよりかはもっと踏み込んでアプリケーションとして欲しくなる機能をとりあえず全部実装していこうと思います。
+それが何かというのは独断と偏見で言うと、</p>
+<ul>
+<li>Build できて Hello World が表示される</li>
+<li>ルーティングがある</li>
+<li>状態管理がある</li>
+<li>スタイリングできる</li>
+</ul>
+<p>を一旦のゴールにおこうと思います。
+ということで詳細ページ付き TODO リストを作ってみようと思います。</p>
+<p>またいま preact を始めるならということで、</p>
+<ul>
+<li>Preact X</li>
+<li>TypeScript</li>
+</ul>
+<p>の利用を想定しています。</p>
+<h2>まずは Hello World</h2>
+<p>TypeScript を使って Hello World するところまでまず作ります。
+この例が公式にあって欲しい・・・</p>
+<h3>いつものおまじない</h3>
+<p>webpack でのビルド環境を作ります。</p>
+<p>React + TS で Hello World するとき、</p>
+<p><code>npm i -D typescript webpack webpack-cli ts-loader html-webpack-plugin webpack-dev-server</code> みたいなことをすると思うのですが preact でも全く同じ構成を使えます。</p>
+<p>webpack.config.js もいつも通りの感じで書きます。</p>
+<pre><code class="language-js:title=twebpack.config.js">const HtmlWebpackPlugin = require(&quot;html-webpack-plugin&quot;)
+const path = require(&quot;path&quot;)
+
+module.exports = {
+  mode: process.env.NODE_ENV,
+  entry: &quot;./src/index.tsx&quot;,
+  output: {
+    path: path.resolve(__dirname, &quot;./dist&quot;),
+    filename: &quot;build.js&quot;,
+  },
+  module: {
+    rules: [
+      {
+        test: /\.(js|ts|tsx)$/,
+        use: [
+          {
+            loader: &quot;ts-loader&quot;,
+          },
+        ],
+        exclude: /node_modules/,
+      },
+    ],
+  },
+  resolve: {
+    extensions: [&quot;.js&quot;, &quot;.ts&quot;, &quot;.tsx&quot;, &quot;.css&quot;, &quot;.gif&quot;, &quot;.json&quot;, &quot;.png&quot;, &quot;.mp4&quot;],
+  },
+  plugins: [new HtmlWebpackPlugin({ template: &quot;./src/index.html&quot; })],
+  devServer: {
+    historyApiFallback: true,
+  },
+}
+</code></pre>
+<p>そして次に TypeScript の設定をします。</p>
+<pre><code class="language-sh">$ npx tsc --init
+</code></pre>
+<p>そしてこのまま、適当な preact のサンプルコードを走らせてみましょう。</p>
+<pre><code class="language-tsx:title=src/index.tsx">import { h, render } from &quot;preact&quot;
+
+const Main = () =&gt; {
+  return &lt;div&gt;hello world!&lt;/div&gt;
+}
+
+render(&lt;Main&gt;&lt;/Main&gt;, document.body)
+</code></pre>
+<p>これはビルドに失敗します。</p>
+<h3>preact の h 関数をビルドする</h3>
+<p>先ほどのビルドエラーは</p>
+<pre><code class="language-sh">TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+</code></pre>
+<p>とでるはずなので、jsx オプションに react をつけて実行します。
+すると、</p>
+<pre><code class="language-sh">TS2686: 'React' refers to a UMD global, but the current file is a module.
+Consider adding an import instead.
+</code></pre>
+<p>というエラーがでます。</p>
+<p>これはつまり、</p>
+<pre><code class="language-sh">import React from 'react'
+</code></pre>
+<p>を書いておく必要があります。
+React コンポーネントで使いもしないのに書く必要があるおまじないのあれです。</p>
+<p>これは <a href="https://ja.reactjs.org/docs/jsx-in-depth.html#react-must-be-in-scope">公式 Doc の React がスコープ内にあること</a> にある通り、</p>
+<blockquote>
+<p>JSX は React.createElement の呼び出しへとコンパイルされるため、React ライブラリは常に JSX コードのスコープ内にある必要があります。</p>
+</blockquote>
+<p>という制限があるためです。</p>
+<p>でもいまは preact 環境です。
+これを解決する方法を考えないといけません。</p>
+<p>そこで preact の h 関数を使います。
+h 関数は React でいう createElement 相当の関数です。</p>
+<p>preact の世界では h 関数を import しておけばビルドが通るようになります。
+ただしそれをチェックしてくれている TypeScript コンパイラはそれを知らないので、この h 関数の存在を知らせる必要があります。
+とはいえ createElement 相当のもの が何かをコンパイラに教えればいいだけなので、jsx の Factory 関数が h であることをオプションで指定します。</p>
+<p>それが jsxFactory です。</p>
+<blockquote>
+<p>Specify the JSX factory function to use when targeting react JSX emit, e.g. 'React.createElement' or 'h'. Requires TypeScript version 2.1 or later.</p>
+</blockquote>
+<p>ここに h を指定します。</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;jsxFactory&quot;: &quot;h&quot;,
+    &quot;jsx&quot; : &quot;react&quot;
+    ...
+}
+</code></pre>
+<p>なので tsconfig はこうなります。</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;jsxFactory&quot;: &quot;h&quot;,
+    &quot;target&quot;: &quot;es5&quot;,
+    &quot;module&quot;: &quot;commonjs&quot;,
+    &quot;jsx&quot;: &quot;react&quot;,
+    &quot;strict&quot;: true,
+    &quot;esModuleInterop&quot;: true,
+    &quot;skipLibCheck&quot;: true,
+    &quot;forceConsistentCasingInFileNames&quot;: true
+  }
+}
+</code></pre>
+<p>もちろん、target や module などのオプションは好きに変えても良いです。</p>
+<p>（せっかく preact という省エネ環境でやるので module は ESNext にした方が良いと思った方もいらっしゃるとは思いますが、Hello World するだけなのでいまは <code>npx tsc --init</code> の設定をそのまま使いまわしています。）</p>
+<p>これでビルドできるようになったので、アプリケーションを開発していきます。</p>
+<h2>ルーティング</h2>
+<p>ルーターには <a href="https://github.com/preactjs/preact-router">preact-router</a> が使えます。</p>
+<p>公式にある通り、</p>
+<pre><code class="language-jsx">import Router from &quot;preact-router&quot;
+import { h, render } from &quot;preact&quot;
+/** @jsx h */
+
+const Main = () =&gt; (
+  &lt;Router&gt;
+    &lt;Home path=&quot;/&quot; /&gt;
+    &lt;About path=&quot;/about&quot; /&gt;
+    // Advanced is an optional query
+    &lt;Search path=&quot;/search/:query/:advanced?&quot; /&gt;
+  &lt;/Router&gt;
+)
+
+render(&lt;Main /&gt;, document.body)
+</code></pre>
+<p>として使え、よく見る Router という感じがします。
+ただし、この書き方だと path は型定義が合いません。</p>
+<pre><code class="language-sh">type '{ path: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'path' does not exist on type 'IntrinsicAttributes'.ts(2322)
+</code></pre>
+<p>そこで、ドキュメントにはない API なのですが</p>
+<pre><code class="language-jsx">&lt;Router&gt;
+  &lt;Route path=&quot;/&quot; component={Home}&gt;&lt;/Route&gt;
+  &lt;Route path=&quot;/:id&quot; component={Detail}&gt;&lt;/Route&gt;
+&lt;/Router&gt;
+</code></pre>
+<p>と書くと path の型定義を通せます。</p>
+<p>一応ドキュメントには</p>
+<blockquote>
+<p>Note: This is not a preact-compatible version of React Router. preact-router is a simple URL wiring and does no orchestration for you. If you're looking for more complex solutions like nested routes and view composition, react-router works great with preact as long as you alias in preact/compat.</p>
+</blockquote>
+<p>とあるので、そもそも preact-router を使わずに react-router を使えば解決できる問題だったのかもしれません。ただ個人的には preact-router でも問題なさそうなのでこれを使います。</p>
+<p>(nested routes が必要になるのは大規模なアプリケーションだしそんな大規模なものだったら(どうせ肥大化するので)react でよくないかと思うし、そもそも nested route も nest したルーティングを平でトップレベルに持てば作れるので react-router を採用する理由ってあまりないような気がします。もちろんサイドバーの内側やタブの中だけルーティングしたいといったケースは対応できませんが、それも query parameter とかで乗り切れるはずです。)</p>
+<h2>状態管理</h2>
+<p>Preact では hooks が使えます！
+つまり useReducer と useContext があります。
+なので global state の管理も容易です。
+一応 <a href="https://github.com/developit/preact-redux">preact-redux</a> というのはありますが、バンドルサイズ増やしたくないので採用を見送りました。
+middleware のような物が欲しくなるとこちらを検討してもいいかもしれません。</p>
+<h3>preact での hooks の使い方</h3>
+<p>preact/compat もしくは preact/hooks に含まれています。</p>
+<pre><code class="language-jsx">import { useReducer } from &quot;preact/compat&quot;
+</code></pre>
+<h3>preact/compat ってなに？</h3>
+<blockquote>
+<p>preact/compat is our compatibility layer that translates React code to Preact. For existing React users this can be an easy way to try out Preact without changing any of your code, by setting up a few aliases in your bundler configuration.</p>
+</blockquote>
+<p>React にある機能を preact で使うための変換機能です。
+もともとは <a href="https://github.com/preactjs/preact-compat">preact-compat</a> という別のライブラリでしたが本体に含まれることとなりました。</p>
+<blockquote>
+<p>It provides the same exports as react and react-dom, meaning you can use your build tool of choice to drop it in where React is being depended on.</p>
+</blockquote>
+<p>とあり、preact/compat があれば React に依存する 3rd party ライブラリを入れることも可能になってきます。
+さきほどの react-router の例がそれです。</p>
+<h3>パフォーマンスがネックになるのでは？</h3>
+<p>Context は <a href="https://ja.reactjs.org/docs/context.html#caveats">公式の注意事項</a>によると、</p>
+<blockquote>
+<p>コンテクストは参照の同一性を使用していつ再レンダーするかを決定するため、プロバイダの親が再レンダーするときにコンシューマで意図しないレンダーを引き起こす可能性があるいくつかの問題があります。</p>
+</blockquote>
+<p>とあり、再レンダリングによって性能劣化を引き起こす可能性があります。</p>
+<p>ただ実際のところ再レンダリングによってもっさりすることがあるのは複雑な画面を作らない限りは起きないはずなので、気にしなくてもいいかもしれません。</p>
+<p>この手の問題は Context を分割することで防いだり、もし実装してしまっていても memo などを使って再レンダリングのための計算そのものを防ぐことで解消できます。
+Context にまつわるトラブルは<a href="https://qiita.com/jonakp/items/58c9c383473d02479ea7">useContext + useState 利用時のパフォーマンスは Provider の使い方で決まる！かも。。。？</a>などにまとまっているのでご覧ください。</p>
+<p>あと memo を解決策についてはこちらの Issue をご覧ください。まとまっててとても助かりました。</p>
+<p>FYI: https://github.com/facebook/react/issues/15156</p>
+<h3>Dispatch の型定義がない</h3>
+<p>Context を使った状態管理の例としては<a href="https://mizchi.dev/202005271609-react-app-context">React Context を用いた簡易 Store</a>の実装が実感が湧くと思います。</p>
+<p>React の場合@types/react が提供している Dispatch という型で createContext のジェネリクスに渡して型をしばれます。
+<strong>しかし preact の場合、Dispatch という型が提供されていません。</strong>
+<strong>ここは React との差分となります。</strong>
+が、型推論させてみるとこれは useContext で渡す action 関数そのもの型が入ることがわかるので createContext 時にはその型を指定すれば問題ないです。</p>
+<pre><code class="language-ts">export const TodoDispatchContext = createContext&lt;{
+  dispatch: (action: ActionType) =&gt; void
+}&gt;({ dispatch: () =&gt; {} })
+</code></pre>
+<h3>実装例</h3>
+<p>reducer の定義</p>
+<pre><code class="language-ts:title=src/reducer/TodoReducer.ts">// action type
+
+import { TodoType } from &quot;../type&quot;
+
+const SELECT_TODO = &quot;SELECT_TODO&quot;
+const SAVE_TODO = &quot;SAVE_TODO&quot;
+
+const actionTypes = {
+  SELECT_TODO,
+  SAVE_TODO,
+} as const
+
+// action
+
+const selectTodo = (todo: TodoType) =&gt; ({
+  type: actionTypes.SELECT_TODO,
+  payload: todo,
+})
+const saveTodo = (todo: TodoType) =&gt; ({
+  type: actionTypes.SAVE_TODO,
+  payload: todo,
+})
+
+export const actions = {
+  selectTodo,
+  saveTodo,
+}
+
+export type ActionType =
+  | ReturnType&lt;typeof selectTodo&gt;
+  | ReturnType&lt;typeof saveTodo&gt;
+
+// store
+export type StoreType = {
+  selectedTodo: TodoType | null
+  todos: TodoType[]
+}
+
+export const initialState: StoreType = {
+  selectedTodo: null,
+  todos: [],
+}
+
+export default (state: StoreType, action: ActionType): StoreType =&gt; {
+  switch (action.type) {
+    case &quot;SELECT_TODO&quot;:
+      return { ...state, selectedTodo: action.payload }
+    case &quot;SAVE_TODO&quot;:
+      return { ...state, todos: [...state.todos, action.payload] }
+    default:
+      throw new Error(&quot;unexpected action type&quot;)
+  }
+}
+</code></pre>
+<p>context</p>
+<pre><code class="language-ts:title=src/context/TodoContext.ts">import { createContext } from &quot;preact&quot;
+import { StoreType, ActionType, initialState } from &quot;../reducer/TodoReducer&quot;
+
+export const TodoStateContext = createContext&lt;{
+  state: StoreType
+}&gt;({ state: initialState })
+
+export const TodoDispatchContext = createContext&lt;{
+  dispatch: (action: ActionType) =&gt; void
+}&gt;({ dispatch: () =&gt; {} })
+</code></pre>
+<p>reducer を context で配信</p>
+<pre><code class="language-tsx:title=src/index.tsx">import { h, render } from &quot;preact&quot;
+import { useReducer } from &quot;preact/hooks&quot;
+import { Router, Route } from &quot;preact-router&quot;
+import reducer, { initialState } from &quot;./reducer/TodoReducer&quot;
+import { TodoStateContext, TodoDispatchContext } from &quot;./context/TodoCotext&quot;
+import { Todos } from &quot;./pages/Todos&quot;
+import { Detail } from &quot;./pages/Detail&quot;
+
+const Main = () =&gt; {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  return (
+    &lt;TodoStateContext.Provider value={{ state }}&gt;
+      &lt;TodoDispatchContext.Provider value={{ dispatch }}&gt;
+        &lt;Router&gt;
+          &lt;Route path=&quot;/&quot; component={Todos}&gt;&lt;/Route&gt;
+          &lt;Route path=&quot;/todos/:id&quot; component={Detail}&gt;&lt;/Route&gt;
+        &lt;/Router&gt;
+      &lt;/TodoDispatchContext.Provider&gt;
+    &lt;/TodoStateContext.Provider&gt;
+  )
+}
+
+render(&lt;Main&gt;&lt;/Main&gt;, document.body)
+</code></pre>
+<p>UI から利用</p>
+<pre><code class="language-tsx:title=src/pages/Todo.tsx">import { h } from &quot;preact&quot;
+import { useContext } from &quot;preact/hooks&quot;
+import { Link } from &quot;preact-router&quot;
+import { TodoStateContext, TodoDispatchContext } from &quot;../context/TodoCotext&quot;
+import { actions } from &quot;../reducer/TodoReducer&quot;
+import { genRandomId } from &quot;../helper&quot;
+import { Item } from &quot;../component/Item&quot;
+
+export const Todos = () =&gt; {
+  const todoStateContext = useContext(TodoStateContext)
+  const todoDispatchContext = useContext(TodoDispatchContext)
+  const { state } = todoStateContext
+  const { dispatch } = todoDispatchContext
+  return (
+    &lt;div&gt;
+      &lt;hi&gt;TODO LIST&lt;/hi&gt;
+      &lt;div&gt;
+        {state.todos.map(todo =&gt; (
+          &lt;Link
+            href={`/todos/${todo.id}`}
+            onClick={() =&gt; {
+              dispatch(actions.selectTodo(todo))
+            }}
+          &gt;
+            &lt;Item data={todo} key={todo.id}&gt;&lt;/Item&gt;
+          &lt;/Link&gt;
+        ))}
+      &lt;/div&gt;
+      &lt;form
+        onSubmit={e =&gt; {
+          e.preventDefault()
+          try {
+            // @ts-ignore
+            const todo = e.target.todo.value as string
+            const id = genRandomId()
+            dispatch(actions.saveTodo({ id, todo }))
+          } catch (e) {
+            console.error(e)
+            alert(&quot;入力の保存に失敗しました。&quot;)
+          }
+        }}
+      &gt;
+        &lt;Input name=&quot;todo&quot;&gt;&lt;/Input&gt;
+        &lt;button&gt;submit&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h2>スタイリング</h2>
+<p><a href="https://github.com/cristianbote/goober">goober</a> が良いと思います。</p>
+<h3>goober は軽量でバンドルを無闇に増やさない</h3>
+<p>スタイリングに関しては、バンドルサイズを増やしたくないしランタイムでの実行コストも減らしたいので CSS in JS は避けるべきなのかとも思ったのですが、設定・補完・行数の節約といった面での開発体験を考えて採用することにしました。</p>
+<p>とはいえここで入れるライブラリは慎重になりました。
+例えば styled-components や emotion などは バンドルサイズが 10 kb あり preact 本体と同じくらいのサイズがあります。
+ここでバンドルサイズを増やすと「なんのために preact を入れたのじゃ」となるのでどうしたらいいか頭を悩ましていました。</p>
+<p>preact に詳しそうな先人の<a href="https://mizchi.dev/202006261728-minimal-js">ビルドサイズ要求環境でモダンフロントエンドをやる (主に preact の話)</a>を見てるとどうやら goober というのがあるらしいです。
+これは まさしく ちょうど僕が悩んでいたようなバンドルサイズへの懸念から生まれたライブラリのようで、「CSS in JS ライブラリっていってもどうせ styled しか使わないこともあるからそれだけを持ってきたぜ」といった解決策が実装されています。</p>
+<h3>必要なユースケースは全部満たせそう</h3>
+<p>とはいえ機能を絞っているライブラリなので本当にやりたいことが全部できるかどうかという実験はしておく必要があったので試しておきました。</p>
+<h4>上書きができる</h4>
+<p>コンポーネントの上書きはできます。
+emotion や styled-components でやる時の方法と同じです。</p>
+<p>コンポーネントをラップし、</p>
+<pre><code class="language-tsx">import { styled } from &quot;goober&quot;
+import { Item as _Item } from &quot;../component/Item&quot;
+
+const Item = styled(_Item)`
+  border: solid 1px #ccc;
+  border-radius: 8px;
+  margin: 4px 12px;
+  @media screen and (max-width: 450px) {
+    flex-direction: column;
+    margin: 12px 0px;
+  }
+`
+</code></pre>
+<p>ラップ対象に className を渡すと</p>
+<pre><code class="language-jsx">&lt;div className={props.className} /&gt;
+</code></pre>
+<p>スタイリングの上書きができます。</p>
+<p>レイアウトのようなものは親からスタイルを指定することでコンポーネントのポータビリティが上がるのでやりたいテクニックなので使っていきましょう。</p>
+<h4>メディアクエリが使える</h4>
+<p>公式 Doc に例が書かれていないのですができます。（似た例はあるけどテンプレートリテラルでの例がない）</p>
+<p>styled-components と同じ書き方でできます。</p>
+<pre><code class="language-tsx">const Items = styled(&quot;div&quot;)`
+  display: flex;
+  flex-direction: row;
+  @media screen and (max-width: 450px) {
+    flex-direction: column;
+  }
+`
+</code></pre>
+<h4>global css も簡単に読み込める</h4>
+<p>glob という機能で実現できます。(global の略っぽい)
+reset.css の実現に使えます。</p>
+<pre><code class="language-jsx">import { glob } from &quot;goober&quot;
+
+glob`
+  *,
+  *:after,
+  *:before {
+    margin: 0;
+    padding: 0;
+    box-sizing: inherit;
+  }
+
+  html {
+    font-size: 62.5%;
+  }
+
+  body {
+    box-sizing: border-box;
+  }
+`
+</code></pre>
+<p>これを呼ぶだけで GlobalCSS が適用されます。</p>
+<h2>おわりに</h2>
+<p>といった感じで preact を使って見た感想としては、環境構築が React との差分があったりドキュメントを見つけられなかったりで苦戦するところがあったのですが、最低限の機能は実現できることがわかりました。
+ぶっちゃけ自分がアプリ開発する分にはこれらの機能さえあればどんなものでも作れると思っているので preact で十分に実務で戦えそうだなと思いました。
+とはいえ preact が要求される過酷な環境での開発をする機会は今のところはないので、技術選定では React を選ぶとは思います。
+ただいつか preact を使わないと解決できないような限界を追求する系の仕事をしたいので、そういった仕事が任されるようにこれからも勉強を頑張ります！</p>
+<p>最後にこの設定をする上で公式 Doc だけ見てると多分ハマるであろうことだけまとめます。</p>
+<ul>
+<li>TS を採用するなら jsxFactory の設定を忘れずに, それ以外は React の設定と全く同じものが使える</li>
+<li>preact-router でページを出し分けるには Router だけでなく Route も使う</li>
+<li>preact 本体に hooks は入っていない。preact 配下の path から見つけ出そう。</li>
+<li>Dispatch の型定義はそもそも preact にないが、型定義自体がないので Dispatch がなくても型検査を通せる</li>
+<li>スタイリングは goober が良さそう。メディアクエリは styled-components と同じ書き方ができる。</li>
+</ul>
+<h2>ソースコード</h2>
+<p>https://github.com/ojisan-toybox/preact-todo</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

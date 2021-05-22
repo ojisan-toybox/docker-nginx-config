@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>OCaml の補完とフォーマットをVSCode上で実現するための試行錯誤</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="私は プログラミングの基礎や大学の講義資料でプログラミングを勉強しており、OCaml の開発者ではないもののサンプルコードとして OCaml を読んでいます。">
+    <meta property="og:title" content="OCaml の補完とフォーマットをVSCode上で実現するための試行錯誤">
+    <meta property="og:image" content="https://blog.ojisan.io//ocaml-lsp-vscode/visual.png">
+    <meta property="og:description" content="私は プログラミングの基礎や大学の講義資料でプログラミングを勉強しており、OCaml の開発者ではないもののサンプルコードとして OCaml を読んでいます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="OCaml の補完とフォーマットをVSCode上で実現するための試行錯誤">
+    <meta name="twitter:description" content="私は プログラミングの基礎や大学の講義資料でプログラミングを勉強しており、OCaml の開発者ではないもののサンプルコードとして OCaml を読んでいます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-16 15:00</time>
+      <h1>OCaml の補完とフォーマットをVSCode上で実現するための試行錯誤</h1>
+    </div>
+    <div class="post-contents"><p>私は <a href="https://www.amazon.co.jp/%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%9F%E3%83%B3%E3%82%B0%E3%81%AE%E5%9F%BA%E7%A4%8E-Computer-Science-Library-%E6%B5%85%E4%BA%95/dp/4781911609">プログラミングの基礎</a>や大学の講義資料でプログラミングを勉強しており、OCaml の開発者ではないもののサンプルコードとして OCaml を読んでいます。
+この記事では、そういったコードリーディングを目的とした補完やフォーマットのための環境構築をしようとしてハマってしまっていたのでそれについてメモします。
+（ビルド周りについては触れません）</p>
+<p>筆者の環境は MacOS です。</p>
+<h2>とりあえず OCaml の環境を作る</h2>
+<p>たまたま修理に出して新品になった Mac があるので、ここに環境を作っていきます。</p>
+<p>まずは OCaml の package manager である<a href="https://opam.ocaml.org/">opam</a>を入れます。
+これはパッケージだけで無く OCaml 本体も入れられので、このコマンドを最初に使えるようにします。</p>
+<p>インストール方法は公式である<a href="https://opam.ocaml.org/doc/Install.html">How to install opam</a>にあるので、参照します。</p>
+<pre><code class="language-sh">$ brew install gpatch
+$ brew install opam
+</code></pre>
+<p>公式曰く、<a href="https://savannah.gnu.org/projects/patch/">GNU patch</a> は 依存として必要とのことです。
+（なんで必要かは知らないです。）</p>
+<p>上記のコマンドを実行すれば、opam を実行できるようになります。</p>
+<pre><code class="language-sh">&gt; opam
+usage: opam [--version]
+            [--help]
+            &lt;command&gt; [&lt;args&gt;]
+
+The most commonly used opam commands are:
+    init         Initialize opam state, or set init options.
+    list         Display the list of available packages.
+    show         Display information about specific packages.
+    install      Install a list of packages.
+    remove       Remove a list of packages.
+    update       Update the list of available packages.
+    upgrade      Upgrade the installed package to latest version.
+    config       Display configuration options for packages.
+    repository   Manage opam repositories.
+    switch       Manage multiple installation prefixes.
+    pin          Pin a given package to a specific version or source.
+    admin        Tools for repository administrators
+
+See 'opam help &lt;command&gt;' for more information on a specific command.
+</code></pre>
+<p>次に<code>opam</code>コマンドで OCaml の環境を作っていきます。</p>
+<pre><code class="language-sh">opam init
+
+# パスを通す
+eval $(opam env)
+</code></pre>
+<p>これで OCaml の環境が使えるようになりました。
+試しに<code>ocaml</code>と打つと REPL が起動するはずです。</p>
+<pre><code class="language-sh">&gt; ocaml
+        OCaml version 4.09.1
+</code></pre>
+<h2>LSP 環境を作る</h2>
+<p>補完やフォーマットは<a href="https://microsoft.github.io/language-server-protocol/">LSP</a>経由で行います。
+そこで VSCode を LSP Client にするので、それに対応する Launguage Server をインストールします。
+それは<a href="https://github.com/ocaml/ocaml-lsp">ocaml-lsp</a>というもので opam 経由でインストールできます。</p>
+<pre><code class="language-sh">$ opam pin add ocaml-lsp-server https://github.com/ocaml/ocaml-lsp.git
+$ opam install ocaml-lsp-server
+</code></pre>
+<p>こののちに ocamllsp とターミナルに打ってエラーがでなければ成功です。</p>
+<h2>VSCode の設定</h2>
+<p>VSCode 上での補完やフォーマットには<a href="https://github.com/ocamllabs/vscode-ocaml-platform">vscode-ocaml-platform</a>というエクステンションを使います。
+<code>textDocument/completion</code>と<code>textDocument/formatting</code>がサポートされているので、LSP 経由で補完もフォーマットもできます。</p>
+<p><img src="./lspconf.png" alt="LSPがサポートしている機能一覧" /></p>
+<p>ただし format に関しては別途 <a href="https://github.com/ocaml-ppx/ocamlformat">ocamlformat</a> が必要らしいです。
+（VSCode 上で format on save をかけると <code>Unable to find ocamlformat binary. You need to install ocamlformat manually to use the formatting feature.</code> と表示された。
+また、ソースコードを見る限り、formatter は別途入れておく必要がありそう。FYI: https://github.com/ocaml/ocaml-lsp/blob/549ee9e21dda93a152657e138f8e43c8a26e3577/ocaml-lsp-server/src/fmt.ml#L73）</p>
+<p><strong>また、ocamlformat それ自体は format 時に .ocamlformat という設定ファイルが必要です。</strong>
+中身は無くても動きますが、このファイルがないとフォーマットされないので project のルートに置いておきましょう。</p>
+<p>その結果補完やフォーマットができます。</p>
+<p><img src="./hokan.png" alt="補完されている画像" /></p>
+<h2>多分うまくいかないと思うのでデバッグするときに役立ちそうな情報を紹介</h2>
+<p>上に書いた内容は公式 Doc 似合った情報を切り取っただけなのですが、実際にはうまく動かない箇所があったりしてこの環境を手に入れるのに相当苦労しました。
+opam の入れ方だったり、VSCode の設定次第ではうまくいかないのでどういうデバッグをしたか紹介します。</p>
+<h3>試行錯誤のために VSCode のリロードを繰り返す</h3>
+<p>Extension の disaple や設定の修正を行った後は VSCode の再起動が必要となります。
+これは <code>cmd + shift + p</code> でコマンド入力欄を開いて、「reload window」 と打てばできます。
+実際には reload と打つだけで表示されたり、最新の実行順で表示されるので、高速にリロードすることができます。
+動かなかったときの試行錯誤をするときに知っておくと便利です。</p>
+<h3>opam を入れたときのシェルと VSCode のシェルを揃える</h3>
+<p><code>opam init</code> するとこのような表示がされます。</p>
+<pre><code class="language-sh">&gt; opam init
+...
+
+
+&lt;&gt;&lt;&gt; Fetching repository information &gt;&lt;&gt;&lt;&gt;&lt;&gt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;  🐫
+Processing  1/1: [default: http]
+[default] Initialised
+
+&lt;&gt;&lt;&gt; Required setup - please read &lt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;&gt;&lt;&gt;  🐫
+
+  In normal operation, opam only alters files within ~/.opam.
+
+  However, to best integrate with your system,
+  some environment variables should be set.
+  If you allow it to, this initialisation step will update
+  your fish configuration by adding the following
+  line to ~/.config/fish/config.fish:
+
+    source /Users/ojisan/.opam/opam-init/init.fish &gt; /dev/null 2&gt; /dev/null; or true
+
+  Otherwise, every time you want to access your opam installation, you will
+  need to run:
+
+    eval $(opam env)
+
+  You can always re-run this setup with 'opam init' later.
+
+Do you want opam to modify ~/.config/fish/config.fish? [N/y/f]
+(default is 'no', use 'f' to choose a different file) A hook can be
+added to opam's init scripts to ensure that the shell remains
+in sync with the opam environment when they are loaded. Set that up? [y/N] y
+
+&lt;&gt;&lt;&gt; Creating initial switch (ocaml-base-compiler) &gt;&lt;&gt;&lt;&gt;&gt;&lt;&gt;&lt;&gt;  🐫
+
+&lt;&gt;&lt;&gt; Gathering sources &gt;&lt;&gt;&lt;&gt;&lt;&lt;&gt;&lt;&gt;&lt;&gt;&lt;&gt;  🐫
+[ocaml-base-compiler.4.10.0] downloaded from cache at https://opam.ocaml.org/cache
+
+&lt;&gt;&lt;&gt; Processing actions &lt;&gt;&lt;&lt;&gt;&lt;&gt;  🐫
+∗ installed base-bigarray.base
+∗ installed base-threads.base
+∗ installed base-unix.base
+</code></pre>
+<p>で、ここで</p>
+<pre><code class="language-sh">your fish configuration by adding the following line to ~/.config/fish/config.fish:
+
+source /Users/ojisan/.opam/opam-init/init.fish &gt; /dev/null 2&gt; /dev/null; or true
+</code></pre>
+<p>とある通り環境変数を読み込む処理が fish の設定に書かれています。
+（ちなみに僕の fish 環境では <code>~/.config/fish/config.fish</code> は設定ファイルではないので、このファイルができたところで環境変数は読まれないし、そもそもこのファイルができていなかったので謎は残っている。）</p>
+<p>これは bash や zsh で実行したらそれはまた別の設定ファイルになっています。
+つまり、opam を実行したときのシェルの種類に依存します。
+他のシェルを使う場合は自分で環境変数を読み込まない限りは opam は叩けません。</p>
+<p>その結果、VSCode が標準で異なるシェルを立ち上げると opam の資材にアクセスできません。
+特に fish だと VSCode で標準サポートされていないので設定で切り替える必要があります。</p>
+<h4>bash/zsh など</h4>
+<p>VSCode のターミナル機能の GUI から変えることができます。</p>
+<p><img src="./vscsh.png" alt="VSCの下部ターミナルから切り替えられる" /></p>
+<h4>fish など</h4>
+<p>setting.json から切り替えます。</p>
+<pre><code class="language-json">{
+  &quot;terminal.integrated.shell.osx&quot;: &quot;/usr/local/bin/fish&quot;
+}
+</code></pre>
+<p>などとして切り替えられます。</p>
+<p>shell の絶対パスを書く必要があるので、 <code>which fish</code> などして出てきたものをここに書いてください。</p>
+<h3>ocamllsp が VSCode 上からだけ見えない</h3>
+<p>これ初見で見事にハマったのですが、VSCode の設定次第では VSCode のエクステンション(<a href="https://github.com/ocamllabs/vscode-ocaml-platform">vscode-ocaml-platform</a>) から ocamllsp を使えないといったことがありそうです。
+ちなみにこのとき VSCode 内のシェルからは <code>ocamllsp</code> を実行できます。
+これは <code>ocaml.select-sandbox</code> というコマンドで設定を書き換えることで修正できました。</p>
+<p>vscode-ocaml-platform は<a href="https://github.com/ocamllabs/vscode-ocaml-platform#commands">command</a>を提供しており、VSCode 上の cmd + shift + p で実行できます。
+このとき <code>ocaml.select-sandbox</code> は 利用する opam のバージョンを指定できます。
+これで ocamllsp や ocamlformat が入っているバージョンを選択すれば ocamllsp に VSC からアクセスできるようになり補完が聞くようになります。</p>
+<p><img src="./wchichversion.png" alt="OCamlのバージョンをVSC上で選択する" /></p>
+<p>これは特に <code>opam switch</code>で複数バージョンの OCaml を切り替えたりしているとハマる点だと思います。
+僕は本や資料のバージョンに合わせて複数バージョン持っていたためこの設定をしていないと動かないという状況になっていました。</p>
+<h2>あとがき</h2>
+<p>OCaml を VSCode でやるとすれば、<a href="https://marketplace.visualstudio.com/items?itemName=freebroccolo.reasonml">OCaml and Reason IDE</a>の方が圧倒的にスターが多いのでこちらを使ってもいいとは思います。ただこっちもこっちで試行錯誤しないと動かない点はあったり、<a href="https://github.com/ocamllabs/vscode-ocaml-platform">vscode-ocaml-platform</a>の方が後発で開発も活発なのでいま始めるならこちらに挑戦してみた方が良いとは思います。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

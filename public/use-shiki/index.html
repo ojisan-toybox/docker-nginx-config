@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>syntax highlighter を shiki に切り替えた</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Blog のシンタックスハイライトに関してPrism.jsとうまく折り合いを付けられなかったので">
+    <meta property="og:title" content="syntax highlighter を shiki に切り替えた">
+    <meta property="og:image" content="https://blog.ojisan.io//use-shiki/visual.png">
+    <meta property="og:description" content="Blog のシンタックスハイライトに関してPrism.jsとうまく折り合いを付けられなかったので">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="syntax highlighter を shiki に切り替えた">
+    <meta name="twitter:description" content="Blog のシンタックスハイライトに関してPrism.jsとうまく折り合いを付けられなかったので">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-14 12:00</time>
+      <h1>syntax highlighter を shiki に切り替えた</h1>
+    </div>
+    <div class="post-contents"><p>Blog のシンタックスハイライトに関して<a href="https://prismjs.com/">Prism.js</a>とうまく折り合いを付けられなかったので<a href="https://shiki.matsu.io/">shiki</a> に乗り換えました。</p>
+<h2>Prism.js を採用していた理由</h2>
+<p>「syntax highlighter といえばこれ」といった印象を持っていたことと、Gatsby に plugin があるのを知っていたことが大きいです。
+特に昔から 「Gatsby おすすめプラグイン集」のようなまとめ記事でもたびたび目にしており、syntax hilight をするために特に不安を持たずに入れていたのがきっかけです（ハイライトはどういう仕組みかはよくわかっていなかったけど）。
+ただブログを書き続けていると色々合わない点が出てきてしまって切り替えようと思いました。</p>
+<h2>Prism.js を剥がすきっかけ</h2>
+<h3>JSX 対応を乗り越えれなかった</h3>
+<p>この問題が一番大きいです。
+plugin の<a href="https://www.gatsbyjs.com/plugins/gatsby-remark-prismjs/">公式 HP</a>をみる限り、JSX がサポートされているようなのですが、私の手元ではハイライトはされるもののこのように崩れていました。</p>
+<p><img src="./kuzure.png" alt="React.Nodeが崩れている" /></p>
+<p>Prism.js は拡張性が優れているのでユーザー側で修正を入れていくことができるのですが、plugin でラップしてしまっているので拡張するのが難航しそうで手を出す気になれませんでした。
+とはいえ、実際のところ公式で Prism.js 本家でも Gatsby.js でもサポートしていそうなので何かしらのやりようはありそうではあります。</p>
+<p>そういった悩みを Twitter で呟いていたら <a href="https://twitter.com/_Ria0130/status/1292507432598384640?s=20">@_Ria0130</a>さんから shiki を教えてもらい使ってみることにしました。</p>
+<h3>短縮記法が使えない</h3>
+<p>JSX 崩れほど決定的な理由ではないのですが、言語名の短縮記法が使えないのもちょっともやっとポイントでした。</p>
+<p>GitHub 上のハイライトでは</p>
+<pre class="shiki" style="background-color: #2e3440">
+<code>
+<span style="color: #D8DEE9FF">```sh</span>
+<span style="color: #D8DEE9FF">$ cp config/env .env</span>
+<span style="color: #D8DEE9FF">```</span>
+</code>
+</pre>
+<p>と書いた際に shellscript のハイライトがされますが、Prism.js はこれが効きません。</p>
+<pre class="shiki" style="background-color: #2e3440">
+<code>
+<span style="color: #D8DEE9FF">```shellscript</span>
+<span style="color: #D8DEE9FF">$ cp config/env .env</span>
+<span style="color: #D8DEE9FF">```</span>
+</code>
+</pre>
+<p>と書く必要があります。</p>
+<p>GitHub で使える書き方が使えないのは markdown file のポータビリティを考えた際にモヤっとした点でした。</p>
+<p>一方 shiki では sh といった短縮記法がサポートされているため乗り換えの機運が高まりました。
+shiki ではこのように<a href="https://github.com/shikijs/shiki/blob/master/packages/languages/README.md#literal-values">TCommonLangAlias</a>として短縮記法がサポートされています。</p>
+<p><img src="./TCommonLangAlias.png" alt="TCommonLangAlias型をみると短縮記法がサポートされていることがわかる" /></p>
+<h3>ユーザーのセンスが問われる</h3>
+<p>これは自分の問題でもあるのですが、何かダサさがありました。
+<a href="https://prismjs.com/">公式</a>だと入っているテーマが 8 種類しかなく、既存のページのデザインと調和するデザインを選択することが難しかったです。</p>
+<p>これは Prism.js の制限というよりかは Gatsby Plugin の制限です。
+もちろんサードパーティのテーマを持ってきたり、自分でスタイルシートを拡張すればこの手の問題は解決できるのですが、</p>
+<ul>
+<li>Global に CSS を読み込まないといけない</li>
+<li>サードパーティは公式ほどの充実なサポートが望めなかった</li>
+</ul>
+<p>ということもあり、導入は避けていました。</p>
+<p>その結果、公式テーマを入れてその上から個別でスタイルを上書いていたのですが、デザインの訓練などは受けていないので手を入れれば入れるほどデザインがおかしくなってしまい苦しんでいました。</p>
+<p>一方で shiki は公式がサポートしているスタイルがどれもいい感じだったので入れてみたいなという気持ちになりました。</p>
+<h2>Prism.js の除却</h2>
+<p>では既存の Prism.js を剥がすフローから紹介します。</p>
+<h3>plugin の remove</h3>
+<p>Gatsby の plugin 本体に Prism.js が含まれているので、gatsby-remark-prismjs を remove してしまえば剥がせます。</p>
+<pre><code class="language-sh">yarn remove gatsby-remark-prismjs
+</code></pre>
+<p>で node_modules から削除し、それを読み込んでいる gatsby-config.js も修正します。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">{
+  &quot;resolve&quot;: `gatsby-transformer-remark`,
+  &quot;options&quot;: {
+    &quot;plugins&quot;: [
+      {
+        &quot;resolve&quot;: &quot;gatsby-remark-code-titles&quot;,
+        &quot;options&quot;: {}
+      },
+      // ここを削除
+      // {
+      //   &quot;resolve&quot;: `gatsby-remark-prismjs`,
+      //   &quot;options&quot;: {
+      //     &quot;classPrefix&quot;: &quot;language-&quot;,
+      //     &quot;inlineCodeMarker&quot;: null,
+      //     &quot;aliases&quot;: {},
+      //     &quot;showLineNumbers&quot;: false,
+      //     &quot;noInlineHighlight&quot;: false,
+      //     &quot;prompt&quot;: {
+      //       &quot;user&quot;: &quot;root&quot;,
+      //       &quot;host&quot;: &quot;localhost&quot;,
+      //       &quot;global&quot;: false
+      //     }
+      //   }
+      // },
+      {
+        &quot;resolve&quot;: `gatsby-remark-autolink-headers`,
+        &quot;options&quot;: {
+          // そこにジャンプした時の上からの余白
+          &quot;offsetY&quot;: `100`,
+          &quot;className&quot;: `anchor-link`
+        }
+      },
+      {
+        &quot;resolve&quot;: `gatsby-remark-images`,
+        &quot;options&quot;: {
+          &quot;maxWidth&quot;: 590
+        }
+      }
+    ]
+  }
+}
+</code></pre>
+<p>gatsby-remark-prismjs の役割は gatsby-remark が作るコードブロックのスタイリングなので、このプラグイン設定は gatsby-remark のオプション扱いです。
+他のオプションは影響がないのでこのブロックだけを削除します。</p>
+<h3>gatsby-browser.js の修正</h3>
+<p>gatsby-remark-prismjs のスタイリングは、テーマをユーザーに gatsby-browser.js から読み込ませます。
+gatsby-browser.js は NextJS の_app.js のようなもので各ページで必ず呼ばれるものです。
+reset.css や tracker を呼び込むエントリポイントとして使うと良いでしょう。</p>
+<p>これまではここで tomorrow というテーマを読み込んでいたのでそれを削除します。</p>
+<pre><code class="language-javascript:title=gatsby-browser.js">require(&quot;prismjs/themes/prism-tomorrow.css&quot;)
+</code></pre>
+<h3>Prism.js に向けた上書き CSS を調整</h3>
+<p>わたしは gatsby-browse.js で css コードブロックやテーマを微調整するファイルを読み込んでいました。</p>
+<pre><code class="language-javascript:title=gatsby-browser.js">require(&quot;./src/vendor/css/code.css&quot;)
+</code></pre>
+<p>この中にある Prism.js 向けの CSS も削除します。</p>
+<pre><code class="language-css:title=vendor/code.css">.gatsby-code-title {
+  color: #2c2e31;
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;,
+    &quot;Courier New&quot;, monospace;
+  letter-spacing: 0.075em;
+  line-height: 1;
+  text-align: left;
+  border-radius: 4px 4px 0px 0px;
+  padding: 0.25rem 0.5rem;
+  display: inline-block;
+  margin-left: 1em;
+  margin-bottom: 0px !important;
+}
+
+pre {
+  border-radius: 8px;
+}
+/* ここが不要
+.language-text {
+  font-size: 16px !important;
+  padding: 0.1em 0.4em !important;
+  background: rgba(0, 0, 0, 0.1) !important;
+  color: black !important;
+  border-radius: 8px;
+}
+
+pre[class*=&quot;language-&quot;] {
+  margin: 0;
+} */
+</code></pre>
+<p><code>class*=&quot;language-&quot;</code> というのは gatsby-remark-prismjs で指定したオプションです。
+そのクラス名をコードブロックに付与していたので、別の CSS ファイルから直接スタイルを当てることができていました。</p>
+<p>これで除却できたので shiki を導入します。</p>
+<h2>shiki の導入</h2>
+<p>shiki のプラグインは Prism.js のプラグインと違って config それ自体でテーマを設定できるのでライブラリを入れて plugin 登録するだけで使えます。</p>
+<h3>plugin の導入と設定</h3>
+<pre><code class="language-sh">$ yarn add gatsby-remark-shiki
+</code></pre>
+<pre><code class="language-javascript:title=gatsby-config.js">{
+  &quot;resolve&quot;: `gatsby-transformer-remark`,
+  &quot;options&quot;: {
+    &quot;plugins&quot;: [
+      {
+        &quot;resolve&quot;: &quot;gatsby-remark-code-titles&quot;,
+        &quot;options&quot;: {}
+      },
+      {
+            resolve: `gatsby-remark-shiki`,
+            options: {
+              theme: &quot;nord&quot;,
+            },
+          },
+      {
+        &quot;resolve&quot;: `gatsby-remark-autolink-headers`,
+        &quot;options&quot;: {
+          &quot;offsetY&quot;: `100`,
+          &quot;className&quot;: `anchor-link`
+        }
+      },
+      {
+        &quot;resolve&quot;: `gatsby-remark-images`,
+        &quot;options&quot;: {
+          &quot;maxWidth&quot;: 590
+        }
+      }
+    ]
+  }
+}
+</code></pre>
+<h3>微調整</h3>
+<p>ここでも微調整が必要になりました。
+reset.css が pre タグのスタイルを消していたためです。</p>
+<pre><code class="language-css:title=vendor/code.css">pre {
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  overflow-x: scroll;
+}
+</code></pre>
+<p>またファイル名のスタイリングもしたいのでそれ用の CSS も追加します。
+（これは Prism.js を使っていた時から存在していた設定で、shiki への移行とは関係がないもの）</p>
+<pre><code class="language-css:title=vendor/code.css">/* gatsby-remark-code-titlesによって追加される要素のスタイリング */
+.gatsby-code-title {
+  color: #2c2e31;
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;,
+    &quot;Courier New&quot;, monospace;
+  letter-spacing: 0.075em;
+  line-height: 1;
+  text-align: left;
+  border-radius: 4px 4px 0px 0px;
+  padding: 0.25rem 0.5rem;
+  display: inline-block;
+  margin-left: 1em;
+  margin-bottom: 0px !important;
+}
+
+pre {
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  /* SPでみたときに横長のファイルをスクロールでみれるようにするため */
+  overflow-x: scroll;
+}
+</code></pre>
+<h2>見比べてみると</h2>
+<p>before...</p>
+<p><img src="./kuzure.png" alt="React.Nodeが崩れている" /></p>
+<p>after...</p>
+<p><img src="./nokuzure.png" alt="React.Nodeが崩れていない" /></p>
+<p>やったね！</p>
+<h2>ソースコード</h2>
+<p><a href="https://github.com/sadnessOjisan/blog.ojisan.io/pull/75">この PR</a>が shiki に乗り換えた PR です。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

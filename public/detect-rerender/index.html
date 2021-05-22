@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>再レンダリングを検知するコード</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="いつも再レンダリングを確認するときは Chrome の DevTool から Profiler 立ち上げて、'Highlight updates when components render.' のチェックを入れていたのですが、それやらなくても良いじゃんということに気づいたのでメモ。">
+    <meta property="og:title" content="再レンダリングを検知するコード">
+    <meta property="og:image" content="https://blog.ojisan.io//detect-rerender/visual.png">
+    <meta property="og:description" content="いつも再レンダリングを確認するときは Chrome の DevTool から Profiler 立ち上げて、'Highlight updates when components render.' のチェックを入れていたのですが、それやらなくても良いじゃんということに気づいたのでメモ。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="再レンダリングを検知するコード">
+    <meta name="twitter:description" content="いつも再レンダリングを確認するときは Chrome の DevTool から Profiler 立ち上げて、'Highlight updates when components render.' のチェックを入れていたのですが、それやらなくても良いじゃんということに気づいたのでメモ。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-09</time>
+      <h1>再レンダリングを検知するコード</h1>
+    </div>
+    <div class="post-contents"><p>いつも再レンダリングを確認するときは Chrome の DevTool から Profiler 立ち上げて、'Highlight updates when components render.' のチェックを入れていたのですが、それやらなくても良いじゃんということに気づいたのでメモ。</p>
+<p><img src="./rerender.png" alt="インスペクタ" /></p>
+<pre><code class="language-tsx:title=count.tsx">import * as React from &quot;react&quot;
+import { StateContext } from &quot;./app&quot;
+
+export const Count = () =&gt; {
+  const context = React.useContext(StateContext)
+  const getColor = () =&gt; Math.floor(Math.random() * 255)
+  const style = {
+    color: `rgb(${getColor()},${getColor()},${getColor()})`,
+  }
+  return &lt;div style={style}&gt;count: {context.count}&lt;/div&gt;
+}
+</code></pre>
+<p>という風に コンポーネントの return より前の部分でランダムな色が当たるスタイルを作ってそれを div に食わせるだけで良い。</p>
+<p>こういう感じに動く。</p>
+<iframe src="https://stoic-saha-cfd2d3.netlify.app/"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="stable-observedBits-useMutableSource"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+></iframe>
+<p>このやり方は https://leewarrick.com/blog/the-problem-with-context/ で見かけて良いなって思った。</p>
+<p>あと似たようなのとして、コンポーネント自体に</p>
+<pre><code class="language-css">@keyframes rendered {
+  0% {
+    background-color: rgb(255, 255, 0, 1);
+  }
+  100% {
+    background-color: rgb(255, 255, 0, 0);
+  }
+}
+
+div {
+  animation: rendered 1s ease;
+  animation-iteration-count: 1;
+}
+</code></pre>
+<p>のようにアニメーションを与えても良い。</p>
+<p>これは <a href="https://twitter.com/uhyo_">@uhyo</a>さんの<a href="https://zenn.dev/uhyo/articles/react-stable-observedbits">Stable React でも observedBits を使いたい！</a> から拝借してきたコード。</p>
+<p>uhyo さんのコードはこんな感じで動いていた。</p>
+<iframe src="https://codesandbox.io/embed/stable-observedbits-usemutablesource-ey0m1?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="stable-observedBits-useMutableSource"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+></iframe>
+<p>注意事項としては、データが変わった時に確実に再レンダリングさせるためにコンポーネントに key を割り振るのを忘れないように。
+preact + CSS in JS で実装し直すとこういう感じになる。</p>
+<pre><code class="language-tsx">import { h } from &quot;preact&quot;
+import { styled } from &quot;goober&quot;
+
+const Component = (props: { cnt: number; className?: string }) =&gt; {
+  return (
+    &lt;div className={props.className} key={props.cnt}&gt;
+      &lt;span&gt;cnt: {props.cnt}&lt;/span&gt;
+    &lt;/div&gt;
+  )
+}
+
+const StyledComponent = styled(Component)`
+  @keyframes rendered {
+    0% {
+      background-color: rgb(255, 255, 0, 1);
+    }
+    100% {
+      background-color: rgb(255, 255, 0, 0);
+    }
+  }
+
+  span {
+    animation: rendered 1s ease;
+    animation-iteration-count: 1;
+  }
+`
+
+export const Count = StyledComponent
+</code></pre>
+<h2>終わりに</h2>
+<p>profiler の再レンダリングの表示は境界が見え難かったり、どのコンポーネントが再レンダリングしているのかみたいな調査しにくかったり(インスペクタから分かるけど開くのがめんどくさい)したので、こういう方法も取り入れていきたい。
+またこういうブログで再レンダリングについてを扱うときは、読者にプロファイラを要求せずに例を出せるのでこういうテクニックは嬉しい。
+そして単純に実装できるこれを今まで自分で思い付けなかったのはちょっと悔しい。</p>
+<h2>サンプルコード</h2>
+<ul>
+<li>関数内で適当なランダムな色を持ったスタイルオブジェクトを作って渡す
+<ul>
+<li>https://github.com/ojisan-toybox/store-context-outer</li>
+</ul>
+</li>
+<li>CSS アニメーションと key 割り振りでアニメーションを発火させる
+<ul>
+<li>https://github.com/ojisan-toybox/detect-rerender-animation</li>
+</ul>
+</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

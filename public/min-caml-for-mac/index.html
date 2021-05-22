@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>min-caml を Mac で動かす</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="min-caml という教育用のコンパイラがあります。これは大学の講義などでも使われており、">
+    <meta property="og:title" content="min-caml を Mac で動かす">
+    <meta property="og:image" content="https://blog.ojisan.io//min-caml-for-mac/visual.png">
+    <meta property="og:description" content="min-caml という教育用のコンパイラがあります。これは大学の講義などでも使われており、">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="min-caml を Mac で動かす">
+    <meta name="twitter:description" content="min-caml という教育用のコンパイラがあります。これは大学の講義などでも使われており、">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-11-13 18:00</time>
+      <h1>min-caml を Mac で動かす</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://github.com/esumii/min-caml">min-caml</a> という教育用のコンパイラがあります。
+これは大学の講義などでも使われており、<a href="http://esumii.github.io/min-caml/">速攻 MinCaml コンパイラ概説</a>という解説では、字句解析、構文解析、型推論、最適化、コード生成のステップを通して静的型付け言語のコンパイラを作る方法を学べます。</p>
+<p>「これで僕もコンピュータの勉強するぞ！」と息込んで挑戦してみたのですが、新しいマシン(おそらく Mojave 以降の OS)ではビルドできないようなので、これを手元で動かす方法を紹介します。
+筆者の環境は macOS Catalina Version 10.15.7 です。</p>
+<h2>公式の README 通りにやってみる</h2>
+<p>このような手順書があるので辿ってみます。</p>
+<pre><code class="language-sh">Install OCaml (http://caml.inria.fr/) if you haven't
+
+Download (and expand) MinCaml, e.g. git clone https://github.com/esumii/min-caml.git
+
+cd min-caml/
+
+Execute ./to_x86 for x86 (or ./to_sparc for SPARC, ./to_ppc for PowerPC)
+
+make
+</code></pre>
+<p>が、おそらく make で失敗します。</p>
+<h2>make のエラーログ</h2>
+<pre><code class="language-sh">make
+
+File &quot;parser.cmo&quot;, line 1:
+File &quot;lexer.cmo&quot;, line 1:
+./min-caml test/print
+free variable print_int assumed as external
+iteration 1000
+eliminating variable Ti7.13
+eliminating variable Ti6.12
+eliminating variable Ti4.15
+iteration 999
+register allocation: may take some time
+(up to a few minutes, depending on the size of functions)
+generating assembly...
+gcc -g -O2 -Wall -m32 test/print.s libmincaml.S stub.c -lm -o test/print
+ld: warning: The i386 architecture is deprecated for macOS
+ (remove from the Xcode build setting: ARCHS)
+Undefined symbols for architecture i386:
+  &quot;___stack_chk_fail&quot;, referenced from:
+      _main in stub-890dc1.o
+  &quot;___stack_chk_guard&quot;, referenced from:
+      _main in stub-890dc1.o
+  &quot;___stderrp&quot;, referenced from:
+      _main in stub-890dc1.o
+  &quot;_atan&quot;, referenced from:
+      min_caml_atan in libmincaml-19fba4.o
+     (maybe you meant: min_caml_atan)
+  &quot;_cos&quot;, referenced from:
+      min_caml_cos in libmincaml-19fba4.o
+     (maybe you meant: min_caml_cos)
+  &quot;_fabs&quot;, referenced from:
+      min_caml_abs_float in libmincaml-19fba4.o
+  &quot;_floor&quot;, referenced from:
+      min_caml_floor in libmincaml-19fba4.o
+     (maybe you meant: min_caml_floor)
+  &quot;_fprintf&quot;, referenced from:
+      min_caml_prerr_int in libmincaml-19fba4.o
+      min_caml_prerr_float in libmincaml-19fba4.o
+      _main in stub-890dc1.o
+  &quot;_fputc&quot;, referenced from:
+      min_caml_prerr_byte in libmincaml-19fba4.o
+  &quot;_fwrite$UNIX2003&quot;, referenced from:
+      _main in stub-890dc1.o
+  &quot;_malloc&quot;, referenced from:
+      _main in stub-890dc1.o
+  &quot;_printf&quot;, referenced from:
+      min_caml_print_int in libmincaml-19fba4.o
+  &quot;_putchar&quot;, referenced from:
+      min_caml_print_newline in libmincaml-19fba4.o
+      min_caml_print_byte in libmincaml-19fba4.o
+  &quot;_scanf&quot;, referenced from:
+      min_caml_read_int in libmincaml-19fba4.o
+      min_caml_read_float in libmincaml-19fba4.o
+  &quot;_sin&quot;, referenced from:
+      min_caml_sin in libmincaml-19fba4.o
+     (maybe you meant: min_caml_sin)
+ld: symbol(s) not found for architecture i386
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+make: *** [test/print] Error 1
+</code></pre>
+<p><code>ld: symbol(s) not found for architecture i386</code> とある通り、i386(32 ビットを扱える CPU)用のシンボルを見つけられずリンクで失敗します。
+どうも MacOS では Catallina 以降は 32bit 用の命令が使えないようです。</p>
+<p>FYI: https://news.mynavi.jp/article/osxhack-247/</p>
+<p>min-caml の x_86 用の makefile を読む限り、実行されている gcc は -m32 オプションが渡っておりこれにより 32bit のバイナリにコンパイルされるので、ここで生成されたバイナリは手元では実行できないようです。</p>
+<h2>Docker 使えばできるかな？</h2>
+<p>32bit 対応している OS を使えば解決できると思ったので試してみました。
+CentOS6 は 32bit 対応なので、このイメージを使ってみます。</p>
+<pre><code class="language-sh">docker pull i386/centos:6
+docker run -it --rm i386/centos:6 /bin/bash
+</code></pre>
+<p>Docker 環境に入ったら min-caml を実行するための OCaml と min-caml 自体を DL するための git をインストールします。
+ただこのままだと 64bit 版が入る(?)ので、yum のレポジトリを i386 向けに設定します。</p>
+<pre><code class="language-sh">sed -i 's/$basearch/i386/g' /etc/yum.repos.d/CentOS-*.repo
+</code></pre>
+<p>そしてインストールします。</p>
+<pre><code class="language-sh">yum install git ocaml
+</code></pre>
+<p>そして min-caml 自体を DL します。</p>
+<pre><code class="language-sh">git clone https://github.com/sadnessOjisan/min-caml.git
+</code></pre>
+<p>これで実行してみましょう。</p>
+<pre><code class="language-sh">cd min-caml/
+
+./to_x86
+
+make
+</code></pre>
+<p>これで min-caml コンパイラを作れました。</p>
+<p>本当に動くか試してみましょう。</p>
+<pre><code class="language-sh">./min-caml test/adder
+</code></pre>
+<p>adder はこのようなコードです。</p>
+<pre><code class="language-sh">let rec make_adder x =
+  let rec adder y = x + y in
+  adder in
+print_int ((make_adder 3) 7)
+</code></pre>
+<p>これをコンパイルすると、</p>
+<pre><code class="language-sh">adder      adder.ans  adder.cmp  adder.ml   adder.res  adder.s
+</code></pre>
+<p>といったファイルが生成されているはずです。
+そして結果を見てみましょう。</p>
+<pre><code class="language-sh">less test/adder.res
+10
+</code></pre>
+<p>はい、上手く行きましたね。</p>
+<h2>手元でビルドできるようにする</h2>
+<p>毎回 Docker 環境に入るのもめんどくさいので手元でもビルドできるようにしましょう。
+さいわい Docker はローカルのファイルをホストにできるので、Docker 環境があればビルドできます。</p>
+<p>先ほどコンテナ内でやったことを Dockerfile に書いておきます。</p>
+<pre><code class="language-sh">FROM i386/centos:6
+
+RUN sed -i 's/\$basearch/i386/g' /etc/yum.repos.d/CentOS-\*.repo \
+ &amp;&amp; yum install -y git ocaml \
+ &amp;&amp; git clone https://github.com/sadnessOjisan/min-caml.git
+</code></pre>
+<p>yum install の -y を付けないとインストールが中断されて止まるので付け忘れないように注意しましょう。</p>
+<p>そしてこのファイルを次のコマンドで実行します。</p>
+<pre><code class="language-sh">docker run --rm -v \$PWD:/min-caml -w /min-caml mincaml-builder make
+</code></pre>
+<p>-v を使うことで ホストの任意のパスをコンテナの任意のパスにマウントでき、ここではホストの現在位置(Dockerfile がある位置)をコンテナ内の min-caml にマウントしています。
+これは Dockerfile で git clone したことで作られているフォルダです。
+そして -w で コンテナ内の作業用ディレクトリを指定できるので、/min-caml 内にある makefile を使うために/min-caml を指定します。
+-rm は コンテナ終了時にコンテナを自動的に削除するオプションです。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

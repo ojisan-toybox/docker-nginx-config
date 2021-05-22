@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>fishを使ってみて分かったメリットや設定のコツ</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="ずっと他のシェルを使っていたのですが fish に切り替えました。せっかく設定を dotfiles として Git で管理していたのに、設定の依存関係を何も覚えておらず持ち運べない状態になっていたので、いっそのこと全部やめて新しくしようと思ったのが移行のきっかけです。">
+    <meta property="og:title" content="fishを使ってみて分かったメリットや設定のコツ">
+    <meta property="og:image" content="https://blog.ojisan.io//to-fish/visual.png">
+    <meta property="og:description" content="ずっと他のシェルを使っていたのですが fish に切り替えました。せっかく設定を dotfiles として Git で管理していたのに、設定の依存関係を何も覚えておらず持ち運べない状態になっていたので、いっそのこと全部やめて新しくしようと思ったのが移行のきっかけです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="fishを使ってみて分かったメリットや設定のコツ">
+    <meta name="twitter:description" content="ずっと他のシェルを使っていたのですが fish に切り替えました。せっかく設定を dotfiles として Git で管理していたのに、設定の依存関係を何も覚えておらず持ち運べない状態になっていたので、いっそのこと全部やめて新しくしようと思ったのが移行のきっかけです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-17 15:00</time>
+      <h1>fishを使ってみて分かったメリットや設定のコツ</h1>
+    </div>
+    <div class="post-contents"><p>ずっと他のシェルを使っていたのですが fish に切り替えました。
+せっかく設定を dotfiles として Git で管理していたのに、設定の依存関係を何も覚えておらず持ち運べない状態になっていたので、いっそのこと全部やめて新しくしようと思ったのが移行のきっかけです。</p>
+<h2>fish ってどんなシェル？</h2>
+<p><a href="https://fishshell.com/">fish</a>は Friendly interactive shell というシェルで、friendly さ（+親切さ）があるシェルです。
+何も設定を足していない標準の状態でも強力な設定がされているのが魅力の一つです。</p>
+<h3>補完がすごい</h3>
+<p>他のシェルだとプラグインの設定や関数をたくさん書いて設定していたような補完機能が標準で手に入りました。
+たとえばコマンド入力中にこれまでの実行履歴やその階層のファイル一覧を見て、予測変換を出してくれます。</p>
+<p><img src="./ctrlf.png" alt="予測変換" /></p>
+<p>このとき ctrl + f を押すことでその補完で入力でき、入力時間を大幅に短縮できます。</p>
+<p>もちろん既存のシェルにある tab で補完候補を出したり、切り替える機能もついています。
+これも fish では標準で tab 連打した時に候補にフォーカスを当てることができ、インタラクティブにファイルを選択することができます。</p>
+<p><img src="./interactive.png" alt="tab連打で候補からファイルを選択できる" /></p>
+<h3>FW っぽい振る舞いをする</h3>
+<p>設定ファイルの分割は標準機能として実現できます。
+また、そして補完用の設定やコマンド用の設定の分割も標準で行え、関数をコマンドとして定義していけます。
+このように設定ファイルの置き場によっていろんな設定が自動でされるので、FW 的な印象も持ちました。
+少し使い方を覚えるだけでたくさんの設定ができ、またピンポイントで挙動を制御したいときは script を書いて制御でき、FW が持つ生産性とプリミティブな仕組みが持つコントール性のバランスがよかったです。</p>
+<p>とくに functions は感動的で、fish は export や nvm が使えないみたいな問題も、function に export や nvm 関数を定義してコマンドとしてそれを使うみたいなことができたり（標準で設定済みだったり）して、よかったです。</p>
+<h2>fish の 導入</h2>
+<p>Homebrew から手に入れることができます。</p>
+<pre><code class="language-sh">brew install fish
+</code></pre>
+<p>インストール後 <code>fish</code> と打てば fish が立ち上がります。</p>
+<pre><code class="language-sh">&gt; fish
+Welcome to fish, the friendly interactive shell
+Type help for instructions on how to use fish
+you@hostname ~&gt;
+</code></pre>
+<p>毎回打ち直すのはめんどくさいと思うので、ログインシェルを変更するとよいでしょう。
+fish はデフォルトシェルではないのでそもそもの設定対象のリストに追加する作業から発生するのでちょっとめんどうです。
+ここでは fish 自体の設定について解説したいのでシェルの変更方法については解説しませんが、こちらの記事を参照してください。</p>
+<p>FYI: https://www.task-notes.com/entry/20150117/1421482066</p>
+<h3>設定ファイル</h3>
+<p>fish の設定は ~/.config/fish/ 配下で行います。
+zsh や bash のように HOME 配下に rc ファイルがあるわけではないので注意しましょう。
+ファイルの拡張子は .fish で ~/.config/fish/config.fish に設定ファイルをかけば設定ができます。</p>
+<p>FYI: https://fishshell.com/docs/current/tutorial.html#startup-where-s-bashrc</p>
+<p>ただしこのファイル以外の場所に設定を書いても設定を読み込め、その方が設定ファイルの分割をする上で有利なので後に紹介します。</p>
+<h3>plugin を使える</h3>
+<p>fish それ自体には plugin 機構はありませんが、<a href="https://fishshell.com/docs/current/tutorial.html#functions">functions</a> や <a href="https://fishshell.com/docs/current/index.html#where-to-put-completions">completions</a> を使って plugin manager として使える外部ツールがあります。
+ここでは plugin manager として使える <a href="https://github.com/jorgebucaran/fisher">fisher</a> を使います。</p>
+<p>plugin manager を名乗るツールは複数ありますが結局は fish の機能を呼び出しているだけのようでした。
+<a href="https://github.com/jorgebucaran/fisher#what-is-a-plugin">公式 Doc</a>や実行後の ~/.config/fish/ を読む限りは、functions や conf.d 配下に *.fish を置くことで設定を足しているようです。
+なので、仮に plugin manager を移行するとなってもそこまで影響なさそうだったので、特に理由やこだわりがあるわけでは無く比較的後発で人気がありそうな fisher を選択しました。</p>
+<h2>設定する時に知っておいた方が良いこと</h2>
+<h3>設定時は~/.config/fish/ を意識</h3>
+<p>fish ではいわゆる profile や rc がついたファイル名で設定のエントリポイントは読み取りません。
+エントリポイントとしては <a href="https://fishshell.com/docs/current/index.html#initialization-files">~/.config/fish/config.fish</a>になるとは思いますが、これを使わなくても後述するファイル分割に使うフォルダを使えばエントリポイントを作らなくても動かせます。</p>
+<p>functions, fisherfile, conf.d といった設定用のファイル・フォルダはこの直下に置かれます。</p>
+<h3>設定ファイルは分割できる</h3>
+<p>設定には alias に関するもの、環境変数に関するもの、util 関数に関するものといろいろ増えたり管理したくなるものです。
+そこで設定ファイルを分割したくなるわけですが、fish ではこれが簡単にできます。
+<strong>fish では~/.config/fish/conf.d/*.fish は全部設定ファイルとして読み込まれます</strong>(ただし ver2.3.0 以降)。
+そのため conf.d 配下に設定を分割していれておけば設定は簡単に分割できます。</p>
+<p>FYI: https://fishshell.com/docs/current/index.html#initialization-files</p>
+<p>FYI: https://stackoverflow.com/questions/48749443/fish-shell-import-config-into-main-config</p>
+<p>zsh/bash などでは</p>
+<pre><code class="language-sh:title=.bashrc">#!/bin/bash -eu
+
+bash_conf=~/.config/bash
+
+. $bash_conf/base.bash
+. $bash_conf/alias.bash
+. $bash_conf/jump.bash
+. $bash_conf/env.bash
+</code></pre>
+<p>や</p>
+<pre><code class="language-sh:title=.zshrc">function loadlib(){
+    lib=${1:?&quot;You have to specify a library file&quot;}
+    if [ -f &quot;$lib&quot; ];then #ファイルの存在を確認
+      . &quot;$lib&quot;
+    fi
+}
+
+loadlib ~/.zsh/load_prezto
+loadlib ~/.zsh/zsh_alias
+</code></pre>
+<p>などの工夫で設定を分割したりしていたものですが、それをやらなくていいのは嬉しかったです。</p>
+<h3>fisher は plugin をテキストファイルで管理できる</h3>
+<p>調べていると <code>fisher add</code> で設定を追加する記事をよく見ましたが、私はそれを使わずに <code>fishfile</code> に書いて管理しています。
+PC の移行を考え、どんなプラグインを使っているかを dotfiles と Git で管理したいからです。</p>
+<p>ただ dotfiles として管理しないのであれば、<code>fisher add</code> で直接プラグインを入れてもいいとは思います。
+仮に fishfile を使ってなくても、パッケージ管理用のコマンドで自分がどんなファイルを持っているか調べられるので、忘れてもリカバリは容易です。</p>
+<pre><code class="language-sh"># package一覧を取得
+fisher ls
+
+# packageを削除
+fisher rm XXX
+</code></pre>
+<p>こういった今風（っていいのか知らないけど）なパッケージマネージメントができるのは本当に嬉しいです。</p>
+<h2>既存環境を移せないデメリットはある</h2>
+<p>とまあ fish はとても良いのですが、もちろんデメリットもあります。
+実際のところ以前 fish に移行しようとしたときはこれらのデメリットを考えて採用しなかったことがありました。</p>
+<h3>nvm が悩みどころ</h3>
+<p>bash/zsh などで nvm を使っていると、</p>
+<pre><code class="language-sh">export NVM_DIR=&quot;$HOME/.nvm&quot;
+[ -s &quot;$NVM_DIR/nvm.sh&quot; ] &amp;&amp; \. &quot;$NVM_DIR/nvm.sh&quot;
+[ -s &quot;$NVM_DIR/bash_completion&quot; ] &amp;&amp; \. &quot;$NVM_DIR/bash_completion&quot;
+</code></pre>
+<p>のような設定を読み込む必要がありますが、この $HOME/.nvm/nvm.sh は fish では動きません。
+そのため fish では nvm を使うことができず、<a href="https://github.com/jorgebucaran/nvm.fish">fish-nvm</a> のような別のツールを使うか、<a href="https://github.com/edc/bass">bass</a> のようなツールで bash の設定を fish に読み込んで nvm コマンドを実行する必要があります。</p>
+<p>FYI: https://medium.com/@joshuacrass/nvm-on-mac-for-fish-users-e00af124c540</p>
+<p>不用意に依存や設定を複雑にしたくなかったので私はそもそも nvm をやめて、<a href="https://volta.sh/">volta</a>というツールに移行しました。</p>
+<h2>自分の設定</h2>
+<h3>alias 設定</h3>
+<p>alias, env, keybind として設定を分けています。</p>
+<pre><code class="language-sh:title=.config/fish/conf.d/alias.fish"># vim -&gt; nvim
+alias vim='nvim'
+
+# GitHubを表示
+alias hb=&quot;hub browse&quot;
+
+###
+### Git系
+###
+alias g='git'
+alias gb='git branch'
+alias gbc='git checkout -b'
+alias gc='git commit --verbose'
+alias gco='git checkout'
+alias gia='git add'
+alias gm='git merge'
+alias gp='git push'
+alias gfm='git pull'
+</code></pre>
+<p>Git のエイリアスは昔から使っていた prezto の Git モジュールのもののうち、よく使っていたものです。</p>
+<h3>plugin 設定</h3>
+<p>fishfile には</p>
+<pre><code class="language-sh:title=.config/fish/fishfile">rafaelrinaldi/pure
+oh-my-fish/plugin-peco
+</code></pre>
+<p>をセットしています。</p>
+<p>普段は VSCode での作業なのでシェルにそこまでの機能は求めておらず、これだけで間に合っています。</p>
+<h3>oh-my-fish/plugin-peco</h3>
+<p><a href="https://github.com/oh-my-fish/plugin-peco">plugin-peco</a> は peco を使ってコマンド履歴を interactive に filter をかけて辿れるツールです。</p>
+<p><img src="./peco.png" alt="pecoを使ってコマンド実行履歴を絞り込み" /></p>
+<p><a href="https://github.com/peco/peco">peco</a> は シングルバイナリな interactive filtering tool です。
+plugin-peco はこの peco を使ってコマンド履歴をフィルタリングする関数を提供します。
+そのため<strong>peco は別途自分でインストールしておく必要</strong>があります。</p>
+<pre><code class="language-sh">brew install peco
+</code></pre>
+<p>fish では key bind は fish_user_key_bindings 関数に書いていきます。
+plugin-peco によって peco_select_history が使えるようになっているので、この関数を呼び出すキーバインドを設定します。
+私は ctrl + r で履歴を絞り込めるようにここに peco_select_history を書いておきます。
+(bash/zsh だと このバインドで履歴を検索できたはずなので。)</p>
+<pre><code class="language-sh">function fish_user_key_bindings
+  bind \cr 'peco_select_history (commandline -b)'
+end
+</code></pre>
+<h3>rafaelrinaldi/pure</h3>
+<p><a href="https://github.com/oh-my-fish/oh-my-fish/blob/master/docs/Themes.md">Available themes</a>から好きなテーマを選んで fisher で入れることができます。</p>
+<ul>
+<li>2 行表示</li>
+<li>フォントのインストール不要</li>
+<li>Git ブランチが表示されて欲しい</li>
+</ul>
+<p>というのが好みなので、それで探していました。</p>
+<p>その結果いつも通り <a href="https://github.com/rafaelrinaldi/pure">pure</a> を使うことにしました。
+自分が尊敬している人が使っているものなので個人的な思い入れがあったりもします。</p>
+<h2>ソースコード</h2>
+<p>dotfiles そのものは訳があって公開できないのですが、fish 周りだけ切り出してレポジトリを作ったので興味ある方はご覧ください。</p>
+<p>FYI: https://github.com/sadnessOjisan/fishconfig</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

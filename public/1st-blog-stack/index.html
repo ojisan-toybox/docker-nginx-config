@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Gatsby + TypeScript で技術ブログを書くための知見</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Blog を作りました！！！！！会社を辞めて 5 ヶ月経とうとしており、ついに堕落しきった生活による危機感が生まれはじめました。">
+    <meta property="og:title" content="Gatsby + TypeScript で技術ブログを書くための知見">
+    <meta property="og:image" content="https://blog.ojisan.io//1st-blog-stack/visual.png">
+    <meta property="og:description" content="Blog を作りました！！！！！会社を辞めて 5 ヶ月経とうとしており、ついに堕落しきった生活による危機感が生まれはじめました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Gatsby + TypeScript で技術ブログを書くための知見">
+    <meta name="twitter:description" content="Blog を作りました！！！！！会社を辞めて 5 ヶ月経とうとしており、ついに堕落しきった生活による危機感が生まれはじめました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-06-10</time>
+      <h1>Gatsby + TypeScript で技術ブログを書くための知見</h1>
+    </div>
+    <div class="post-contents"><hr />
+<p>Blog を作りました！！！！！
+会社を辞めて 5 ヶ月経とうとしており、ついに堕落しきった生活による危機感が生まれはじめました。
+その危機感が結実したものがこの Blog です。</p>
+<p>で、Blog を作ってみたものの書く内容が特にないので、まずはこのブログをどうやって作ったかについて書きます。
+「こういう記法にちゃんと対応できてる？」を試す目的でもあります。</p>
+<h2>技術スタック</h2>
+<p>根幹になっているものは、</p>
+<ul>
+<li><a href="https://www.typescriptlang.org/">TypeScript</a></li>
+<li><a href="https://www.gatsbyjs.org/">Gatsby</a></li>
+</ul>
+<p>です。</p>
+<p>元々は <a href="https://github.com/mizchi/amdx">amdx</a> + <a href="https://nextjs.org/">NextJS</a>, もしくは完全自作 SSG を考えていたのですが、 <strong>ブログは完璧を目指しているといつまでも完成しない</strong> ということは知っているので、自分にとって自信があるツールとして Gatsby を選びました。</p>
+<p>しかし、ただ使うだけなのはチャレンジ性がなかったので、TypeScript を使ってみることにしました。
+昔の Gatsby には TypeScript サポートが充実していなかった(特に Page に型を付けるのが大変で、型注釈を書いて信じるしか無かった)のですが、いまは graphql-codegen を活用すればできそうでしたので挑戦しました。</p>
+<p>スタイリングは CSS Module を使っています。styled-components も考えたのですが、plugin があるとはいえ静的ビルド時のパフォーマンスに確証を持てないところがあったので、採用しませんでした。そもそも動的な状態によってスタイルが変わる場面があまりなかったので、CSS Module で十分と予想しました。CSS Module は Gatsby の Built in なので環境構築もいらないところも採用理由です。ソースコードのハイライトは <a href="https://prismjs.com/">prismjs</a> でやってます。</p>
+<h2>どのようにして作ったか</h2>
+<p>Gatsby + TypeScript で ブログを作るときに大事になりそうな箇所をかいつまんで解説します。
+Gatsby とはそもそもなんぞやという方は <a href="https://www.gatsbyjs.org/">公式サイト</a> を見ると良いでしょう。
+ドキュメントがとても親切に整備されています。（自分も驚きました・・・）</p>
+<h3>機能を考える</h3>
+<p>まず Blog の機能を考える上で、以下の 3 つの Blog を参考にしました。</p>
+<ul>
+<li><a href="https://mizchi.dev/">mizchi.dev</a>
+<ul>
+<li>mizchi さんは、技術文書をアウトプットする仕組みについて一番詳しい方だと思っているので、mizchi さんのやりかたに従うことから始めました。</li>
+</ul>
+</li>
+<li><a href="https://blog.uhy.ooo/">blog.uhy.ooo</a>
+<ul>
+<li>TS + Gatsby の組み合わせで作られていたので、TypeScript 採用で詰まったときのリファレンスとして参考にしていました。実際に TOC コンポーネントの設計や tsconfing の設定時に参考にしました。</li>
+</ul>
+</li>
+<li><a href="https://blog.jxck.io/">blog.jxck.io</a>
+<ul>
+<li>長く技術ブログを続けていらっしゃっており、ずっと読まれている方なので、このブログにある機能は揃えた方が良いだろうな考えました。</li>
+</ul>
+</li>
+</ul>
+<p>具体的には、Blog に付ける機能として、</p>
+<ul>
+<li>目次(ToC)機能
+<ul>
+<li>読みやすいように追従</li>
+<li>共有可能なリンクを作る</li>
+</ul>
+</li>
+<li>syntax hilight</li>
+<li>Github 連携
+<ul>
+<li>修正を PR で出せるような仕組み</li>
+<li>執筆履歴の生成(時間なくていまは諦めている)</li>
+</ul>
+</li>
+<li>全文検索(未実装)
+<ul>
+<li>Google のカスタム検索(1st scope)</li>
+<li>Algolia を使った全文検索(2nd scope)</li>
+</ul>
+</li>
+</ul>
+<p>などを考えました。</p>
+<p>デザインは、</p>
+<ul>
+<li><a href="https://amp.dev/documentation/templates/simple_blog/?format=websites">AMP templates</a>
+<ul>
+<li>最終的には AMP でブログを作りたいので、AMP Valid な CSS で実現できるデザインとして強く意識しました。</li>
+</ul>
+</li>
+<li><a href="https://medium.com/">Medium</a>
+<ul>
+<li>Blog としての体験が個人的に好きなため真似ました。とくに 画像を Blur で出す機能が好きです。（これは gatsby-image も提供しており、こちらはパフォーマンス上の利点もあります。)</li>
+</ul>
+</li>
+</ul>
+<p>を参考にしました。</p>
+<p>またこだわる点として、</p>
+<ul>
+<li>入稿は Markdown
+<ul>
+<li>今の実装やスタックがベストでないことは最初からわかっていたので、最初からこの Blog を移行する前提で作っています。文章のポータビリティを考えると、Markdown での入稿をできるようにしたしたいです。</li>
+</ul>
+</li>
+<li>剥がしやすいか
+<ul>
+<li>移行することが前提になっているので、再利用可能性や全体感の掴みやすさを意識しています。TypeScript の採用はその手段の一つでもあります。</li>
+</ul>
+</li>
+</ul>
+<p>を意識しました。</p>
+<h3>雛形を作る</h3>
+<p><code>gatsby new hoge</code> とすればアプリケーションを作れます。
+このときオプションを指定すれば TypeScript 対応の starter なども使えますが、私は使いませんでした。
+使わなくても今の Gatsby はデフォルトで TypeScript 対応されています。
+ただそのデフォルト機能では、十分な型推論を効かせられないので手作業する部分もあります。</p>
+<h3>TypeScript 対応する</h3>
+<p>これまでの Gatsby は TypeScript との相性が少し悪かったです。
+Gatsby はビルド時にファイルシステムや外部 Store にあるリソースを Source として手元に持ってきて、静的ビルドのプロセスに含めることができます。</p>
+<p>開発時に開発者と Gatsby のビルドシステム間では GraphQL を使って必要なデータを宣言できるのですが、これまではビルド時に使うデータと、UI に渡されるデータの間で型の連携を図ることができていませんでした。もちろん GraphQL の schema から 型定義を吐ける <a href="https://graphql-code-generator.com/">GraphQL Code Generator</a>を使えばできていたとは思うのですが、これを Gatsby と連携させる例は見ていなかったです。</p>
+<p>それが今では <a href="https://github.com/d4rekanguok/gatsby-typescript/tree/master/packages/gatsby-plugin-graphql-codegen">gatsby-plugin-graphql-codegen</a> としてお手軽に使えるようになりました。config に挿せば 自動で Pages の<code>props.data</code> や useStaticQuery の返り値の型をを得られます。積極的に使って行きましょう。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      resolve: &quot;gatsby-plugin-graphql-codegen&quot;,
+      options: {
+        fileName: `types/graphql-types.d.ts`,
+      },
+    },
+  ],
+}
+</code></pre>
+<pre><code class="language-javascript:title=layout.tsx">import * as React from &quot;react&quot;
+import { useStaticQuery, graphql } from &quot;gatsby&quot;
+import { SiteTitleQuery } from &quot;../../types/graphql-types&quot;
+
+const Layout: React.FC&lt;{ data: SiteTitleQuery }&gt; = ({ children }) =&gt; {
+  // ビルド時に SiteTitleQuery という型が生成される
+  const data = useStaticQuery(graphql`
+    query SiteTitle {
+      site {
+        siteMetadata {
+          title
+        }
+      }
+    }
+  `)
+
+  return (
+    &lt;&gt;
+      &lt;Header siteTitle={data.site.siteMetadata.title} /&gt;
+      ...
+    &lt;/&gt;
+  )
+}
+
+export default Layout
+</code></pre>
+<h3>画像の Blur Up 対応</h3>
+<p>Medium が一番分かりやすいと思うのですが、画像が「ぶわぁっ」って出るサイト見たことありませんか？</p>
+<p><img src="./blur.png" alt="Blurの例" /></p>
+<p>例)</p>
+<ul>
+<li>https://medium.com/workshop-me/traced-svg-images-for-excellent-ux-d75a6bb4caed</li>
+<li>https://using-gatsby-image.gatsbyjs.org/</li>
+</ul>
+<p>Gatsby が提供するライブラリの <a href="https://www.gatsbyjs.org/packages/gatsby-image/">gatsby-image</a> にもそれを実現する機能があり、しかもパフォーマンス面で有利になるため採用します。
+gatsby-image のそれは <strong>Traced SVG</strong> と呼ばれており、画像のロードがされるまではサイズが小さい SVG を表示させておき、それを本体の画像が load されたときに切り替えることで初回ロードを早められます。
+gatsby-image はその trace される SVG を Build 時に作ります。
+それが <a href="https://github.com/lovell/sharp">sharp</a> です。
+おそらく Gatsby を経験されたことは sharp という文字で「あぁ！あれ！」となったかもしれません。
+そうです、開発ビルドが急に落ちたときのエラーメッセージに書かれているアレです。</p>
+<p>gatsby-image は他にも様々な画像最適化機能を提供しており、たとえば</p>
+<ul>
+<li>サイズ・解像度を最適化</li>
+<li>デバイスサイズにあった画像を複数種類生成</li>
+<li>meta data の削除</li>
+<li>Traced SVG</li>
+</ul>
+<p>を行います。</p>
+<p>もちろん Traced SVG 以外の機能は人間が手運用で頑張れば解決できる問題ですが、この仕組みのおかげで Gatsby は大きい画像を不用意に利用しても最適な画像を吐き出してくれます。
+画像を扱うのなら入れておいた方が良いと私は考えており、この Blog でも画像を使っているので採用しています。
+（ただあまりにも記事が多くでビルド時間が長くなるなら採用しない方が良い場合もあります。）</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+    ...
+    `gatsby-transformer-sharp`,
+    `gatsby-plugin-sharp`,
+    ...
+  ],
+}
+</code></pre>
+<pre><code class="language-javascript:title=blogTemplate.tsx">import * as React from &quot;react&quot;
+import { graphql } from &quot;gatsby&quot;
+import Image from &quot;gatsby-image&quot;
+import { BlogTemplateQuery } from &quot;../../types/graphql-types&quot;
+
+interface IProps {
+  data: BlogTemplateQuery;
+}
+
+export default function Template({ data }: IProps) {
+  return (
+    &lt;Layout&gt;
+      &lt;&gt;
+        ...
+        {markdownRemark.frontmatter.visual?.childImageSharp?.fluid &amp;&amp; (
+          &lt;Image
+            fluid={markdownRemark.frontmatter.visual.childImageSharp.fluid}
+          /&gt;
+        )}
+        ...
+      &lt;/&gt;
+    &lt;/Layout&gt;
+  )
+}
+export const pageQuery = graphql`
+  query BlogTemplate($path: String!) {
+    markdownRemark(frontmatter: { path: { eq: $path } }) {
+      html
+      frontmatter {
+        visual {
+          childImageSharp {
+            fluid(maxWidth: 800) {
+              ...GatsbyImageSharpFluid
+            }
+          }
+        }
+      }
+    }
+  }
+`
+</code></pre>
+<h3>md 入稿できるようにする</h3>
+<p>入稿は Markdown で行います。
+Markdown processor である <a href="https://remark.js.org/">remark</a> を parser に持つ、 <a href="https://github.com/gatsbyjs/gatsby/tree/master/packages/gatsby-transformer-remark">gatsby-transformer-remark</a>を使います。
+このツールによって parse された Markdown は GraphQL によって html や hast として取り出せるようになります。</p>
+<p><img src="./query.png" alt="GraphiQL" /></p>
+<p>これを使うためには <code>gatsby-transformer-remark</code> の設定を gatsby-config.js に書けばいいのですが、私の <code>gatsby-transformer-remark</code> は plugin が盛り盛りでそう単純な話でもないです。
+<strong>※ Gatsby Plugin に Plugin を指していることに注意</strong></p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      resolve: `gatsby-transformer-remark`,
+      options: {
+        plugins: [
+          // NOTE: title を前におく必要あり
+          {
+            resolve: &quot;gatsby-remark-code-titles&quot;,
+            options: {},
+          },
+          {
+            resolve: `gatsby-remark-prismjs`,
+            options: {
+              classPrefix: &quot;language-&quot;,
+              inlineCodeMarker: null,
+              aliases: {},
+              showLineNumbers: true,
+              noInlineHighlight: false,
+              languageExtensions: [
+                {
+                  language: &quot;superscript&quot;,
+                  extend: &quot;javascript&quot;,
+                  definition: {
+                    superscript_types: /(SuperType)/,
+                  },
+                  insertBefore: {
+                    function: {
+                      superscript_keywords: /(superif|superelse)/,
+                    },
+                  },
+                },
+              ],
+              prompt: {
+                user: &quot;root&quot;,
+                host: &quot;localhost&quot;,
+                global: false,
+              },
+            },
+          },
+          `gatsby-remark-autolink-headers`,
+          {
+            resolve: `gatsby-remark-images`,
+            options: {
+              maxWidth: 590,
+            },
+          },
+        ],
+      },
+    },
+  ],
+}
+</code></pre>
+<p>これらプラグインについては以下で解説します。</p>
+<h4>Markdown 内の画像にも gatsby-image を適用させる</h4>
+<p>gatsby-transformer-remark に gatsby-remark-images を使えば gatsby-image の効果を Markdown 内の画像にも適用させられます。
+これまで gatsby-image を使う上で 指定していた GraphQL のクエリオプションの一部はこの config でセットできます。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      resolve: `gatsby-transformer-remark`,
+      options: {
+        plugins: [
+          ...
+          {
+            resolve: `gatsby-remark-images`,
+            options: {
+              maxWidth: 590,
+            },
+          },
+        ],
+      },
+    },
+  ],
+}
+</code></pre>
+<h4>目次とジャンプ機能</h4>
+<p>目次は少しこだわりました。
+構造化されている文章は読みやすい文章です。
+文章が読むのが苦手な私にとってはその文自体が良い文章だったとしても、全体の構造が見えないとなかなか文意が掴めなかったりします。
+そのため<strong>文の構成をいつでも確認できるインターフェース</strong>にしたいと思って色々と考えました。
+なので、PC では目次を sticky, Mobile では opener を hover させるなどの工夫をしています。</p>
+<p>目次自体は <a href="https://www.gatsbyjs.org/packages/gatsby-transformer-remark/">gatsby-transformer-remark</a>から生成可能です。
+取得可能な GraphQL Scheme が提供されています。</p>
+<p><img src="./toc.png" alt="目次" /></p>
+<p>また目次にジャンプ（リンク）機能も付けました。
+これは比較的長い文章をシェアされたときの使い勝手を向上させるためです。
+だれかに文章を共有したいときにその読んで欲しいところをマークできる機能でもあります。
+目次をクリックしたときに URL に#がついていると思います。
+この#を付ける機能も plugin で実現可能で、 gatsby-transformer-remark に <a href="https://www.gatsbyjs.org/packages/gatsby-remark-autolink-headers/">gatsby-remark-autolink-headers</a> を使います。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      resolve: `gatsby-transformer-remark`,
+      options: {
+        plugins: [
+          ...,
+          `gatsby-remark-autolink-headers`,
+          ...
+        ],
+      },
+    },
+  ],
+}
+</code></pre>
+<h2>がんばりポイント</h2>
+<p>作る上で時間を溶かした場所を解説します。</p>
+<h3>tsconfig の設定</h3>
+<p>デフォルトでの Gatsby は、 <a href="https://babeljs.io/docs/en/babel-plugin-transform-typescript">babel-plugin-transform-typescript</a> を利用して Transpile します。
+そのため 型検査はされないので、こちらで行う必要があります。
+つまり tsc でビルドしないため、tsconfig は型検査目的で書いていきます。</p>
+<p>私の設定はこれです。</p>
+<pre><code class="language-json:title=tsconfig.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;target&quot;: &quot;ESNext&quot;,
+    &quot;strict&quot;: true,
+    &quot;skipLibCheck&quot;: true,
+    &quot;forceConsistentCasingInFileNames&quot;: true,
+    &quot;jsx&quot;: &quot;preserve&quot;,
+    &quot;allowSyntheticDefaultImports&quot;: true,
+    &quot;moduleResolution&quot;: &quot;node&quot;
+  },
+  &quot;include&quot;: [&quot;src/**/*.ts&quot;, &quot;src/**/*.tsx&quot;]
+}
+</code></pre>
+<p>target に ESNext を指定している理由は、Gatsby それ自体の設定がそうなっているからで、この tsconfig で型検査に通ったソースコードは、Gatsby の中の Babel も解釈してくれるであろうと思っているからです。
+この設定次第で lib の default 値も変わってくるので、使っているライブラリによっては型検査に失敗します。
+型検査に影響しそうなものは全部公式の設定に揃えておこうと思い、公式とお揃いの ESNext にしました。</p>
+<p>jsx に preserve を指定しているのは Gatsby が Babel を使っているということは多段ビルドをするはずで、実際 Gatsby 自体の設定もそうなっていたので、揃えておこうかというくらいの気持ちです。
+ここは何に設定しても、型検査<strong>は</strong>動くと思います。</p>
+<p>skipLibCheck は true にしています。
+Library 側で型エラーがあったときにそこでなにか対応したり、型定義ファイルを継ぎ足すのがめんどくさいのでそうしています。
+これはどっちに設定するのが正解なのかイマイチわかっていないのですが、個人ブログだし厳密にやらなくてもいっかという気持ちで true にしました。</p>
+<p><strong>moduleResolution は &quot;node&quot; にしてください。</strong>
+そうしないとおそらく gatsby や gatsby-image などの import でエラーが出るはずです。
+target が ESNext だと、module のデフォルト設定が ES6 になり、moduleResolution のデフォルト設定が classic になります。gatsby は本体に型定義ファイルが含まれるので、clasic だと module を見つけることができません。
+TypeScript の module 解決の仕組みを完全に正しく説明しようとすると長くなるので、こちらを参照してください。</p>
+<ul>
+<li>https://www.typescriptlang.org/docs/handbook/module-resolution.html</li>
+<li>https://www.typescriptlang.org/docs/handbook/compiler-options.html</li>
+</ul>
+<h3>SEO 対策</h3>
+<p>GoogleAnalytics などの Tracking もそうなのですが、Gatsby の SEO や Marketing 対策の情報があまり出てこないので、すこし手間取りました。
+GA に関しては 色々書きたいことが多いので別の記事に切り出しますが、Search Console 周りについては書きます。
+クロール用にサイトマップや個別 URL を送信するために行うことです。</p>
+<h4>Sitemap</h4>
+<p><a href="https://www.gatsbyjs.org/packages/gatsby-plugin-sitemap/">gatsby-plugin-sitemap</a> でビルド時にサイトマップを生成できます。
+生成したらそれを Search Console から送信してください。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      resolve: `gatsby-plugin-sitemap`,
+      ...
+    },
+  ],
+}
+</code></pre>
+<h4>Robots.txt</h4>
+<p>Search Console でのカバレッジがもし悪ければ、robots.txt で改善できる可能性もあります。
+そのための robots.txt も Gatsby で生成できます。
+それは <a href="https://www.gatsbyjs.org/packages/gatsby-plugin-robots-txt/">gatsby-plugin-robots-txt</a> で生成できます。</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+  ...,
+    {
+      {
+        resolve: &quot;gatsby-plugin-robots-txt&quot;,
+        options: {
+          host: &quot;https://blog.ojisan.io&quot;,
+          sitemap: &quot;https://blog.ojisan.io/sitemap.xml&quot;,
+          env: {
+            development: {
+              policy: [{ userAgent: &quot;*&quot;, disallow: [&quot;/&quot;] }],
+            },
+            production: {
+              policy: [{ userAgent: &quot;*&quot;, allow: &quot;/&quot; }],
+            },
+          },
+        },
+      },
+      ...
+    },
+  ],
+}
+</code></pre>
+<p>Gatsby は元になる HTML を拡張する場所がないので既存の設定方法をどうしたらいいかで悩みがちですが、大抵のことは Plugin が行ってくれます。</p>
+<p>もしくは、gatsby-browser.js を使うのも手です。
+gatsby-browser.js は respond to actions within the browser, and wrap your site in additional components. とあり、Client Side での実行時に何かしらの hook を書けるファイルです。
+Next.js の _app.js みたいなものです。</p>
+<h3>prismjs の設定</h3>
+<p>ソースコードに syntax hilight を付ける機能です。
+Gatsby では plugin を入れる</p>
+<pre><code class="language-javascript:title=gatsby-config.js">module.exports = {
+  ...,
+  plugins: [
+    {
+      resolve: `gatsby-transformer-remark`,
+      options: {
+        plugins: [
+          ...,
+          {
+            resolve: `gatsby-remark-prismjs`,
+            options: {
+              classPrefix: &quot;language-&quot;,
+              inlineCodeMarker: null,
+              aliases: {},
+              showLineNumbers: true,
+              noInlineHighlight: false,
+              languageExtensions: [
+                {
+                  language: &quot;superscript&quot;,
+                  extend: &quot;javascript&quot;,
+                  definition: {
+                    superscript_types: /(SuperType)/,
+                  },
+                  insertBefore: {
+                    function: {
+                      superscript_keywords: /(superif|superelse)/,
+                    },
+                  },
+                },
+              ],
+              prompt: {
+                user: &quot;root&quot;,
+                host: &quot;localhost&quot;,
+                global: false,
+              },
+            },
+          },
+        ],
+      },
+    },
+  ],
+}
+</code></pre>
+<p>だけでは済まないという話を今からします。</p>
+<p>prismjs にはいくつかテーマがあるので、その CSS を import する必要があります。</p>
+<pre><code class="language-javascript:title=gatsby-browser.js">require(&quot;prismjs/themes/prism-coy.css&quot;)
+require(&quot;prismjs/plugins/line-numbers/prism-line-numbers.css&quot;)
+</code></pre>
+<p>僕は青色が好きなので coy を入れました。
+また、行数表示もしたいので、その行数用の CSS を入れます。
+しかしこの行数用の CSS は何か size がずれていたり、prism 自体が Mobile 対応されていないので、いくつかユーザー側で書き換える必要があります。
+そこでユーザー定義の CSS も作り、独自で読み込みます。</p>
+<pre><code class="language-javascript:title=gatsby-browser.js">require(&quot;prismjs/themes/prism-coy.css&quot;)
+require(&quot;prismjs/plugins/line-numbers/prism-line-numbers.css&quot;)
+require(&quot;./src/vendor/css/code.css&quot;)
+</code></pre>
+<p>私が足した CSS はこのようなものです。</p>
+<pre><code class="language-css:title=code.css">.gatsby-code-title {
+  color: #ffffff;
+  background: #368ccb;
+  font-size: 0.75rem;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;,
+    &quot;Courier New&quot;, monospace;
+  letter-spacing: 0.075em;
+  line-height: 1;
+  text-align: left;
+  border-radius: 4px 4px 0px 0px;
+  padding: 0.25rem 0.5rem;
+  display: inline-block;
+  margin-left: 1em;
+  margin-bottom: 0px !important;
+}
+
+.line-numbers-rows {
+  width: 3.6em !important;
+  background-color: white;
+}
+
+pre[class*=&quot;language-&quot;] {
+  margin: 0;
+}
+</code></pre>
+<p>無理やりスタイルを合わせるために <code>!importatnt</code> を使っています。（まあ個人ブログだしいっかというあきらめでそうしているだけです。推奨される行為ではない。）
+どのような CSS が良いかわかっておらず、最適なものを解説できる自信がないのでここでは触れませんが、このようにユーザー側で CSS を書き換えて頑張って対応しましょう。
+その読み取り口は gatsby-browser.js です。</p>
+<h3>Deploy</h3>
+<p>Netlify にデプロイしています。
+カスタムドメインも 1click, HTTPS 対応も 1click でとても楽でした。
+ただ CNAME 設定の時に www を付けるべきかという話で、どういう時に www を付けないといけないかがよくわかっておらず、この辺はあとで勉強しようとおもいます。
+まずは動けばいいということで一旦デプロイしています。</p>
+<p>FYI: https://www.netlify.com/blog/2017/02/28/to-www-or-not-www/</p>
+<h2>これからすること</h2>
+<h3>0 から作り直す</h3>
+<p>ほらーっやっぱりそんなことする！一生ブログが完成しないやつ！！😡😡😡😡</p>
+<p>頑張ったものの、 やってることは md を HTML に変換しているだけなので、「Gatsby 使う必要ないじゃん」っていうのが今のお気持ちです。
+もっと薄く作れるのではないかと思っています。</p>
+<p>ただ Gatsby を剥がそうと勉強すればするほど、その利便性に気付き、特に gatsby-image は強力で、やらかしがちなボトルネックを取り除いてくれるので、そこまでの実力がない自分にとっては G
+atsby が最速になるのかなと思っています。</p>
+<p><strong>Gatsby は 最適化がとても難しい <a href="https://www.gatsbyjs.org/blog/2017-09-13-why-is-gatsby-so-fast/">Compiler</a> だといういうのが自分の認識です。</strong></p>
+<h3>AMP 対応</h3>
+<p>可能な限りいろんなものに対応させたいので AMP 対応はやりたいです。
+~~AMP は無料で使える CDN なので~~、PWAMP(PWA + AMP)構成 で初回はエッジから返して、二回目からは Cache から返して爆速みたいなことをやりたいです。</p>
+<p>AMP 対応を考えると、Gatsby が吐く HTML は amp valid ではなく、一方で Next.js は <a href="https://github.com/ampproject/amp-toolbox/tree/master/packages/optimizer">AMP Optimizer</a> が使えるので乗り換え先としてみています。
+もちろん Amp Optimizer を埋め込んだ Gatsby Plugin を書くという手もあるのですが、これはかなり大変そうなので乗り気ではないです。</p>
+<h3>全文検索</h3>
+<p>Algolia でシャッと実装します。</p>
+<h2>おわりに</h2>
+<p>Blog を作ったところなので、これからはゲームばっかりせずに頑張って修行します！！！
+しばらくはこのブログを改善しつつ、就活用のアウトプット記事をたくさん書いて行きます。
+<a href="https://www.epicgames.com/store/ja/product/sid-meiers-civilization-vi/home">Civ6</a> も <a href="https://store.steampowered.com/app/427520/Factorio/?l=japanese">Factorio</a> もやりません！！！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

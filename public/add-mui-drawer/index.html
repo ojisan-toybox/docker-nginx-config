@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ブログにmaterial-uiのDrawerを入れた</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="ヘッダーにナビゲーションを付けたくて、SP 対応を考えた結果 Drawer をつけることにしました。">
+    <meta property="og:title" content="ブログにmaterial-uiのDrawerを入れた">
+    <meta property="og:image" content="https://blog.ojisan.io//add-mui-drawer/visual.png">
+    <meta property="og:description" content="ヘッダーにナビゲーションを付けたくて、SP 対応を考えた結果 Drawer をつけることにしました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ブログにmaterial-uiのDrawerを入れた">
+    <meta name="twitter:description" content="ヘッダーにナビゲーションを付けたくて、SP 対応を考えた結果 Drawer をつけることにしました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-02</time>
+      <h1>ブログにmaterial-uiのDrawerを入れた</h1>
+    </div>
+    <div class="post-contents"><p>ヘッダーにナビゲーションを付けたくて、SP 対応を考えた結果 Drawer をつけることにしました。
+ただアニメーションとか考えるのめんどくさかったのでコンポーネントライブラリを入れることにしました。</p>
+<p><img src="header.png" alt="ヘッダーからドロワーを開いた" /></p>
+<h2>なぜいま material-ui</h2>
+<p><a href="https://material-ui.com/">material-ui</a>, この言葉に「えっ、それ採用する？」と思われる方もいると思います。
+燃えたくないので material-ui のデメリットについてはここでは言及しませんが、正しく使う限りにおいては自分では何も問題ないと思っています。</p>
+<p>採用の決め手はグローバルな CSS を読み込まなくていいので剥がしたい時に剥がせる点です。
+正しく import すればバンドルサイズを増やさないのも嬉しい点です。</p>
+<p>公式に<a href="https://material-ui.com/guides/minimizing-bundle-size/">Minimizing Bundle Size</a>というページがあるのですが、</p>
+<ul>
+<li>path imports すること</li>
+<li>2 階層目までの import にすること(2 階層目までで済むように export してくれている(はず))</li>
+</ul>
+<p>に注意すれば開発モード時のビルド時間も気にしなくていいと思っています。
+(prduction build しないと treeshaking されないことへの回避)</p>
+<p>パフォーマンスの劣化は気にしていたポイントですが、実際には劣化が起きていなさそうなので採用しました。</p>
+<p>FYI: <a href="https://github.com/sadnessOjisan/blog.ojisan.io/pull/50">計測したときの PR</a></p>
+<p>もしパフォーマンスが悪くなったりした時は部分的にそのコンポーネントを剥がすといった対処をしていこうと思います。
+全て material-ui に乗らなくても採用できるのは、material-ui の良いところですね。</p>
+<h2>Drawer を使う</h2>
+<p>ヘッダーからサイドバーを出す UI は、Drawer というコンポーネントで対応できます。</p>
+<pre><code class="language-sh">$ yarn add yarn add @material-ui/core
+</code></pre>
+<p>これで、</p>
+<pre><code class="language-tsx">import * as React from &quot;react&quot;
+import { useStaticQuery, graphql } from &quot;gatsby&quot;
+import Drawer from &quot;@material-ui/core/Drawer&quot;
+import styles from &quot;./layout.module.css&quot;
+import DrawerContents from &quot;./drawer-contents&quot;
+e: () =&gt; {},
+})
+
+const Layout: React.FC = ({ children }) =&gt; {
+  const [isOpenDrawer, setDrawerState] = React.useState(false)
+
+  return (
+    &lt;Drawer
+      anchor=&quot;right&quot;
+      open={isOpenDrawer}
+      onClose={() =&gt; {
+        setDrawerState(false)
+      }}
+    &gt;
+      &lt;DrawerContents&gt;&lt;/DrawerContents&gt;
+    &lt;/Drawer&gt;
+  )
+}
+
+export default Layout
+</code></pre>
+<p>として呼び出せます。</p>
+<p>どのページからも呼び出せるように共通レイアウトファイルに記述しました。
+<code>anchor</code> で出す方向、<code>open</code>で開閉、<code>onClose</code>で close 呼び出しの処理を書きます。
+この onClose は背景クリックでも消せるものです。</p>
+<p>開閉のフラグ切り替えはヘッダーなどの他の場所からも呼び出したいので、そのハンドラは Context で配信します。</p>
+<p>それを全てやったコードがこちらです。</p>
+<pre><code class="language-tsx:title=components/layout.tsx">import * as React from &quot;react&quot;
+import { useStaticQuery, graphql } from &quot;gatsby&quot;
+import Drawer from &quot;@material-ui/core/Drawer&quot;
+import Header from &quot;./header&quot;
+import Footer from &quot;./footer&quot;
+import styles from &quot;./layout.module.css&quot;
+import DrawerContents from &quot;./drawer-contents&quot;
+
+export const DrawerContext = React.createContext&lt;{
+  setDrawerState: React.Dispatch&lt;React.SetStateAction&lt;boolean&gt;&gt;
+}&gt;({
+  setDrawerState: () =&gt; {},
+})
+
+const Layout: React.FC = ({ children }) =&gt; {
+  const [isOpenDrawer, setDrawerState] = React.useState(false)
+  const data = useStaticQuery(graphql`
+    query SiteTitle {
+      site {
+        siteMetadata {
+          title
+        }
+      }
+    }
+  `)
+
+  return (
+    &lt;DrawerContext.Provider value={{ setDrawerState }}&gt;
+      &lt;Header siteTitle={data.site.siteMetadata.title} /&gt;
+      &lt;div&gt;
+        &lt;main className={styles.body}&gt;{children}&lt;/main&gt;
+        &lt;Footer&gt;&lt;/Footer&gt;
+        &lt;Drawer
+          anchor=&quot;right&quot;
+          open={isOpenDrawer}
+          onClose={() =&gt; {
+            setDrawerState(false)
+          }}
+        &gt;
+          &lt;DrawerContents&gt;&lt;/DrawerContents&gt;
+        &lt;/Drawer&gt;
+      &lt;/div&gt;
+    &lt;/DrawerContext.Provider&gt;
+  )
+}
+
+export default Layout
+</code></pre>
+<pre><code class="language-tsx:title=components/header.tsx">import * as React from &quot;react&quot;
+import { Link } from &quot;gatsby&quot;
+import styles from &quot;./header.module.css&quot;
+import { DrawerContext } from &quot;./layout&quot;
+import { IconButton } from &quot;@material-ui/core&quot;
+import MenuIcon from &quot;@material-ui/icons/Menu&quot;
+import GitHubIcon from &quot;@material-ui/icons/GitHub&quot;
+import RssFeedIcon from &quot;@material-ui/icons/RssFeed&quot;
+
+interface IProps {
+  siteTitle: string
+}
+
+const Header: React.FC&lt;IProps&gt; = ({ siteTitle }) =&gt; {
+  const drawerContext = React.useContext(DrawerContext)
+  return (
+    &lt;header className={styles.header}&gt;
+      &lt;h1 className={styles.title}&gt;
+        &lt;Link to=&quot;/&quot;&gt;blog.ojisan.io&lt;/Link&gt;
+      &lt;/h1&gt;
+      &lt;div&gt;
+        &lt;a href=&quot;/rss.xml&quot; aria-label=&quot;rssへのリンク&quot;&gt;
+          &lt;IconButton aria-label=&quot;rssアイコン&quot; color=&quot;default&quot;&gt;
+            &lt;RssFeedIcon /&gt;
+          &lt;/IconButton&gt;
+        &lt;/a&gt;
+        &lt;a
+          href=&quot;https://github.com/sadnessOjisan/blog.ojisan.io&quot;
+          aria-label=&quot;githubへのリンク&quot;
+        &gt;
+          &lt;IconButton aria-label=&quot;githubアイコン&quot; color=&quot;default&quot;&gt;
+            &lt;GitHubIcon /&gt;
+          &lt;/IconButton&gt;
+        &lt;/a&gt;
+        &lt;IconButton
+          aria-label=&quot;delete&quot;
+          color=&quot;default&quot;
+          onClick={() =&gt; {
+            drawerContext.setDrawerState(true)
+          }}
+        &gt;
+          &lt;MenuIcon /&gt;
+        &lt;/IconButton&gt;
+      &lt;/div&gt;
+    &lt;/header&gt;
+  )
+}
+
+export default Header
+</code></pre>
+<p>このヘッダで使うアイコンは material-icons を使っています。</p>
+<pre><code class="language-sh">$ yarn add yarn add @material-ui/icons
+</code></pre>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

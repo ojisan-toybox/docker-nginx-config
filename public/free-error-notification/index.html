@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>Vercelで無料のError通知サーバーを作ったら便利だった</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="お久しぶりです。BRAVELY DEFAULT II やったりモンハンに忙しくてブログの存在を忘れてました。">
+    <meta property="og:title" content="Vercelで無料のError通知サーバーを作ったら便利だった">
+    <meta property="og:image" content="https://blog.ojisan.io//free-error-notification/visual.png">
+    <meta property="og:description" content="お久しぶりです。BRAVELY DEFAULT II やったりモンハンに忙しくてブログの存在を忘れてました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="Vercelで無料のError通知サーバーを作ったら便利だった">
+    <meta name="twitter:description" content="お久しぶりです。BRAVELY DEFAULT II やったりモンハンに忙しくてブログの存在を忘れてました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-04-07</time>
+      <h1>Vercelで無料のError通知サーバーを作ったら便利だった</h1>
+    </div>
+    <div class="post-contents"><p>お久しぶりです。
+BRAVELY DEFAULT II やったりモンハンに忙しくてブログの存在を忘れてました。</p>
+<p>最近、個人開発やゆるふわな開発をする時に使えるエラー通知システムが欲しくて自作しました。</p>
+<p>欲しかった要件としては、</p>
+<ul>
+<li>無料</li>
+<li>Slack に通知できる</li>
+<li>Web API ベース</li>
+</ul>
+<p>といったものです。</p>
+<p>その方法として、Vercel にエンドポイントを生やしてそれを Slack 連携しました。
+この方式のいいところは、Vercel は GitHub のレポジトリを指定してプロジェクトを作れる点で、管理画面でレポジトリの URL を打つだけで通知サーバーを建てられる点です。</p>
+<p><img src="import.png" alt="Vercelの3rd party import の設定画面" /></p>
+<p>そのため、皆さんも Vercel の管理画面からこのレポジトリを指定すれば同様の仕組みを作れます。</p>
+<p>これがそのレポジトリです。</p>
+<p>https://github.com/sadnessOjisan/datacat</p>
+<p>DataDog ぽい名前で良いですね。datacat はただ Data を cat しているだけです。</p>
+<h2>要素技術</h2>
+<h3>Vercel</h3>
+<p>Vercel は FrontEnd 開発における無料のホスティングサービスとして使われがちですが、ただの Serverless Function を実行する口としても活用できます。
+TypeScript の最小構成で API 生やす方法を以前書いたので、よければご覧ください。</p>
+<p><a href="https://dev.to/sadnessojisan/simple-server-with-vercel-and-typescript-481b">Let's create simple echo server with Vercel and TypeScript</a></p>
+<h3>Slack</h3>
+<p>Slack は管理画面から Webhook URL を発行でき、特定のスペースの特定のチャンネルに、POST 経由でメッセージを送ることができます。
+そのエンドポイントを Vercel から叩けば通知サービスを実装できます。</p>
+<h2>使い方</h2>
+<p>詳しくは <a href="https://github.com/sadnessOjisan/datacat">こちら</a> にまとめてありますので概略だけ解説します。</p>
+<p>Slack の 管理画面から Webhook url を取得</p>
+<p>Vercel にレポジトリを登録</p>
+<p>Webhook url を環境変数にする</p>
+<p>エンドポイントにメッセージを送る</p>
+<p>たとえば、</p>
+<pre><code class="language-ts">axios
+  .post(&quot;http://datacat-demo.vercel.app/api/report-dev-error&quot;, {
+    message: &quot;Hello from vercel!!&quot;,
+  })
+  .then(() =&gt; res.status(204))
+  .catch(() =&gt; res.status(500).send(&quot;slack api error&quot;))
+</code></pre>
+<p>のようにして使えます。</p>
+<h2>おわりに</h2>
+<p>ランタイムでのエラー通知をできるだけでなく、mobile 端末での実機デバッグにおいてもエラーログを覗き見れるので便利です。
+雑に使えるエラー報告ツールを持っておくと開発の補助にも使えるのでオススメです。
+よければ Vercel に読み込んで使ってみてください。</p>
+<p>https://github.com/sadnessOjisan/datacat</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

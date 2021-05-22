@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>custom hookの返り値は配列であるべきか</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="つい先日、知人とペアプロしているときに custom hooks の戻り値は配列かオブジェクトかで意見が分かれたことがあって、結局何が正しいのかを調べてみました。">
+    <meta property="og:title" content="custom hookの返り値は配列であるべきか">
+    <meta property="og:image" content="https://blog.ojisan.io//why-hooks-need-array/visual.png">
+    <meta property="og:description" content="つい先日、知人とペアプロしているときに custom hooks の戻り値は配列かオブジェクトかで意見が分かれたことがあって、結局何が正しいのかを調べてみました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="custom hookの返り値は配列であるべきか">
+    <meta name="twitter:description" content="つい先日、知人とペアプロしているときに custom hooks の戻り値は配列かオブジェクトかで意見が分かれたことがあって、結局何が正しいのかを調べてみました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-12-09</time>
+      <h1>custom hookの返り値は配列であるべきか</h1>
+    </div>
+    <div class="post-contents"><p>つい先日、知人とペアプロしているときに custom hooks の戻り値は配列かオブジェクトかで意見が分かれたことがあって、結局何が正しいのかを調べてみました。</p>
+<h2>結論</h2>
+<p>どっちでもいい。</p>
+<h2>hooks は何でも返せる</h2>
+<p>返り値を持つ hooks の返り値は配列であることをよく見ます。</p>
+<pre><code class="language-tsx">export default () =&gt; {
+  const [state, setState] = useState()
+  const [store, dispatch] = useReducer(reducer, initalState)
+  return &lt;div&gt;ほげ&lt;/div&gt;
+}
+</code></pre>
+<p>これを、</p>
+<pre><code class="language-tsx">export default () =&gt; {
+  const { state, setState } = useState()
+  const { store, dispatch } = useReducer(reducer, initalState)
+  return &lt;div&gt;ほげ&lt;/div&gt;
+}
+</code></pre>
+<p>と返さない理由って何でしょうか。
+実際のところ、配列で返さない hooks ライブラリも存在します。</p>
+<pre><code class="language-tsx">export default () =&gt; {
+  const value = useContext(MyContext)
+  const { loading, error, data } = useQuery(
+    gql`
+      query GetGreeting($language: String!) {
+        greeting(language: $language) {
+          message
+        }
+      }
+    `,
+    {
+      variables: { language: &quot;english&quot; },
+    }
+  )
+  const { data, error } = useSWR&lt;User, Error&gt;(`/users/${id}`, () =&gt;
+    fetchUser(id)
+  )
+
+  return &lt;div&gt;ほげ&lt;/div&gt;
+}
+</code></pre>
+<p>hooks の返り値は何でもいいのですが、なぜわざわざ配列で返すような API が存在しているのでしょうか。
+特に配列で返すとオブジェクトで返す場合と比べて取り出しの自由度は下がりそうです。</p>
+<h2>名前を自由に付けれる</h2>
+<p>その理由は、配列で返しておけば受け取る時に名前を自由に付けられるからです。
+たとえば、</p>
+<pre><code class="language-tsx">export default () =&gt; {
+  const [state, setState] = useState()
+  const [store, dispatch] = useReducer(reducer, initalState)
+  return &lt;div&gt;ほげ&lt;/div&gt;
+}
+</code></pre>
+<p>は、</p>
+<pre><code class="language-tsx">export default () =&gt; {
+  const [user, setUser] = useState()
+  const [posts, postDispatch] = useReducer(reducer, initalState)
+  return &lt;div&gt;ほげ&lt;/div&gt;
+}
+</code></pre>
+<p>などとして、そのコンポーネントを使う文脈に合わせた名前を割り当てられます。
+もしこれがオブジェクトとして返っていると、hooks の呼び出し後に名前を付け直す必要があります。
+そのため <strong>custom hooks の開発者はその hooks が汎用的に使われ文脈にそった名前を与えられる使われ方をするか</strong>どうかを考えて、オブジェクトで返すか配列で返すかをすれば良いです。</p>
+<p>swr, applo, react-query などはデータ取得の hooks で基盤のような動きをし、それをラップした別の hooks から呼ばれることが多くそのときに別の名前が割り当てられるのでオブジェクトで返す API であっても良いのかなと個人的に解釈しています。(View から呼ぶ hooks は文脈に即した名前で返ってくるため)</p>
+<h2>配列で返して不都合？</h2>
+<p>たとえばなんらかの custom hooks を</p>
+<pre><code class="language-tsx">export const useHoge = () =&gt; {
+  // something
+  return [loading, data, error, refetch]
+}
+</code></pre>
+<p>のように返したとして、呼び出し側が data だけ欲しい場合などはどうすればいいでしょうか。
+配列で返すとオブジェクトのように key で自由に取り出しができず、また index でのアクセスは range error などを想定すると使いたくない選択肢です。</p>
+<h3>destructuring と placeholder を活用しよう</h3>
+<p>配列はラベルでアクセスできませんが、_などの placeholder を用意してピンポイントで必要な要素を取り出せます。</p>
+<pre><code class="language-ts">const getVal = () =&gt; [1, 2, 3, 4]
+
+const [_, second] = getVal()
+</code></pre>
+<pre><code class="language-sh">&gt; second
+2
+</code></pre>
+<p>(追記)</p>
+<p><code>_</code> を使わなくても、</p>
+<pre><code class="language-ts">const getVal = () =&gt; [1, 2, 3, 4]
+
+const [, second] = getVal()
+</code></pre>
+<p>とすれば取得できます。</p>
+<p><code>_</code> を使うと複数定義できないのであまり良い方法ではなさそうです。</p>
+<h2>結論</h2>
+<p>hooks 関数から戻り値を配列で返すと、 hooks の呼び出し時に束縛する変数名を自由に変えられ、可読性を上げられる。</p>
+<h2>参考にしたもの</h2>
+<ul>
+<li>https://dev.to/theianjones/should-hooks-always-return-an-array--21np</li>
+</ul>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

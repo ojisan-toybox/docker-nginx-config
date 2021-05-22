@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>My COVID っていうクソアプリの作り方</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="クソアプリ Advent Calendar 2020 の 5 日目に 俺の恋人 ~my covid~ という記事を書きました。">
+    <meta property="og:title" content="My COVID っていうクソアプリの作り方">
+    <meta property="og:image" content="https://blog.ojisan.io//my-covid/visual.png">
+    <meta property="og:description" content="クソアプリ Advent Calendar 2020 の 5 日目に 俺の恋人 ~my covid~ という記事を書きました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="My COVID っていうクソアプリの作り方">
+    <meta name="twitter:description" content="クソアプリ Advent Calendar 2020 の 5 日目に 俺の恋人 ~my covid~ という記事を書きました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-12-14</time>
+      <h1>My COVID っていうクソアプリの作り方</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://qiita.com/advent-calendar/2020/kuso-app">クソアプリ Advent Calendar 2020</a> の 5 日目に <a href="https://qiita.com/sadnessOjisan/items/45d2c3e6e3f5a38a7f0b">俺の恋人 ~my covid~</a> という記事を書きました。</p>
+<p><a href="https://my-covid.web.app/">こちら</a>がその糞アプリです。</p>
+<p><img src="kusotop.png" alt="トップページ" /></p>
+<p><a href="https://my-covid.web.app/">https://my-covid.web.app/</a></p>
+<p>これは、自粛の影響で恋人と過ごせない鬱憤を、理想の COVID と過ごすことで気を紛らわせることができるアプリです。(※1)
+右側にあるエディタから画像を選んで、コロナウイルス上に配置していって自分のオリジナルコロナを作り、それを画像として保存・シェアできます。
+ちなみに「恋人」と「COVID」をかけあわせたネーミングです。ふふっ</p>
+<p>(※1: 恋人と過ごせない理由は COVID のせいなのかどうかは諸説あり)</p>
+<h2>クソアプリ Advent Calendar について</h2>
+<p>クソアプリ Advent Calendar は今年で 5 回目の開催で、私は今回を含めて過去 3 回参加しました。</p>
+<ul>
+<li><a href="https://qiita.com/sadnessOjisan/items/45d2c3e6e3f5a38a7f0b">俺の恋人 ~my covid~</a></li>
+<li><a href="https://qiita.com/sadnessOjisan/items/98619eaaef1da8d6545a">ビルド時に俳句を読めるプラグイン</a></li>
+<li><a href="https://qiita.com/sadnessOjisan/items/51bb949466fdd065a5a6">Marquee タグに詳しくないと攻略できないブロック崩しゲーム</a></li>
+</ul>
+<p>お察しの通り、こういう技術的にも内容的にも ●● な記事を書いても許されるカレンダーで僕はとても好きです。</p>
+<p>ただ今年の記事は技術的にも実装の中身的にも例年以上の本当に ●● な内容なので、記事内でコードの公開や実装方法は紹介していなかったのですが、思いのほか気になるという意見をいただきましたので紹介したいと思います。</p>
+<p>ソースコードは<a href="https://github.com/sadnessOjisan/my-covid">こちら</a>です。
+せっかく公開しましたので、もしお手隙でしたら適宜面白い素材画像を追加してくれると助かります。</p>
+<h2>作り方</h2>
+<p>やっていることは本当にシンプルで <a href="https://konvajs.org/">Konva.js</a> を Firebase に載せただけです。
+そのため技術的に学びになるようなことは少ないとは思いますが、労力を削るためにいろいろ誤魔化しているのでそういう削り方みたいなのは参考になるかもしれません。
+また konva にあるサンプルを切りはりしただけなのですが、Konva で一貫して何かを作った例というのもないような気がするので、これから Konva を触る人の助けにはなるのかもしれません。</p>
+<h3>画像のエディタの作り方</h3>
+<h4>初期化周り</h4>
+<p>konva では stage, layer, object が登場します。</p>
+<p>stage に layer を重ねていき、その layer に画像などのオブジェクトを重ねていきます。
+階層が分かれているのでそれぞれで検索をかけたり、移動をさせることができます。</p>
+<pre><code class="language-ts">const stage = new Konva.Stage({
+  container: &quot;container&quot;,
+  width: width,
+  height: height,
+  drawBorder: true,
+})
+const layer = new Konva.Layer()
+</code></pre>
+<p>そしてここではエディタの操作による状態管理をいわゆる super-tenuki global variables で行うので、あらかじめ宣言しておきます。</p>
+<pre><code class="language-ts">const images: KonvaImage[] = []
+const selectedImages: Transformer[] = []
+</code></pre>
+<p>selectedImages は image に対応する操作オブジェクトの配列として操作します。
+ここでは操作できる画像は 1 枚だけという制約(複数操作できない)を加えて実装をシンプルにしています。</p>
+<h4>画像の追加とドラッグアンドドロップ</h4>
+<p>画像はたくさん出てくるので画像を Konva に登録し、その画像に操作オブジェクト(Transformer)を紐づける処理を関数化しておきます。
+この Transformer はドラックアンドドロップを可能にしバウンディングボックスを表示してくれる Konva の組み込みの機能です。
+便利。</p>
+<pre><code class="language-ts">function drawImage(imageObj: HTMLImageElement) {
+  const id = Math.random().toString(32).substring(2)
+  const loadedImage: KonvaImage = new Konva.Image({
+    image: imageObj,
+    x: stage.width() / 2 - 200 / 2,
+    y: stage.height() / 2 - 137 / 2,
+    width: 200,
+    height: 137,
+    draggable: true,
+    name: id,
+  })
+
+  // add cursor styling
+  loadedImage.on(&quot;mouseover&quot;, function () {
+    document.body.style.cursor = &quot;pointer&quot;
+  })
+  loadedImage.on(&quot;mouseout&quot;, function () {
+    document.body.style.cursor = &quot;default&quot;
+  })
+  loadedImage.on(&quot;click&quot;, () =&gt; {
+    const tr = new Konva.Transformer({
+      nodes: [loadedImage],
+      name: id,
+    })
+    // クリックされたものだけを選択状態にする
+    const oldImage = selectedImages.shift()
+    if (oldImage) {
+      oldImage.destroy()
+    }
+    selectedImages.push(tr)
+    layer.draw()
+    layer.add(tr)
+  })
+
+  layer.add(loadedImage)
+  stage.add(layer)
+  images.push(loadedImage)
+}
+</code></pre>
+<h4>レイヤを内での検索</h4>
+<p>KonvaJS では画像オブジェクトと Transformer(操作オブジェクト)は別のものとして扱われます。
+そのためどの画像がどの Transformer に紐づくかという紐付けをしなければいけません。
+そのため同じ name をそれぞれに持たせて、その name をオブジェクトがマウントされている layer 内から検索して削除や移動などの処理を加えていました。</p>
+<p>そうすることで画像を削除された時に Transformer も削除することができます。</p>
+<pre><code class="language-ts">window.del = function del(): void {
+  const selectedImage = selectedImages[0]
+  if (!selectedImage) {
+    alert(&quot;画像を選択してください。&quot;)
+    return
+  }
+  const name = selectedImage.name()
+  selectedImage.destroy()
+  const shapes = stage.find(`.${name}`)
+  shapes.each(shape =&gt; {
+    shape.destroy()
+  })
+  images.shift()
+  layer.draw()
+}
+</code></pre>
+<h4>レイヤの再描画を忘れるな。</h4>
+<p>そして削除や追加をしたら layer を更新しましょう。</p>
+<pre><code class="language-ts">layer.draw()
+</code></pre>
+<p>オブジェクトを layer から追加・削除しただけでは画面は反映されません。
+これを忘れていてめちゃくちゃ時間を溶かしました。
+なので正直なところ konva-react みたいなラッパを使った方が良いと思います。</p>
+<h3>デプロイ周りの工夫</h3>
+<p>Firebase Hosting にデプロイするのでビルトインコードを使えてライブラリのインストールやライブラリの初期化周りの手順を省けました。
+実際それを狙って Firebase Hosting にデプロイしました。</p>
+<p>しかし、そのせいでローカルでの疎通や開発環境・本番環境を跨いだデプロイ周りがめんどくさくなりました。
+環境を跨がせるのは firebase.json や デプロイコマンドのオプションで出しわけれますが、この辺りは正直慣れてなくて詰まりました。
+なので途中から開発環境を捨てて、全部本番環境に繋ぐようにしました。
+糞アプリにデプロイフローも糞もねぇ。</p>
+<p>ちなみに <a href="https://github.com/sadnessOjisan/my-covid/blob/main/.github/workflows/dev.yml#L36">Firebase Hosting は GHA からもデプロイできて</a>、その場合も引数を渡せるので、デプロイ先の分離自体は可能で自分もやっていました。
+ただサイト名とプロジェクト名が紐づいてしまったり(そのせいで my-covid-prd.app みたいな URL になったり)、その site name やアプリを Firebase 上から消しても勝手に復活したり謎挙動を踏んだので途中で諦めました。</p>
+<h4>途中で TypeScript やライブラリを使うのを辞めた</h4>
+<p>シェアページを作ろうとしたときに webpack を複数のエントリポイントを持たせないといけないようにしたり、出力を分けないといけないようにしないといけないことに気付き、そもそも webpack を使うのを辞めました。
+直接 HTML の中に JS を書きました。
+知ってましたか？JavaScript って HTML の中に直接書けるんですよ。
+超便利！</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;ja&quot;&gt;
+  &lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot; /&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot; /&gt;
+    &lt;script src=&quot;/__/firebase/8.1.1/firebase-app.js&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;/__/firebase/8.1.1/firebase-analytics.js&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;/__/firebase/8.1.1/firebase-firestore.js&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;/__/firebase/init.js&quot;&gt;&lt;/script&gt;
+    &lt;title&gt;my covid&lt;/title&gt;
+    &lt;meta property=&quot;og:title&quot; content=&quot;my covid&quot; /&gt;
+    &lt;meta
+      property=&quot;og:description&quot;
+      content=&quot;自分でパーツを選んで自分だけのコロナウイルスを作ろう！&quot;
+    /&gt;
+    &lt;meta property=&quot;og:url&quot; content=&quot;https://my-covid.web.app/&quot; /&gt;
+    &lt;meta name=&quot;twitter:card&quot; content=&quot;summary_large_image&quot; /&gt;
+    &lt;style&gt;
+      h1 {
+        text-align: center;
+      }
+
+      /* ... */
+    &lt;/style&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Your COVID&lt;/h1&gt;
+    &lt;div class=&quot;wrapper&quot;&gt;
+      &lt;p class=&quot;title&quot; id=&quot;documentTitle&quot;&gt;&lt;/p&gt;
+      &lt;img class=&quot;covid-image&quot; id=&quot;covidImage&quot; /&gt;
+      &lt;a href=&quot;/&quot;&gt;&lt;button class=&quot;orange&quot;&gt;戻る&lt;/button&gt;&lt;/a&gt;
+      &lt;a
+        href=&quot;https://twitter.com/intent/tweet?text=my covidを作ったよ&quot;
+        id=&quot;tweetLink&quot;
+        &gt;&lt;button class=&quot;blue&quot;&gt;tweetする&lt;/button&gt;&lt;/a
+      &gt;
+    &lt;/div&gt;
+    &lt;script&gt;
+      const id = window.location.search
+        .split(&quot;?id&quot;)[1]
+        .split(&quot;&amp;&quot;)[0]
+        .split(&quot;=&quot;)[1]
+      console.log(id)
+      if (!id) {
+        alert(&quot;idを指定してください。&quot;)
+      }
+      const db = firebase.firestore()
+      db.collection(&quot;images&quot;)
+        .doc(id)
+        .get()
+        .then(function (doc) {
+          const { title, data } = doc.data()
+          const titleEl = document.getElementById(&quot;documentTitle&quot;)
+          titleEl.textContent = title
+
+          const imageEl = document.getElementById(&quot;covidImage&quot;)
+          imageEl.src = data
+
+          document.getElementById(
+            &quot;tweetLink&quot;
+          ).href = `https://twitter.com/intent/tweet?text=${window.location.href}`
+        })
+        .catch(function (error) {
+          console.log(&quot;Error getting cached document:&quot;, error)
+        })
+    &lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<h4>Firestore に直接画像を保存する</h4>
+<p>Cloud Storage の準備をしていましたが、「Firestore を連携させるのめんどくせー」となって直接 Firestore に保存しました。
+もちろんバイナリは保存できないので base64 形式で保存しました。
+幸いにも konva.js の <code>stage.toImage</code> から出力できる画像は base64 なのでそれを直接 store に入れたらよく、とても楽です。</p>
+<pre><code class="language-ts">window.exportImage = function exportImage(): void {
+  const inputEl = document.getElementById(&quot;titleInput&quot;) as HTMLInputElement
+  const buttonEl = document.getElementById(&quot;submitbutton&quot;) as HTMLInputElement
+  buttonEl.textContent = &quot;送信中&quot;
+  const title = inputEl.value
+  // 送信ボタンを押された時に選択を解除するため
+  stage.find(&quot;Transformer&quot;).each(d =&gt; d.destroy())
+  stage.toImage({
+    callback(img) {
+      var db = firebase.firestore()
+      db.collection(&quot;images&quot;)
+        .add({
+          title: title,
+          data: img.src,
+        })
+        .then((docRef: any) =&gt; {
+          console.log(docRef.id)
+          inputEl.value = &quot;&quot;
+          buttonEl.textContent = &quot;作成する&quot;
+          window.location.href = `/share.html?id=${docRef.id}`
+        })
+    },
+    pixelRatio: 3,
+  })
+}
+</code></pre>
+<p>おっと、firestore の箇所が <code>var</code> を使っていますね。
+きっと作者はどこかのソースコードからそのままパクってきたのでしょう。</p>
+<h3>その他</h3>
+<h4>webpack を通した関数を HTML から呼び出す方法</h4>
+<pre><code class="language-ts">funciton add(){
+ // no op
+}
+</code></pre>
+<p>という JS を用意してこれを</p>
+<pre><code class="language-html">&lt;button onclinc=&quot;add()&quot;&gt;add&lt;/button&gt;
+</code></pre>
+<p>として HTML から呼ぼうとしたときに、JS 側を webpack で JS をバンドルしてたら動きません。</p>
+<pre><code class="language-ts">window.add = funciton add(){
+ // no op
+}
+</code></pre>
+<p>とする必要があります。</p>
+<p>webpack を通した上で JS を HTML から呼び出すのが初めてだったのでこの挙動は単純に知りませんでした。</p>
+<h2>おわりに</h2>
+<p>誰か素材画像を追加して欲しいです。</p>
+<p>手順は、</p>
+<h3>1. フォルダに画像を追加</h3>
+<p>my-covid/src/img/ に画像を追加</p>
+<h3>2. my-covid/src/index.ts で画像を import</h3>
+<pre><code class="language-ts">...
+import ju from &quot;./img/ju.png&quot;;
+import taion36 from &quot;./img/taion36.png&quot;;
+import taion38 from &quot;./img/taion38.png&quot;;
+</code></pre>
+<h3>3. my-covid/src/index.html にボタン要素追加</h3>
+<p>クリックしたら画像が追加されるようにしたいためです。id と onClick の引数名を一致させておいてください。class 名は<code>imageButton</code>です。</p>
+<pre><code class="language-html">...
+&lt;input id=&quot;ju&quot; type=&quot;image&quot; onclick=&quot;add('ju')&quot; class=&quot;imageButton&quot; /&gt;
+&lt;input id=&quot;taion36&quot; type=&quot;image&quot; onclick=&quot;add('taion36')&quot; class=&quot;imageButton&quot; /&gt;
+&lt;input id=&quot;taion38&quot; type=&quot;image&quot; onclick=&quot;add('taion38')&quot; class=&quot;imageButton&quot; /&gt;
+</code></pre>
+<p>追加したら id 名を覚えておいてください。</p>
+<h3>4. my-covid/src/index.ts で records に追加</h3>
+<p>先ほど追加要素の id と import した画像要素の名前を組にして record に追加してください。</p>
+<pre><code class="language-ts">const records = [
+  ...{ id: &quot;ju&quot;, fileName: ju },
+  { id: &quot;taion36&quot;, fileName: taion36 },
+  { id: &quot;taion38&quot;, fileName: taion38 },
+]
+</code></pre>
+<p>追加すると後続の処理が諸々の初期化をしてくれます。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

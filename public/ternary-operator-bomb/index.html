@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>三項演算子でstateを吹っ飛ばした</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="今からお話しすることは本当にしょうもないことである...たとえば、フォームの入力画面があって、送信前に確認画面(Confirm)を挟むとしよう。">
+    <meta property="og:title" content="三項演算子でstateを吹っ飛ばした">
+    <meta property="og:image" content="https://blog.ojisan.io//ternary-operator-bomb/visual.png">
+    <meta property="og:description" content="今からお話しすることは本当にしょうもないことである...たとえば、フォームの入力画面があって、送信前に確認画面(Confirm)を挟むとしよう。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="三項演算子でstateを吹っ飛ばした">
+    <meta name="twitter:description" content="今からお話しすることは本当にしょうもないことである...たとえば、フォームの入力画面があって、送信前に確認画面(Confirm)を挟むとしよう。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-26</time>
+      <h1>三項演算子でstateを吹っ飛ばした</h1>
+    </div>
+    <div class="post-contents"><p>今からお話しすることは本当にしょうもないことである...</p>
+<p>たとえば、フォームの入力画面があって、送信前に確認画面(Confirm)を挟むとしよう。
+そしてそれはいろんなフォームでやる操作なので、共通レイアウトファイルに書いてしまおう。
+たとえば NextJS の例でいくと、_app.tsx のような全ページの基準となるようなファイルにて</p>
+<pre><code class="language-tsx:title=_app.tsx">export default function App({ Component, pageProps }: AppProps) {
+  const [isOpen, setOpen] = React.useState(false)
+  return (
+      {isOpen ? &lt;div&gt;&lt;Children&gt;&lt;/Children&gt;&lt;Confrim&gt;&lt;/Confirm&gt;&lt;/div&gt; : &lt;Children&gt;&lt;/Children&gt;}
+  )
+}
+</code></pre>
+<p>みたいなファイルを作ります。</p>
+<p>そして Children に何か状態を持っていたとして、この confirm を閉じるとなんと<strong>その状態が全部消えてしまいます</strong>。
+例えばフォームで最後に送った状態なんかを管理していたとしてもそのデータは消えます。</p>
+<p>それもそのはず、条件が true の節から false の節に切り替わり、<code>&lt;Children&gt;&lt;/Children&gt;</code>コンポーネントそのものが消えて再度作り直されたからです。
+再レンダリングではなく、コンポーネントそのものが作り直されたため state も初期化されてしまいます。</p>
+<h2>さすがにその実装はひどすぎでは・・・</h2>
+<p>聡明な方々は「そもそもその Confrim の使い方や三項演算子の使い方がおかしいのでは！？」って思うかもしれません。
+実際のところ僕はこう書くと思います。</p>
+<pre><code class="language-tsx:title=_app.tsx">export default function App({ Component, pageProps }: AppProps) {
+  const [isOpen, setOpen] = React.useState(false)
+  return (
+    &lt;div&gt;
+      &lt;Children&gt;&lt;/Children&gt;
+      {isOpen &amp;&amp; &lt;Confrim&gt;&lt;/Confirm&gt;}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>と、言ってもそういうコードに出会うかもしれないし、そんなコードを誰かから引き継ぐかもしれません。
+実際、<strong>僕のコードを引き継ぐと出会えます</strong>。</p>
+<p><img src="aho.png" alt="Twitterの反応" /></p>
+<p>なので、<strong>もし何らかの処理をして state が全部吹っ飛んでしまうといったコードに出会った時は、このような三項演算子がどこかに挟まっていないか</strong>という観点で調査すると解決するかもよというアドバイスでした。
+案外 _app.tsx や layouts.tsx のような全ページの共通レイアウトファイルに含まれているかもしれません。</p>
+<h2>三項演算子でそのような書き方をする場面</h2>
+<p>ちなみにそんな「三項演算子を書くことあるかい！？」と思われた方もいると思いますので、どういうときに書いちゃうかという例をお見せします。
+世の中には<strong>正常な判断力を失う仕様</strong>なんてものが存在し、そのようなときに三項演算子を書きたくなってしまう場面がありますし、思い当たる節もあります。</p>
+<h3>div を一つ多く被せたい場合（Safari, IE 対応）</h3>
+<p>代表的なので言うと、Safari の Bounce 対応（慣性スクロールを許した時にスクロールがびよーんて伸びるやつです）と IE 対応(たとえば flex-box に min-height を効かないときの対応)、<a href="https://developer.mozilla.org/ja/docs/Web/CSS/backdrop-filter">backdrop-filter</a> が使えない環境下ですりガラスのようなフィルター効果を実装する場面に代表される <strong>無意味な div ラッパーで囲わないといけない場面</strong>です。</p>
+<p>もしブラウザ上のイベントによって、それらの対応が必要となる UI が呼び出されるなら、三項演算子を使いたくなってしまいます。</p>
+<p>ここではすりガラスモーダルを例としてあげます。
+iPhone の通知画面にあるような背景がモザイクのようにボカされるモーダルです。</p>
+<p><img src="blur.png" alt="すりがらすモーダル" /></p>
+<p>これはモーダルの背景に <code>backdrop-filter</code> を使えば解決するのですが、Chrome で使えるようになったのもここ 1 年といった話で、古いブラウザではそれに対応できません。
+そこで backdrop-filter が使えない場合の実装方法として、モーダル以外のコンポーネントに直接 filter を使ってぼかすというやり方があります。</p>
+<p>いまこういうモーダルを開く画面があるとします。</p>
+<pre><code class="language-tsx:title=index.tsx">import * as React from &quot;react&quot;
+import { BlurContext } from &quot;../pages/_app&quot;
+
+export default () =&gt; {
+  const context = React.useContext(BlurContext)
+  const [text, setText] = React.useState(&quot;&quot;)
+  return (
+    &lt;div&gt;
+      &lt;h2&gt;state全部吹っ飛ばすモーダル&lt;/h2&gt;
+      &lt;p&gt;入力した後にmodal開いて閉じると状態が消える&lt;/p&gt;
+      &lt;p&gt;text = {text}&lt;/p&gt;
+      &lt;input onChange={e =&gt; setText(e.target.value)}&gt;&lt;/input&gt;
+      &lt;button
+        onClick={() =&gt;
+          context.action(
+            &lt;div className=&quot;modalWrapper&quot;&gt;
+              &lt;h2&gt;modal no nakami&lt;/h2&gt;
+              &lt;button onClick={() =&gt; context.action(null)}&gt;close modal&lt;/button&gt;
+            &lt;/div&gt;
+          )
+        }
+      &gt;
+        open modal
+      &lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>そこで、テキスト入力フォームとそれの値が bind された文字列と、モーダルを開くボタンを用意します。
+状態を吹っ飛ばす例をお見せする為に、適当に hoge か何か書いておきます。</p>
+<p><img src="moto.png" alt="元になる画面" /></p>
+<p>そしてモーダルやブラーの共通管理を_app.tsx でやるとします。
+「そもそもそんなことするのが間違いでは」といいたくなる気持ちもあるかとは思いますが、<strong>全モーダルをすりガラス化するのであれば共通処理として書きたくなるはず</strong>です。</p>
+<pre><code class="language-tsx:title=_app.tsx">import * as React from &quot;react&quot;
+import { AppProps } from &quot;next/app&quot;
+
+export const BlurContext = React.createContext&lt;{
+  state: React.ReactNode | null
+  action: React.Dispatch&lt;React.SetStateAction&lt;React.ReactNode | null&gt;&gt;
+}&gt;(null)
+
+export default function App({ Component, pageProps }: AppProps) {
+  const [modalContents, setOpen] = React.useState&lt;React.ReactNode | null&gt;(null)
+  return (
+    &lt;div&gt;
+      &lt;BlurContext.Provider value={{ state: modalContents, action: setOpen }}&gt;
+        &lt;div&gt;
+          {!modalContents ? (
+            &lt;Component {...pageProps} /&gt;
+          ) : (
+            &lt;&gt;
+              &lt;div className=&quot;blurWrapper&quot;&gt;
+                &lt;Component {...pageProps} /&gt;
+              &lt;/div&gt;
+              &lt;div className=&quot;modalWrapper&quot;&gt;{modalContents}&lt;/div&gt;
+            &lt;/&gt;
+          )}
+        &lt;/div&gt;
+      &lt;/BlurContext.Provider&gt;
+      &lt;style jsx&gt;
+        {`
+          .blurWrapper {
+            filter: blur(5px);
+            background-color: rgba(0, 0, 0, 0.3);
+            position: fixed;
+            width: 100vw;
+            height: 100vh;
+            // ここで位置を左に固定しなければ白背景色とblurが混じって黒半透明のデザインが滲んで崩れる。
+            top: 0;
+            left: 0;
+          }
+          .modalWrapper {
+            position: fixed;
+            top: 5vh;
+            left: 5vw;
+            width: 90vw;
+            height: 90vh;
+            background-color: white;
+          }
+        `}
+      &lt;/style&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>ここでは modal の表出に応じて、</p>
+<pre><code class="language-tsx">&lt;div&gt;
+  {!modalContents ? (
+    &lt;Component {...pageProps} /&gt;
+  ) : (
+    &lt;&gt;
+      &lt;div className=&quot;blurWrapper&quot;&gt;
+        &lt;Component {...pageProps} /&gt;
+      &lt;/div&gt;
+      &lt;div className=&quot;modalWrapper&quot;&gt;{modalContents}&lt;/div&gt;
+    &lt;/&gt;
+  )}
+&lt;/div&gt;
+</code></pre>
+<p>として分岐させています。</p>
+<p>ここでモーダルを開いてみます。</p>
+<p><img src="blur.png" alt="すりがらすモーダル" /></p>
+<p>そして閉じます。</p>
+<p><img src="kieru.png" alt="状態が消えたモーダル" /></p>
+<p><code>text=</code>の続きが消えてしまいました。</p>
+<p>このように三項演算子をつかってコンポーネントを切り替えることで状態が消えてしまいました。</p>
+<h4>&amp;&amp; を使うことで回避できるのか</h4>
+<p>これも &amp;&amp; を使ってそもそも三項演算子を使わなければいいのかもしれませんが、このような div を余計にかぶせるパターンだと単純には &amp;&amp; で制御できません。
+もちろん、div が不要な時も div で被せてしまい、blur の制御を CSS in JS で行えば &amp;&amp; が使えないことはないです。</p>
+<pre><code class="language-tsx:title=index.tsx">&lt;div&gt;
+  &lt;div className=&quot;blurWrapper&quot;&gt;
+    &lt;Component {...pageProps} /&gt;
+  &lt;/div&gt;
+  {modalContents &amp;&amp; &lt;div className=&quot;modalWrapper&quot;&gt;{modalContents}&lt;/div&gt;}
+&lt;/div&gt;
+&lt;style jsx&gt;
+  {`
+    .blurWrapper {
+      filter: ${modalContents &amp;&amp; `blur(5px)`};
+      background-color: rgba(0, 0, 0, 0.3);
+      position: fixed;
+      width: 100vw;
+      height: 100vh;
+      // ここで位置を左に固定しなければ白背景色とblurが混じって黒半透明のデザインが滲んで崩れる。
+      top: 0;
+      left: 0;
+    }
+  `}
+&lt;/style&gt;
+</code></pre>
+<p>しかし不要な div があるのは嫌に感じる人もいるでしょう。
+そのようなことをしたくなければ三項演算子を使うしかないのが現状です。</p>
+<p>これに対する解決策はそもそも IE 対応や Safari のバウンス対応やブラウザですりガラスを作るような仕事に近づかないことですが、そうもいかないと思いますので現実的な解決策を述べると、 <strong>三項演算子のスコープを狭めて、その外のレイヤーで状態を管理する</strong> です。
+三項演算子によって三項演算子の内側(子コンポーネント)の状態が飛んでいるので、その状態を三項演算子の外で管理しておけば大丈夫です。
+そたのめにも三項演算子によって切り替わる範囲はなるべく小さくしておきましょう。</p>
+<p>このモーダルの例だと、モーダルが出てくるたびにそのページコンポーネントに開閉状態管理の処理を書くことになるので冗長にはなりますが、 _app.tsx ですりガラス効果を実現するのではなく各ページの一番外側のコンポーネントにブラー効果を与え_app.tsx に分岐を書くのをやめるとよいです。</p>
+<p>実装例は<a href="https://github.com/ojisan-toybox/bomb-state">こちら</a>です。</p>
+<h3>レスポンシブデザインにおけるコンポーネント切り替え</h3>
+<p>あと、これはたまに出会うコードなのですが、</p>
+<pre><code class="language-tsx:title=index.tsx">import * as React from &quot;react&quot;
+import useMedia from &quot;use-media&quot;
+
+export default props =&gt; {
+  const isPC = useMedia({ minWidth: &quot;1000px&quot; })
+  return &lt;div&gt;{isPC ? &lt;SideBar /&gt; : &lt;Header /&gt;}&lt;/div&gt;
+}
+</code></pre>
+<p>といった、いわゆるツールバーみたいなものを提供していて、PC は画面幅が広いから横につけるが SP だと画面幅がないから上につけるというようなケースでも三項演算子による切り替えをみます。
+もしここでこのツールバーがたとえば何らかの状態を持っていれば、ユーザーが画面サイズを変えた時にコンポーネントが切り替わってしまい状態が吹っ飛んでしまいます。</p>
+<p>ツールバーでクリティカルな状態管理はしないはずですが、コンポーネントを切り替えたときに状態が吹っ飛んでしまう実装なので、注意はしておきましょう。</p>
+<h2>&amp;&amp;も同様の問題がある</h2>
+<p>何かをしようとしているときに条件分岐によって強制的に状態が切り替わる問題は &amp;&amp; でも起き得ます。</p>
+<h3>条件分岐によってモーダルの閉アニメーションが飛ばされる</h3>
+<p>いま <code>isOpen</code> というフラグでモーダルの開閉を管理しているとします。</p>
+<pre><code class="language-tsx:title=index.tsx">import * as React from &quot;react&quot;
+
+export default () =&gt; {
+  const [isOpen, setOpen] = React.useState(false)
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() =&gt; setOpen(true)}&gt;open modal&lt;/button&gt;
+      {isOpen &amp;&amp; (
+        &lt;div className=&quot;modalWrapper&quot;&gt;
+          &lt;div className=&quot;modalContent&quot;&gt;
+            &lt;h2&gt;modal no nakami&lt;/h2&gt;
+            &lt;button onClick={() =&gt; setOpen(false)}&gt;close modal&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      )}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>たとえばこの modalWrapper コンポーネントですが、開閉のアニメーションを付けて欲しいと言われたらどうしますか。</p>
+<p>それは簡単で、Confrim の CSS に transition を付けたらいいです。
+<strong>ただそれは開くときはアニメーションが付きますが閉じるときは付きません。</strong>
+閉じるアニメーションが走る前に、isOpenConfirm が false になると modalWrapper それ自体が消えてしまうからです。</p>
+<p>これを解決する為には、コンポーネントを JS で切り替えないようにすること、<strong>つまり&amp;&amp;を使わずに CSS in JS で開閉処理を実現すること</strong>です。
+たとえば、</p>
+<pre><code class="language-tsx:title=index.tsx">import * as React from &quot;react&quot;
+
+export default () =&gt; {
+  const [isOpen, setOpen] = React.useState(false)
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() =&gt; setOpen(true)}&gt;open modal&lt;/button&gt;
+      &lt;div className=&quot;modalWrapper&quot;&gt;
+        &lt;div className=&quot;modalContent&quot;&gt;
+          &lt;h2&gt;modal no nakami&lt;/h2&gt;
+          &lt;button onClick={() =&gt; setOpen(false)}&gt;close modal&lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;style jsx&gt;
+        {`
+          .modalWrapper {
+            transition: opacity 0.5s, visibility 0.5s;
+            opacity: ${!isOpen ? 0 : 1};
+            visibility: ${!isOpen ? &quot;hidden&quot; : &quot;initial&quot;};
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: ${isOpen &amp;&amp; &quot;rgba(0, 0, 0, 0.3)&quot;};
+          }
+          .modalContent {
+            position: fixed;
+            top: 5vh;
+            left: 5vw;
+            width: 90vw;
+            height: 90vh;
+            background-color: white;
+          }
+        `}
+      &lt;/style&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<p>などとして、modalWrapper に対して CSS in JS を使って アニメーションをつけると良いでしょう。</p>
+<h3>有名ライブラリのモーダル I/F</h3>
+<p>ちなみに、有名ところのモーダルコンポーネントはモーダルのフラグを外で管理する I/F ではなく、(flg を渡すのはライブラリとしての I/F の体をなさせるためだけかもしれませんが、)フラグをモーダルに渡す実装になっています。</p>
+<h4><a href="https://material-ui.com/components/modal/">material-ui</a></h4>
+<pre><code class="language-jsx">&lt;Modal
+  open={open}
+  onClose={handleClose}
+  aria-labelledby=&quot;simple-modal-title&quot;
+  aria-describedby=&quot;simple-modal-description&quot;
+&gt;
+  {body}
+&lt;/Modal&gt;
+</code></pre>
+<h4><a href="https://ant.design/components/modal/">ant-design</a></h4>
+<pre><code class="language-jsx">&lt;Modal
+  title=&quot;Basic Modal&quot;
+  visible={this.state.visible}
+  onOk={this.handleOk}
+  onCancel={this.handleCancel}
+&gt;
+  &lt;p&gt;Some contents...&lt;/p&gt;
+  &lt;p&gt;Some contents...&lt;/p&gt;
+  &lt;p&gt;Some contents...&lt;/p&gt;
+&lt;/Modal&gt;
+</code></pre>
+<h4><a href="https://chakra-ui.com/modal">chakra-ui</a></h4>
+<p>これはアニメーションの要件はないが Modal に flg を渡している</p>
+<pre><code class="language-jsx">&lt;Modal isOpen={isOpen} onClose={onClose}&gt;
+  &lt;ModalOverlay /&gt;
+  &lt;ModalContent&gt;
+    &lt;ModalHeader&gt;Modal Title&lt;/ModalHeader&gt;
+    &lt;ModalCloseButton /&gt;
+    &lt;ModalBody&gt;
+      &lt;Lorem count={2} /&gt;
+    &lt;/ModalBody&gt;
+
+    &lt;ModalFooter&gt;
+      &lt;Button variantColor=&quot;blue&quot; mr={3} onClick={onClose}&gt;
+        Close
+      &lt;/Button&gt;
+      &lt;Button variant=&quot;ghost&quot;&gt;Secondary Action&lt;/Button&gt;
+    &lt;/ModalFooter&gt;
+  &lt;/ModalContent&gt;
+&lt;/Modal&gt;
+</code></pre>
+<h3>実際どうすべき？</h3>
+<p>とまあモーダルの中に開閉処理を押し込んだ方が良いと思うのですが、実際は外で管理したい人の方が多いようです。</p>
+<p><img src="poll.png" alt="Twitterで投票すると外で管理する人が多数" /></p>
+<p>外で管理するモチベーションとしては「外で管理した方が可読性がある」、「CSS で見えなくしても実際に DOM があるのは気持ち悪い」があるとは思うのですが、モーダルはアニメーション入れたいといった話がよく出てくるので、最初からアニメーションに対応できるように入れ込んでおいた方が、後々の<strong>自衛として</strong>もよいと思います。</p>
+<h2>おわりに</h2>
+<p>落ち着いて考えてみたらしょうもない話なのですが、条件切り替えによって状態が吹っ飛ぶことはある話です。
+実際このようなコード書きたくなる場面はあるし、また初学者にとってはコンポーネントそれ自体が入れ替わる場合と再レンダリングの区別がつかなかったりして、「なんで状態が消えたんや」となるのかなと思っています。
+「なにか状態が飛ぶコードに出会ったら、どこかで三項演算子がいるのかもしれない」ということをデバッグに備えて頭の片隅に入れておくと救われるかもしれませんね。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

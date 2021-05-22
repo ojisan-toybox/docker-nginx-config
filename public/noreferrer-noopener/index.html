@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>noopener と noreferrer の整理、結局どっちを使えば良いのか</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="a タグにをつける時はとりあえず rel 属性に  と書いておけばいいと思ったのですが、どうして noreferrer だけだとだめなんだろうと気になったので調べてみました。">
+    <meta property="og:title" content="noopener と noreferrer の整理、結局どっちを使えば良いのか">
+    <meta property="og:image" content="https://blog.ojisan.io//noreferrer-noopener/visual.png">
+    <meta property="og:description" content="a タグにをつける時はとりあえず rel 属性に  と書いておけばいいと思ったのですが、どうして noreferrer だけだとだめなんだろうと気になったので調べてみました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="noopener と noreferrer の整理、結局どっちを使えば良いのか">
+    <meta name="twitter:description" content="a タグにをつける時はとりあえず rel 属性に  と書いておけばいいと思ったのですが、どうして noreferrer だけだとだめなんだろうと気になったので調べてみました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-18</time>
+      <h1>noopener と noreferrer の整理、結局どっちを使えば良いのか</h1>
+    </div>
+    <div class="post-contents"><p>a タグに<code>target=_blank</code>をつける時はとりあえず rel 属性に <code>rel=&quot;noopener noreferrer&quot;</code> と書いておけばいいと思ったのですが、どうして noreferrer だけだとだめなんだろうと気になったので調べてみました。</p>
+<h2>結論</h2>
+<p>noreferrer だけでも問題はないが、ちょーーーーーーーーーーーーーーーっとだけ問題がある。</p>
+<h2>前回までのあらすじ！</h2>
+<h3>どうして noopener noreferrer が必要なのか</h3>
+<p>a タグ には target=_blank という設定があり、別タブで開かせることができます。</p>
+<pre><code class="language-jsx">&lt;a href=&quot;http://example.com&quot; target=&quot;_blank&quot;&gt;
+  アンカーリンク
+&lt;/a&gt;
+</code></pre>
+<p>そこには <code>rel=&quot;noopener noreferrer&quot;</code> を付けようという話があり、</p>
+<pre><code class="language-jsx">&lt;a href=&quot;http://example.com&quot; target=&quot;_blank&quot; rel=&quot;noopener noreferrer&quot;&gt;
+  アンカーリンク
+&lt;/a&gt;
+</code></pre>
+<p>とすることが推奨されます。</p>
+<p>どうしてでしょうか。</p>
+<h4>脆弱性対応</h4>
+<p>良い説明がたくさんあるのでそれらを引用します。</p>
+<blockquote>
+<p>target=&quot;_blank&quot;で開かれたページは、元のページを window.opener オブジェクトとして持つので、リンク先のページから window.opener.location = &quot;danger site url&quot; のように元ページを操作することが出来てしまうようです。rel=&quot;noopener&quot; を使うことで、新しく開いたページから window.opener オブジェクトを使って元ページの操作をできなくできるようです。no・opener ですね。</p>
+</blockquote>
+<p>FYI: https://chaika.hatenablog.com/entry/2018/12/06/110000</p>
+<h4>パフォーマンス</h4>
+<blockquote>
+<p>target=&quot;_blank&quot;で開かれたページは、元ページと JavaScript が同じプロセス・スレッドで動作するようです。なので、target=&quot;_blank&quot;で開かれたページに負荷の高い JavaScript が実行されていると、元ページのパフォーマンス低下など影響がある可能性があるようです。</p>
+</blockquote>
+<p>FYI: https://chaika.hatenablog.com/entry/2018/12/06/110000</p>
+<h4>古いブラウザへの対応</h4>
+<p>これらの対応は noopener を使うことで実現できます。
+しかし、noopener は古いブラウザ(例えば Chronium 以前の Edge(~79)など)ではサポートされていません。
+そこで noreferrer です。
+これはリファラを送らないようにする指定であり、<strong>さらに noopener と同様の効果も持ちます。</strong></p>
+<p>そして noreferrer の方がサポートしているブラウザは広いため、noopener を使えない場合のフォールバックとして利用が推奨されています。</p>
+<p><img src="./noopener.png" alt="noopenerの Can I See" /></p>
+<p><img src="./noreferrer.png" alt="noreferrerの Can I See" /></p>
+<h3>ESLint Plugin の警告が変わっていた</h3>
+<p>ところでこの rel がついていないコード</p>
+<pre><code class="language-jsx">&lt;a href=&quot;http://example.com&quot; target=&quot;_blank&quot;&gt;
+  アンカーリンク
+&lt;/a&gt;
+</code></pre>
+<p>をそのまま JSX に書いて eslint(+<a href="https://github.com/yannickcr/eslint-plugin-react">eslint-plugin-react</a>) にかけると、</p>
+<pre><code class="language-sh">error  Using target=&quot;_blank&quot; without rel=&quot;noreferrer&quot; is a security risk:
+see https://html.spec.whatwg.org/multipage/links.html#link-type-noopener
+react/jsx-no-target-blank
+</code></pre>
+<p>のような警告が出ます。</p>
+<p>なので、</p>
+<pre><code class="language-jsx">&lt;a href=&quot;http://example.com&quot; target=&quot;_blank&quot; rel=&quot;noreferrer&quot;&gt;
+  アンカーリンク
+&lt;/a&gt;
+</code></pre>
+<p>とすることで回避できます。</p>
+<p>が、ここの警告が昔は</p>
+<pre><code class="language-sh">Using target=&quot;_blank&quot; without rel=&quot;noopener noreferrer&quot; is a security risk:
+see https://mathiasbynens.github.io/rel-noopener/
+</code></pre>
+<p>でした。
+このときは <code>rel=&quot;noreferrer&quot;</code> ではなく <code>rel=&quot;noopener noreferrer&quot;</code> をつけようという話でした。</p>
+<p>なのにいつの間にか <code>rel=&quot;noreferrer&quot;</code> でよくなっているみたいです。</p>
+<p>FYI: https://github.com/yannickcr/eslint-plugin-react/commit/b9d2eb58b89eec8645c135e12d0a592951499abf (PR)</p>
+<p>どうしてでしょうか？</p>
+<h3>noreferrer だけを外したい動機</h3>
+<p>一方でアフィリエイトサイトに使われる CMS のフォーラムで noreferrer を調べてみると、「noreferrer を外す方法を紹介します・教えてください」といった投稿を目にします。
+ESLint の世界では noreferrer を付けようぜという温度感になっていたのにどうしてなんだと思っていくつか読んでいくと、どうやら referrer が取れない = アフィリエイト報酬が計算されない といった問題が起きる場合があるようでした。
+そしてそれらは 「noopener があるからセキュリティ的には大丈夫だよ」とのことでプラグインやスクリプトが配布されていたりもして、noreferrer を外したい要望もあることがわかりました。</p>
+<h2>パターンの整理</h2>
+<p>ここまでの流れを整理すると、</p>
+<ul>
+<li>セキュリティへの対応として noopener をつける必要がある</li>
+<li>noopener と同様の効果は noreferer にもある</li>
+<li>noreferer のほうがブラウザのサポートが広い</li>
+<li>ESLint は noreferrer だけを推奨するようになった（両方つけることを非推奨にしているわけではないことに注意）</li>
+<li>一方で アフィリエイト業界では noopener だけをつけたい要望が上がっている</li>
+</ul>
+<p>といったことがわかりました。</p>
+<p>ESLint と アフィリエイト の動向が反対なのが気になりますね。
+結局何を指定すれば良いのでしょうか。
+そこでそれらの組み合わせについて整理していきましょう。</p>
+<h3>noopener のみ</h3>
+<p><a href="https://html.spec.whatwg.org/multipage/links.html#link-type-noopener">noopener</a> は spec によると</p>
+<blockquote>
+<p>The keyword indicates that any newly created top-level browsing context which results from following the hyperlink will not be an auxiliary browsing context. E.g., its window.opener attribute will be null.</p>
+</blockquote>
+<p>とあり、開き元の情報を見えなくする働きを持っています。
+つまりこれを使うことで、リンク先のページから元ページの操作を防げます。
+ただし、 noreferrer に比べてブラウザのサポートは狭いです。</p>
+<h3>noreferrer のみ</h3>
+<p><a href="https://html.spec.whatwg.org/multipage/links.html#link-type-noreferrer">noreferrer</a> は</p>
+<blockquote>
+<p>It indicates that no referrer information is to be leaked when following the link and also implies the noopener keyword behavior under the same conditions.</p>
+</blockquote>
+<p>とあり、referrer を送らないだけでなく、noopener と同じ効果も持ちます。
+つまりこれを使うことで、リンク先のページから元ページの操作も防げます。
+そして noopener より広いサポート範囲を持ちます。</p>
+<p>ただし referrer が送られなくなるので、トラッキングツールや広告 SDK に影響があるかもしれません。
+おそらくアフィリエイトツールが気にしているのはこの辺のことです。
+個人的には利用者のセキュリティを第一に考えて欲しい気持ちもありますが、アフィリエイトツールの要件次第では noreferrer と比較してサポート範囲は狭まりますが、せめて noopener だけは付けましょう。</p>
+<p>ただし noreferrer でも計測できるものも多いとは思うのでまずは外さずに使ってみると良いでしょう。</p>
+<h3>noopener noreferrer の双方</h3>
+<p>一番安全なパターンです。
+しかし</p>
+<ul>
+<li>noreferrer のみでも noopener と同じ効果を得られる</li>
+<li>noreferrer の方がブラウザの守備範囲が広い</li>
+</ul>
+<p>はずなのに、双方をつける理由って一体何なのでしょうか。</p>
+<p>noopener もつけるメリットとしては先ほど紹介した ESLint が双方を書くような警告をやめた際の PR/Issue に書かれていました。
+noreferrer だけがついていると別タブで開かなくなる不具合がある Firefox 33–35 にも対応できるとのことです。</p>
+<p>FYI: https://github.com/yannickcr/eslint-plugin-react/issues/2022</p>
+<p>(PR には Firefox 33–35 removes opener with rel=&quot;noreferrer&quot; とあるのですが、実際 FireFox のリリースノートや IssueTracker をみる限りだと referrer が送られてしまうバグの修正とあり、本当に opener が消えてるのかは確証を持てていないです. )</p>
+<p>FYI: https://bugzilla.mozilla.org/show_bug.cgi?id=1031264</p>
+<p>ただし Firefox のバージョンは自動で上がるため考慮せず何も rel の指定がなければ noreferrer のみをつけるように警告はするが noopener がついていることに対して警告しないようになったようです。</p>
+<p>上記のドキュメントは ESLint のプラグインの話なので、本当はまた違ったメリットもあるのかもしれません。
+もしご存知でしたらどなたか教えてください。</p>
+<p>と、両方つけるメリットも少しはありそうと書いたのですがそもそも spec には</p>
+<pre><code class="language-sh">&lt;a href=&quot;...&quot; rel=&quot;noreferrer&quot; target=&quot;_blank&quot;&gt; has the same behavior as
+&lt;a href=&quot;...&quot; rel=&quot;noreferrer noopener&quot; target=&quot;_blank&quot;&gt;.
+</code></pre>
+<p>FYI: https://html.spec.whatwg.org/multipage/links.html#link-type-noreferrer</p>
+<p>とあるので、noopener をつけなくても問題はなさそうです。
+付けても微々たるバンドルサイズ以外の損はなく、救えるブラウザがほんのちょっと増えるという理由で僕は付けていますが・・・</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

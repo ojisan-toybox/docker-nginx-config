@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ブラウザ上でJSXをコンパイルしてプレビュー環境を作る</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="少し前に ogpng というサービスを作りました。これは HTML や JSX を使って OGP 画像を生成しシェアできるサービスです。">
+    <meta property="og:title" content="ブラウザ上でJSXをコンパイルしてプレビュー環境を作る">
+    <meta property="og:image" content="https://blog.ojisan.io//jsx-preview/visual.png">
+    <meta property="og:description" content="少し前に ogpng というサービスを作りました。これは HTML や JSX を使って OGP 画像を生成しシェアできるサービスです。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ブラウザ上でJSXをコンパイルしてプレビュー環境を作る">
+    <meta name="twitter:description" content="少し前に ogpng というサービスを作りました。これは HTML や JSX を使って OGP 画像を生成しシェアできるサービスです。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-07-18</time>
+      <h1>ブラウザ上でJSXをコンパイルしてプレビュー環境を作る</h1>
+    </div>
+    <div class="post-contents"><p>少し前に <a href="https://ogpng.vercel.app">ogpng</a> というサービスを作りました。
+これは HTML や JSX を使って OGP 画像を生成しシェアできるサービスです。</p>
+<p>こういうエディタで OGP 画像を作り、</p>
+<p><img src="ogpng.png" alt="ogpng" /></p>
+<p>そこで発行された URL をシェアすると、OGP が展開されます。</p>
+<p><img src="ogp.png" alt="ogp" /></p>
+<p>告知画像のカスタマイズを簡単にしたいというニーズに答えるためのものです。</p>
+<p>これは HTML 要素を canvas 経由で画像化してそれをオブジェクトストレージで永続化し、その画像 URL を SSR 時に meta タグに展開することで OGP 画像のシェアができるようになっています。
+そのため HTML を生成できれば様々な形式から OGP 画像を作ることができます。
+ogpng では JSX からの OGP 画像をサポートしたのですが、それが意外と苦戦したのでそのときのメモを書きます。</p>
+<h2>そもそもどうやって HTML を画像化していたか</h2>
+<p>ogpng では左がエディタ(monaco-editor を使っています)、右が preview です。
+具体的には、React + NextJS + react-monaco-editor を使っています。</p>
+<p>HTML のプレビューは、monaco-editor に入力した HTML を React の dangerouslySetInnerHTML を使ってレンダリングすることで実現しています。
+そしてその プレビューの DOM を <a href="https://github.com/tsayen/dom-to-image">dom-to-image</a> で画像として出力しています。
+画像生成ボタンを押した時にこのライブラリを呼び出して画像化、出力されたバイナリを直接オブジェクトストレージにアップロードすることで OGP 画像の URL を生成しています。
+一般的な OGP 生成とは違ったやり方になっているとは思うのですが、このように一度クライアントで生成することでユーザーからすればかなり自由度の高い OGP 生成が可能となります。(node-canvas + OGP 生成 API でやるならあらかじめテンプレートを用意したりすることになるので自由度が下がると思いました。)</p>
+<p>このプレビュー用の HTML を生成するのがとても苦労したのでそのことについて書きます。</p>
+<h2>説明の前に寄り道(用語の説明と注意事項)</h2>
+<ul>
+<li>React.Element
+<ul>
+<li>React elements are the building blocks of React applications.</li>
+<li>https://reactjs.org/docs/glossary.html#elements</li>
+</ul>
+</li>
+<li>JSX
+<ul>
+<li>JSX is a syntax extension to JavaScript.</li>
+<li>https://reactjs.org/docs/glossary.html#jsx</li>
+</ul>
+</li>
+</ul>
+<p><a href="https://reactjs.org/docs/introducing-jsx.html">Introducing JSX</a>の説明を借りると、JSX は React.Element を生成できる syntax です。
+JSX ファイル内に React.Element を return しているわけだから当然なのですが、そういう関係性があります。
+本書は JSX から HTML を作ると書いていますが、厳密には React.Element から HTML を作っています。
+しかし React.Element という言葉は JSX と比較して馴染みがなく、わかりにくいと思いましたので 意図的に JSX という言葉を使っている場面があります。</p>
+<h2>HTML を生成する</h2>
+<p>HTML から画像を作る仕組みはあるので、JSX から HTML に変換することを目指しましょう。</p>
+<p>ゴールとしては、</p>
+<pre><code class="language-jsx">&lt;div style={{ color: &quot;red&quot; }}&gt;Hello, World!&lt;/div&gt;
+</code></pre>
+<p>を</p>
+<pre><code class="language-html">&lt;div style=&quot;color: red;&quot;&gt;
+  Hello, World!
+&lt;/div&gt;
+</code></pre>
+<p>に変換できたら勝ちです。</p>
+<h3>文字列を React.Element に変換する</h3>
+<p>React.Element を HTML を変換する処理は ReactDOMServer.renderToHtml を使うことで実現できます。
+この関数は React.Element を引数にとります。
+monaco エディタで <code>&lt;div&gt;hoge&lt;/div&gt;</code>のような React.Elemet を打ってもらってもそれを取り出すとそれはただの文字列です。
+そのため HTML の生成には React.Element 文字列から React.Element を作る必要があります。</p>
+<p>React のドキュメントを探しても見つけられず、この方法に私はずいぶんと頭を悩ませたのですが、たまたま Babel にその例があったことを思い出して使ってみることにしました。
+<a href="https://babeljs.io/repl#?browsers=defaults%2C%20not%20ie%2011%2C%20not%20ie_mob%2011&amp;build=&amp;builtIns=false&amp;spec=false&amp;loose=false&amp;code_lz=DwEwlgbgBAzgLgTwDYFMC8BvDBjA9k3AJwC4ByQlEUgX2oD5gB6cCOoA&amp;debug=false&amp;forceAllTransforms=false&amp;shippedProposals=false&amp;circleciRepo=&amp;evaluate=false&amp;fileSize=false&amp;timeTravel=false&amp;sourceType=module&amp;lineWrap=true&amp;presets=env%2Creact%2Cstage-2%2Cenv&amp;prettier=false&amp;targets=&amp;version=7.10.5&amp;externalPlugins=">Babel Try it out</a>では react の preset が使えます。
+つまりこれはソースコード文字列から React.Element の生成をしている例です。（※実際には出力コードを eval する必要があります。）</p>
+<p><img src="babel.png" alt="Try it out" /></p>
+<p>で、babel-preset-react と babel-core を使って JSX 文字列を食わせてみたのですが、どうやら babel-core はブラウザで動かないらしく、どうして Try it out は動いているのかコードを読んでみました。
+すると、<a href="https://babeljs.io/docs/en/babel-standalone">babel-standalone</a>というのを使っていることがわかりました。</p>
+<p>これは</p>
+<blockquote>
+<p>@babel/standalone provides a standalone build of Babel for use in browsers and other non-Node.js environments.</p>
+</blockquote>
+<p>とあり、ブラウザでも動く Babel のようです。
+ドキュメントには、</p>
+<blockquote>
+<p>Load babel.js or babel.min.js in your environment. This will expose Babel's API in a Babel object:</p>
+</blockquote>
+<p>とあり、babel-core が持っている API はそのまま使えそうです。
+そのためこの transform 関数に React.Element 文字列と JSX をコンパイルする plugin 名(<a href="https://babeljs.io/docs/en/babel-plugin-transform-react-jsx/">transform-react-jsx</a>)を渡せば良いです。</p>
+<pre><code class="language-js">const res = babel.transform(reactElStr, {
+  plugins: [&quot;transform-react-jsx&quot;],
+})
+</code></pre>
+<p>この<code>babel.transform</code>が何をしているかは<strong>めちゃくちゃ頑張って</strong>書いたので、気になる方は参照してください。
+=&gt; <a href="/babel-parse-traverse-generate">Babel の変換処理と向き合う</a> (めちゃくちゃ気合入れて書いたのに全然注目されなくて悲しんでます 😭😭😭😭😭😭)</p>
+<h3>React.Element から HTML を生成する</h3>
+<p>monaco エディタに入力された文字列から React.Element を生成できるようになりました。
+あとは ここから HTML を生成するだけですが、これは react-dom/server にある <a href="https://reactjs.org/docs/react-dom-server.html#rendertostring">renderToString</a> を使うと良いです。
+これは、</p>
+<blockquote>
+<p>Render a React element to its initial HTML.</p>
+</blockquote>
+<p>とあり、ReactElement を HTML に変換できます。</p>
+<pre><code class="language-js">const newHtml = ReactDOMServer.renderToString(el)
+</code></pre>
+<p>とすれば HTML を取得できます。</p>
+<p>これで HTML を dangerouslySetInnerHTML に流せば JSX を HTML としてプレビューできる機能が完成します。</p>
+<h2>ライブラリとして提供しました</h2>
+<p>ここまでで ReactElement 文字列から HTML を出力できるようになりました。
+その処理をまとめて、ライブラリとして <a href="https://github.com/sadnessOjisan/reactel-to-html">reactel-to-html</a> を作りました。
+そしてそれをサーバーで実行・ <strong>JSX as a Service</strong> として利用できる<a href="https://github.com/sadnessOjisan/reactel-to-html-server">reactel-to-html-server</a>を作りました。
+https://reactel-to-html-server.vercel.app/api/ に POST で {html:React.Element} という body を送ると、 それを評価した HTML を返します。
+是非利用してみてください。</p>
+<h2>あとがき</h2>
+<p>ReactElement 文字列 =&gt; ReactElement の変換は babel がブラウザ上で使えないから stand alone モードを使ったわけですが、これは worker 使えば stand alone 入れなくてもよかったかもと思い始めています。
+改修はめんどうくさいのでやらないですが、次何かこういうの作るときは worker に compiler を埋め込む方式みたいなのを考えて設計しようと思います。
+(worker なんもわーからん！w)</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>cloud storage からのファイル取得を制限したい</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="例えば購入者に音楽や動画を配信するサービスを Firebase で実装することを考えましょう。">
+    <meta property="og:title" content="cloud storage からのファイル取得を制限したい">
+    <meta property="og:image" content="https://blog.ojisan.io//firebase-storage-restrict/visual.png">
+    <meta property="og:description" content="例えば購入者に音楽や動画を配信するサービスを Firebase で実装することを考えましょう。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="cloud storage からのファイル取得を制限したい">
+    <meta name="twitter:description" content="例えば購入者に音楽や動画を配信するサービスを Firebase で実装することを考えましょう。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-08-31 09:00</time>
+      <h1>cloud storage からのファイル取得を制限したい</h1>
+    </div>
+    <div class="post-contents"><p>例えば購入者に音楽や動画を配信するサービスを Firebase で実装することを考えましょう。
+配信するファイルはなんらかのオブジェクトストレージに格納されますが、その公開 URL は購入者以外は見えてはいけません。
+そのためそのファイルには特定の IP アドレスや環境からしかアクセスできないようにすることも多く、例えば S3 だとバケットポリシーで IP 制限をかけることができます。
+そして IP 制限をかけた状態で、認証したユーザーに公開用 URL を発行できる機能をバックエンドのサーバーに実装し、権限のあるユーザーのみに期間限定の署名付き URL を発行してファイル URL を共有できるようにします。</p>
+<p>一方で Firebase の CloudStorage には バケットポリシーが無く IP 制限をかけることができないといった問題があります。
+そこで類似の機能をバケットポリシーを使わずに rules と adminAPI で実現する方法を紹介します。</p>
+<h2>結論</h2>
+<p>rules でファイルへのアクセスを全て禁止にして、バックエンドで AdminAPI を使った認証と署名付き URL を作成し返却する</p>
+<h2>rules で全ファイルへのアクセスを禁止する</h2>
+<pre><code class="language-sh">rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+</code></pre>
+<p>現実的にはこういった一括で許可しないルールを書くことはないとは思いますが、該当のフォルダに対する read を禁止します。
+これによりクライアントアプリからはそのフォルダ配下のファイルにアクセスをすることができません。
+ただし、<strong>特権を持った adminAPI からはアクセスができます</strong>。
+そのためクラインアント側からのアクセスを全て禁止して、特権を持ったサーバーからファイルを操作するようにします。</p>
+<h2>バックエンドを用意する</h2>
+<p>firebase にはクライアント用の SDK 以外にもバックエンドから叩ける admin ライブラリがあります。</p>
+<pre><code class="language-sh">$ npm i firebase-admin
+</code></pre>
+<p>このライブラリを使うと特権的な操作ができます。
+そのため初期化には予めコンソールから DL した秘密鍵を使います。</p>
+<p>ここでは例として NodeJS + NextJS(API Routes)を使って実装します。</p>
+<p>初期化は <code>initializeApp</code> という関数で行います。</p>
+<pre><code class="language-ts">import { NextApiRequest, NextApiResponse } from &quot;next&quot;
+import * as admin from &quot;firebase-admin&quot;
+
+var serviceAccount = require(&quot;path/to/key.json&quot;)
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: &quot;hoge.appspot.com&quot;,
+})
+</code></pre>
+<p>cloud storage を使うのならこのとき storageBucket も渡しましょう。
+ここではデフォルトバケットを指定できます。
+ここで指定しなければデフォルトバケットをのちに呼び出せないのでこの設定が必要となります。
+デフォルトバケットの名前は、storage のこの部分です。</p>
+<p><img src="./bucket.png" alt="デフォルトバケットの画像" /></p>
+<p>次に API のエンドポイントを作っていきます。
+署名付き URL を返すエンドポイントとしてこういうものを用意します。</p>
+<pre><code class="language-ts">export default async (req: NextApiRequest, res: NextApiResponse) =&gt; {
+  res.status(200).json({ url })
+}
+</code></pre>
+<p>ではまずアクセスが誰からされたかという識別をします。</p>
+<pre><code class="language-ts">export default async (req: NextApiRequest, res: NextApiResponse) =&gt; {
+  // FIXME: request header に書くべき
+  // TODO: リクエストのバリデーション
+  const idToken = req.query.idToken as string
+  const vid = req.query.vid as string
+  admin
+    .auth()
+    .verifyIdToken(idToken)
+    .then(function (decodedToken) {
+      let uid = decodedToken.uid
+    })
+    .catch(function (error) {
+      console.error(error)
+      res.status(400).json({ message: &quot;fail&quot; })
+    })
+}
+</code></pre>
+<p>クライアントからはユーザーの識別可能な token が送られてくると仮定します。</p>
+<p>そのトークンはクライアント側からこのように作成できます。</p>
+<pre><code class="language-ts">const cu = firebase.auth().currentUser
+if (!cu) {
+  alert(&quot;you should login&quot;)
+  return
+}
+cu.getIdToken(true)
+  .then(function (idToken) {
+    // TODO: 便宜上そうしているけどURLにトークン入れたらだめだよ！！！
+    fetch(`/api/movie?idToken=${idToken}&amp;vid=${videoId}`)
+      .then(res =&gt; res.json())
+      .then(d =&gt; {
+        // no op
+      })
+  })
+  .catch(function (error) {
+    // Handle error
+  })
+</code></pre>
+<p>（普通は URL からその token を見れないようにリクエストヘッダにセットするとは思いますが、楽に説明したいのでクエリパラメタに含めています。）</p>
+<p>そして firestore でユーザーが購入した動画などが管理されているとして、それをチェックし購入済みであれば署名 URL を発行します。
+ユーザーが購入したかどうかは、firestore にある user コレクションが movie コレクションに対する Ref の配列を持っているかどうかなどで判断すれば良いでしょう。</p>
+<pre><code class="language-ts">export default async (req: NextApiRequest, res: NextApiResponse) =&gt; {
+  // FIXME: request header に書くべき
+  const idToken = req.query.idToken as string
+  const vid = req.query.vid as string
+  admin
+    .auth()
+    .verifyIdToken(idToken)
+    .then(function (decodedToken) {
+      let uid = decodedToken.uid
+      admin
+        .firestore()
+        .collection(&quot;users&quot;)
+        .doc(uid)
+        .get()
+        .then(async d =&gt; {
+          const userData = d.data(
+          // userが購入した映像
+          const userVideos = userData.videos as string[]
+          // ユーザーが購入していたら
+          if (userVideos.includes(vid)) {
+            const bucket = admin.storage().bucket()
+            const video = bucket.file(vid)
+            // 動画へのアクセスURLを発行
+            const url = await video.getSignedUrl({
+              action: &quot;read&quot;,
+              expires: &quot;今から一日後の時間など&quot;,
+            })
+            res.status(200).json({ url })
+          }
+          res.status(404).json({ url: &quot;notfound&quot; })
+        })
+        .catch(err =&gt; {
+          console.error(&quot;err&quot;, err)
+          res.status(400).json({ message: &quot;fail access video&quot; })
+        })
+    })
+    .catch(function (error) {
+      console.error(error)
+      res.status(400).json({ message: &quot;fail&quot; })
+    })
+}
+</code></pre>
+<p>ここでのミソは <code>getSignedUrl</code> です。
+<a href="https://googleapis.dev/nodejs/storage/latest/File.html#getSignedUrl">getSignedUrl</a>は cloud storage の apmin API(で取得したファイルオブジェクト)が持っている機能で、動画のリソースの期間限定 URL を発行することができます。
+Cloud Storage はデフォルトでアクセス権限を付与しない限りはリソースは見えないのですが、ファイル名が分かっていると見つけることができます。
+（OGP 画像を返すときにたまに使われる<a href="https://qiita.com/shora_kujira16/items/95216245ecf06c4cd16d#%E9%9D%9E%E6%8E%A8%E5%A5%A8cloud-functions%E3%81%8B%E3%82%89cloud-storage%E4%B8%8A%E3%81%AE%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E3%81%AE%E5%85%AC%E9%96%8B%E7%94%A8url%E3%82%92getsignedurl%E3%82%92%E4%BD%BF%E3%82%8F%E3%81%9A%E3%81%AB%E5%8F%96%E5%BE%97%E3%81%99%E3%82%8B">裏技</a>）
+そのため制限を加えます。</p>
+<p>これで ファイル URL を取得できるようになりました。
+あとは この API をクライアントサイドから叩いて fileURL を取得すれば、購入者限定の動画視聴機能が実現できます。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

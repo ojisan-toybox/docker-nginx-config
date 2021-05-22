@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>RFCからCBORのデコーダーを作る</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="この記事は Node.js Advent Calendar 2020 の 16 日目の投稿です。今年のゴールデンウィークに CBOR(Concise Binary Object Representation) のエンコーダー・デコーダーを作っていまして、今日はデコーダーの作り方を紹介します。">
+    <meta property="og:title" content="RFCからCBORのデコーダーを作る">
+    <meta property="og:image" content="https://blog.ojisan.io//ts-cbor/visual.png">
+    <meta property="og:description" content="この記事は Node.js Advent Calendar 2020 の 16 日目の投稿です。今年のゴールデンウィークに CBOR(Concise Binary Object Representation) のエンコーダー・デコーダーを作っていまして、今日はデコーダーの作り方を紹介します。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="RFCからCBORのデコーダーを作る">
+    <meta name="twitter:description" content="この記事は Node.js Advent Calendar 2020 の 16 日目の投稿です。今年のゴールデンウィークに CBOR(Concise Binary Object Representation) のエンコーダー・デコーダーを作っていまして、今日はデコーダーの作り方を紹介します。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-12-16</time>
+      <h1>RFCからCBORのデコーダーを作る</h1>
+    </div>
+    <div class="post-contents"><p>この記事は <a href="https://qiita.com/advent-calendar/2020/nodejs">Node.js Advent Calendar 2020</a> の 16 日目の投稿です。</p>
+<p>今年のゴールデンウィークに CBOR(Concise Binary Object Representation) のエンコーダー・デコーダーを作っていまして、今日はデコーダーの作り方を紹介します。</p>
+<p>FYI: https://cbor.io/</p>
+<p>CBOR は WebAuthn の Attention Object の検証などで使われている技術ですが、自分が CBOR を勉強した動機はどこかで CBOR を使う機会があったわけではなく、<a href="https://twitter.com/jxck_">jxck</a> さんがゴールデンウィークに開催してくださった <a href="https://blog.jxck.io/entries/2019-05-12/mozaic-bootcamp-2019.html">mozaic bootcamp</a> というブートキャンプにおけるワークの一つとして、RFC を読みそれを実装するというものがありそれに挑戦した形です。
+初めて RFC を読むトレーニングとしては CBOR, UDP, WebSocket がオススメとのことでしたので、僕は CBOR を選びました。
+一緒に受けた他の受講生の方は WebSocket を選んでいたので、ちょっと逆張りしてみました。</p>
+<p>（※ 2020 年版では緊急事態宣言真っ只中ということもあり、オンライン環境下で実現できるのかという実験も兼ねてオンラインで開催されました。）</p>
+<p>そのときに作った実装は<a href="https://github.com/sadnessOjisan/ts-cbor">これ</a>なのですが、色々とひどい実装でそろそろ書き直したいなと思って少しずつ調べていて、ある程度は形になりましたのでアドベントカレンダーの題材として選びました。</p>
+<h2>CBOR とはなにか</h2>
+<p>CBOR は <a href="https://tools.ietf.org/html/rfc7049">RFC 7049</a> に定められた仕様で、</p>
+<blockquote>
+<p>The Concise Binary Object Representation (CBOR) is a data format
+whose design goals include the possibility of extremely small code
+size, fairly small message size, and extensibility without the need
+for version negotiation.</p>
+</blockquote>
+<p>とあるように、少ないコード・サイズを実現するためのデータフォーマットです。</p>
+<p>形式としては微かに JSON が意識されていますが、見た目はかなり異なります。</p>
+<p>例えば、<code>23</code>という数字は CBOR では<code>17</code> と表現され、 <code>a</code> という文字は CBOR では <code>6161</code> と表現されます。
+<code>[1, [2, 3]</code> は <code>8201820203</code> と表現され、<code>{ a9: { あ: 1 } }</code> は <code>A1626139A163E3818201</code> と表現されます。</p>
+<p>このように表現できるのは CBOR の形式が定まっており、エンコーダー・デコーダーを実装できるからです。</p>
+<p>CBOR は 8, 16, 24bit のフレームに、Major type, Additional information, Payload length, payload を詰め込みデータを表現します。
+wikipedia のこの図が非常にイメージとして良いものです。</p>
+<p><img src="wikizu.png" alt="cborのイメージ図" /></p>
+<p>CBOR では<code>6161</code>が<code>a</code>として表現できる例を挙げると、0x6161 は 16bit で表現すると 0b0110000101100001 となります。
+先頭 3bit は Major type と呼ばれデータの型を表し、ここでは 011, つまり 3 でこれは文字列と読み解きます。
+続く 5bit は Additional Information と呼ばれ 続く 0b00001 分の長さにデータが格納されていると読み解きます。
+残りの bit は 0b01100001 なのでこれが一文字のデータであることを表します。
+そしてこれは 0x61 を表すのでこれを文字コード表から探すと a であることが分かります。</p>
+<p>FYI: http://ash.jp/code/unitbl21.htm</p>
+<p>では その CBOR の解釈方法について詳しく見ていきましょう。</p>
+<h3>Major Type</h3>
+<p>先頭 3bit は Major type と呼ばれるものでいわばデータの型です。
+その型には</p>
+<ul>
+<li>Positive integer -&gt; 0</li>
+<li>Negative integer -&gt; 1</li>
+<li>Byte string -&gt; 2</li>
+<li>Text string -&gt; 3</li>
+<li>Array of data items -&gt; 4</li>
+<li>Map of pairs of data items -&gt; 5</li>
+<li>Semantic tag -&gt; 6</li>
+<li>Primitives -&gt; 7</li>
+</ul>
+<p>があり、それぞれ 0 - 7 のカテゴリが割り当てられます。
+つまり、000 - 111 のビット列で表現されます。</p>
+<p>例えば、23 は CBOR では<code>17</code>と表現されますが、0x17 は 0b00010111 であり、先頭 3 ビットの 0b000 は 0 なので正の整数であることが分かります。</p>
+<h3>Additional information</h3>
+<p>続く 5bit には Additional information が格納されます。
+これは Major Type の種類によって意味は変わってくるのですが、大抵はデータの大きさを表します。
+例えば数字の桁数や文字数の長さや配列の長さがここに入ります。</p>
+<p>0b00010111(0x17)の Major Type を除いた 5 ビットは 0b10111(23) なので、23 が addditional information であることが分かります。
+この場合だと additional information がそのままデータの値となるので、CBOR での 17 は整数 23 であると読み解きます。</p>
+<h3>フォーマットを実際に読んでみよう</h3>
+<p>では、その読み方について紹介します。
+CBOR は</p>
+<ul>
+<li>Major type</li>
+<li>Additional information</li>
+<li>Payload length</li>
+<li>payload</li>
+</ul>
+<p>から成り立ちますが、Major Type のカテゴリによって、Additional information, Payload length, payload の意味が変わります。</p>
+<h4>Positive Integer</h4>
+<p>Major Type のカテゴリが Positive Integer のとき、Additional information が 0 - 23(つまり 0b00000 - 0b10111) ならそれがそのままデータの値となります。Additional information が 24(つまり 0b11000) なら続く 1byte がデータの値になります。つまりその場合は 24-255 までの数値を表現できます。さらに Additional information が 25(0b11001)なら続く 2byte(つまり 256-65535)がデータの値となります。そしてここが 26 なら続く 3byte, 27 なら続く 4byte といった風に扱える数が増えていきます。</p>
+<p>そのため先ほどの図にあったデータフォーマットとは違ってデータの種類によっては 短く終わります。これも wikipedia の図がわかりやすいと思います。</p>
+<p><img src="wikiroad.png" alt="ペイロードの図" /></p>
+<h4>Text string</h4>
+<p>Major Type のカテゴリが Text string のとき Additional information が 0 - 23(つまり 0b00000 - 0b10111) ならその分だけの長さの文字列が Additional information の直後の bit 以降に格納されています。
+当然ここでの文字列は人間が読める文字列ではなく、bit 列です。
+この bit 列を 16 進数に変換し、それを UTF-8 の形式でデコードしたものが該当の文字です。</p>
+<p>先ほどの例を挙げると、16 進数で「6161」が送られて来ればそれは「a」と表現されます。</p>
+<p>詳しくはこのテストコードを読むとイメージが掴めると思います。</p>
+<p>FYI: https://github.com/sadnessOjisan/ts-cbor/blob/master/src/decoder/<strong>tests</strong>/StringDecoder.ts</p>
+<p>こちらも additioal information が増えると読み方は異なります。
+たとえば Additional Information が 24 であれば、続く 8bit は文字列の長さを表します。そのためその 8bit を読んだ先の bit を指定文字数だけ読む必要があります。同様に 25 であれば 続く 16bit が文字列の長さを表し、16bit を読んだ先の bit を指定文字数だけ読む必要があります。</p>
+<h4>Array・Map</h4>
+<p>Array や Map では Additional information にデータの長さが入ります。
+ここでは長さだけわかればよく、なぜならその長さを読んだところに別の CBOR 文字列が入っているのでそれをデコードすれば要素が分かるからです。</p>
+<h3>フォーマットをルールにした関数を作るだけでは</h3>
+<p>このように MajorType と Additional information がデータの読み方を教えてくれるので、そのルールに従う関数を書けば簡単に decode できます。</p>
+<h2>愚直に実装していく</h2>
+<p>では、実装していきましょう。</p>
+<p>先ほども述べたとおり、CBOR では Positive integer, Negative integer, Byte string, Text string, Array of data items, Map of pairs of data items, Semantic tag, Primitives というカテゴリに分けられます。</p>
+<p>Positive integer, Negative integer, Byte string, Text string の対応ができれば、Array や Map といったはそれらを組み合わせることで実装できます。
+そのため再帰的にデコーダーを呼び出す実装にします。</p>
+<p>基本的には Major Type と Additional type を参考に読み進めていって、なにか矛盾が起きたら例外を投げるといった設計にします。</p>
+<pre><code class="language-ts">export class Decoder {
+  /**
+   * CBOR列からJSのデータ構造に変換する関数
+   * @param cborInputString {string} cbor文字列
+   * 6161
+   * 01
+   * @example
+   * const result = decode(&quot;6161&quot;)
+   * // a
+   * @throws CBOR文字列ではないときに例外を投げる
+   */
+  static decode(cborInputString: string): any {
+    const cbor = toCBOR(cborInputString)
+    const { majorType } = cbor
+    switch (majorType) {
+      case 0:
+        // 正の数
+        return PositiveNumberDecoder.decode(cbor)
+      case 1:
+        // 負の数
+        return NegativeNumberDecoder.decode(cbor)
+      case 2:
+        // Byte
+        return Byte.decode(cbor)
+      case 3:
+        // 文字列
+        return StringDecoder.decode(cbor)
+      case 4:
+        // 配列
+        return ArrayDecoder.decode(cbor)
+      case 5:
+        // オブジェクト
+        return ObjectDecoder.decode(cbor)
+      case 6:
+        // tag
+        return Tag.decode(cbor)
+      case 7:
+        return PrimitiveDecoder.decode(cbor)
+      default:
+        throw new Error(&quot;Invalid CBOR Input&quot;)
+    }
+  }
+}
+</code></pre>
+<p>そして 配列や Map といったなんらかの構造を取りうるデータ構造の Decoder からはこの<code>Decoder.decode</code>を呼ぶようにします。
+そうすれば配列の要素である数字や文字、さらには入れ子になる配列や Map の decode も行えます。</p>
+<pre><code class="language-ts">export class ArrayDecoder {
+  /**
+   * 配列であることが保証されたCBOR文字列から配列を作る関数.
+   *
+   * @param cbor CBOR文字列.
+   * ex) 820163E38182 = 82(array(2)) 01(1) 
+   63(text(3byte)) E38182(あ) = [12, &quot;あ&quot;]
+   * @param dataItemHeader CBOR文字列の先頭1byte. 
+   major typeと追加情報が格納されている.
+   */
+  static decode(cbor: BaseCborType): any[] {
+    const result: any[] = []
+    const definedToken = detectCborTypeFromBaseCbor(cbor)
+
+    if (cbor.type === &quot;tiny&quot;) {
+      throw new Error(&quot;配列はshort or long. &quot;)
+    }
+    switch (definedToken.type) {
+      case &quot;short&quot;: {
+        // additinal infoに長さが入っており、次のbyte以降にデータ
+        if (definedToken.additionalInformation &gt; 23) {
+          throw new Error(&quot;not tiny&quot;)
+        }
+
+        if (definedToken.additionalInformation === 0) {
+          return []
+        }
+        let eating = null
+        for (;;) {
+          const eatResult = Decoder.decode(eating || definedToken.variable)
+          eating = eatResult.restCborString
+          result.push(eatResult.decodeResult)
+          if (!eatResult.restCborString) {
+            // これ以上tokenがないなら抜ける
+            break
+          }
+        }
+
+        if (result.length !== definedToken.additionalInformation) {
+          throw new Error(&quot;additional informationと配列の数があってない&quot;)
+        }
+
+        return result
+      }
+
+      case &quot;long&quot;: {
+        let eating_long = null
+        for (;;) {
+          const eatResult = Decoder.decode(eating_long || definedToken.variable)
+          eating_long = eatResult.restCborString
+          result.push(eatResult.decodeResult)
+          if (eatResult.restCborString === null) {
+            break
+          }
+        }
+        return result
+      }
+    }
+    throw new Error(&quot;ありえない&quot;)
+  }
+}
+</code></pre>
+<p>このように再帰的な構造を用意してやれば、あとは 整数や文字列のデコーダーを作れば、CBOR のデコーダーそのものが完成します。</p>
+<h3>整数のデコーダー</h3>
+<pre><code class="language-ts">import {
+  separateTokenFromCBOR,
+  BaseCborType,
+  detectCborTypeFromBaseCbor,
+} from &quot;../helper&quot;
+
+/**
+ * 正の数のdecoder
+ */
+export class PositiveNumberDecoder {
+  /**
+   * 正の数であることが保証されたCBOR文字列からnumberを作る関数.
+   *
+   * @param cbor CBOR文字列.
+   * @param dataItemHeader CBOR文字列の先頭1byte. 
+   major typeと追加情報が格納されている.
+   * @returns 正の数
+   */
+  static decode(cbor: BaseCborType): number {
+    const definedToken = detectCborTypeFromBaseCbor(cbor)
+    if (definedToken.additionalInformation &lt; 24) {
+      return definedToken.additionalInformation
+    } else {
+      const separatedCborObject = separateTokenFromCBOR(definedToken.raw)
+      if (!separatedCborObject.rest) {
+        throw new Error(&quot;読み込む対象が存在しない&quot;)
+      }
+      const hexValue = separatedCborObject.rest
+      return parseInt(hexValue, 16)
+    }
+  }
+}
+</code></pre>
+<h3>文字列のデコーダー</h3>
+<pre><code class="language-ts">/**
+ * 文字列のdecoder
+ */
+export class StringDecoder {
+  /**
+   * 文字列であることが保証されたCBOR文字列から文字列を作る関数.
+   *
+   * @param cbor CBOR文字列. 
+   utf-8形式でそのまま連結されている。マルチバイト文字もそのままくっついている.
+   * ex) aあ =&gt; 6461E38182 (64(string2文字)
+    61(a) E38182(あ))
+   * @param dataItemHeader CBOR文字列の先頭1byte. major typeと追加情報が格納されている.
+   */
+  static decode(cbor: BaseCborType): string {
+    const definedToken = detectCborTypeFromBaseCbor(cbor)
+    switch (definedToken.type) {
+      case &quot;short&quot;: {
+        const cborTokenArray = this.cborValueToArray(definedToken.variable)
+        const URI = this.cborTokenArrayToURI(cborTokenArray)
+        const decoded = decodeURIComponent(URI)
+        const decodedByteLength = encodeURIComponent(decoded).replace(
+          /%../g,
+          &quot;x&quot;
+        ).length
+        if (decodedByteLength !== definedToken.additionalInformation) {
+          throw new Error(&quot;長さあってない&quot;)
+        }
+        return decoded
+      }
+      case &quot;long&quot;: {
+        const cborTokenArray = this.cborValueToArray(definedToken.variable)
+        const URI = this.cborTokenArrayToURI(cborTokenArray)
+        const decoded = decodeURIComponent(URI)
+        const decodedByteLength = encodeURIComponent(decoded).replace(
+          /%../g,
+          &quot;x&quot;
+        ).length
+        if (decodedByteLength !== definedToken.payloadLength) {
+          throw new Error(&quot;長さあってない&quot;)
+        }
+        return decoded
+      }
+    }
+    throw new Error(&quot;un reach&quot;)
+  }
+  /**
+   * cbor文字列のvalue部分を配列に分割する関数.
+   * @param cborValue
+   * 入力文字列. E38182E38182E38182 などのように 
+   0xE3 0x81 0x82 0xE3 0x81 0x82 と16進数表記の文字列が渡される
+   *
+   */
+  private static cborValueToArray(cborValue: string): string[] {
+    const res = []
+    let trimed = null
+    for (;;) {
+      trimed = separateTokenFromCBOR(
+        trimed ? trimed.rest || cborValue : cborValue
+      )
+      res.push(trimed.token)
+      if (!trimed.rest) {
+        break
+      }
+    }
+    return res
+  }
+
+  /**
+   * 16進数文字列の配列をURIに変換する関数
+   * @param hexStringArray 16進数文字列の配列
+   * ex) [&quot;e3&quot;, &quot;81&quot;, 82]
+   */
+  private static cborTokenArrayToURI(hexStringArray: string[]): string {
+    const uri =
+      &quot;%&quot; +
+      hexStringArray.reduce((acc, value) =&gt; {
+        return acc + &quot;%&quot; + value
+      })
+    return uri
+  }
+}
+</code></pre>
+<h3>CBOR の parse</h3>
+<p>上記のソースコードではなぞのヘルパーを import していますが、それらは parse のために使っている util です。</p>
+<pre><code class="language-ts">/**
+ * 1byte(0-255)をdataItemHeaderに分解する。
+ * @param input castすると16進数で表現できる文字列
+ * @returns DataItemHeader
+ */
+export const hexToDateitemHeader = (input: number): DataItemHeader =&gt; {
+  if (input &lt; 0 || input &gt; 255) {
+    throw new Error(&quot;un expected input&quot;)
+  }
+  const majorType = (input &gt;&gt; 5) as MAJOR_TYPE_IDENTIFIER_TYPE
+  const additionalInformation = input &amp; 0b00011111
+  if (!majorTypeIdentifiers.includes(majorType)) {
+    throw new Error(&quot;unexpected major type&quot;)
+  }
+  return { majorType, additionalInformation }
+}
+</code></pre>
+<p>ここでは Major Type として先頭 3bit を取得するために入力値に 5bit 分のシフト演算して 3bit を取り出したり、additional information を取得するために 5bit 分を<code>&amp;0b00011111</code>しています。
+このようにビット演算が大活躍するので馴染みのない演算子ですが覚えておくと良いでしょう。</p>
+<h3>これでできらぁ！？</h3>
+<p>とまあできたように見えるのですが、複雑な構造になったり、とてつもない長さの配列を扱うときはその分計算が増える場合に、この再帰を回すのかというと「う〜〜〜〜ん」という気持ちはあります。
+CBOR は何らかの構造を持つ以上、そのデコードは何らかの繰り返し表現を使うこととなりますが、再帰で行うとメモリはどんどん消費していったり、パフォーマンスの低下に繋がります。
+なんとか良い方法を考えたいです。</p>
+<h2>既存実装から学んだこと</h2>
+<p>じゃあ既存ライブラリはどうしているのかと思い調べていました。
+一応あることにはあって、</p>
+<ul>
+<li>https://github.com/PelionIoT/cbor-sync</li>
+<li>https://github.com/hildjj/node-cbor</li>
+</ul>
+<p>があります。</p>
+<p>おそらく使うべきは node-cbor で、読んでみたら「あーこの手があったか」という気になりました。</p>
+<h3>非同期版の API を用意する</h3>
+<p>パフォーマンスが気になるなら非同期に逃す手があります。</p>
+<pre><code class="language-ts">const p = new Promise((resolve, reject) =&gt; {
+  c.on(&quot;data&quot;, val =&gt; {
+    console.log(&quot;data val&quot;, val)
+    v = Decoder.nullcheck(val)
+    c.close()
+  })
+  c.once(&quot;end&quot;, () =&gt; {
+    switch (v) {
+      case NOT_FOUND:
+      default:
+        console.log(&quot;dend&quot;)
+        return resolve(v)
+    }
+  })
+})
+c.end(input, encod)
+return p
+</code></pre>
+<p>node-cbor では NodeJS のライブラリによくある命名として Sync を付けたもの・付けてないものが用意されています。</p>
+<pre><code class="language-ts">console.log(Decoder.decodeFirstSync(&quot;17&quot;))
+Decoder.decodeFirstSync(&quot;17&quot;).then(decoded =&gt; console.log(decoded))
+</code></pre>
+<h3>データのやりとりを stream API で行う</h3>
+<p>オブジェクトや Map といった構造を扱うとき、デコーダーは処理対象の親の情報を持ち、そこに解析したデータを足していかなければいけません。
+これをエレガントにかつパフォーマンスに配慮しながら行う方法として stream API を使う方法があります。
+node-cbor では Decoder Class は Stream を扱うクラスを継承しておき、デコードするたびに書き込みます。</p>
+<pre><code class="language-ts">_transform(fresh, encoding, cb) {
+    this.bs.write(fresh);
+
+    while (this.bs.length &gt;= this.__needed) {
+      let ret;
+      const chunk =
+        this.__needed === null ? undefined : this.bs.read(this.__needed);
+
+      try {
+        ret = this.__parser.next(chunk);
+      } catch (e) {
+        return cb(e);
+      }
+
+      if (this.__needed) {
+        this.__fresh = false;
+      }
+
+      if (!ret.done) {
+        this.__needed = ret.value || 0;
+      } else {
+        this.push(ret.value);
+        this.__restart();
+      }
+    }
+
+    return cb();
+  }
+</code></pre>
+<p>Stream API を使うことでデータサイズが大きくなっても、一度に大きなサイズのデータをメモリに乗せることを避けられます。
+非同期化と組み合わせることでメモリに対して優しくなります。</p>
+<h3>Generator の活用</h3>
+<p>CBOR でなんらかの構造をパースするときは、いま parse しているものの親を知らないといけません。
+そのため自分がいまどこまで parse したかという情報を parser とやりとりしないといけませんが、そこで yield が活躍します。
+parse した進捗を parser に戻すことで次読むべき文字を知れます。</p>
+<p>また generator は value と state を返すので、自然と parser の状態管理もしやすそうです。</p>
+<pre><code class="language-ts">*_parse() {
+    let parent = null;
+    let depth = 0;
+    let val = null;
+    while (true) {
+      const octet = (yield 1)[0];
+      const mt = octet &gt;&gt; 5;
+      const ai = octet &amp; 0x1f;
+      switch (ai) {
+        case NUMBYTES.ONE:
+          this.emit(&quot;more-bytes&quot;, mt, 1, parent_major, parent_length);
+          val = (yield 1)[0];
+          break;
+        case NUMBYTES.TWO:
+        case NUMBYTES.FOUR:
+        case NUMBYTES.EIGHT:
+          const numbytes = 1 &lt;&lt; (ai - 24);
+          this.emit(&quot;more-bytes&quot;, mt, numbytes, parent_major, parent_length);
+          const buf = yield numbytes;
+          val = mt === MT.SIMPLE_FLOAT ? buf : utils.parseCBORint(ai, buf);
+          break;
+        case 28:
+        case 29:
+        case 30:
+          this.running = false;
+          throw new Error(&quot;Additional info not implemented: &quot; + ai);
+        case NUMBYTES.INDEFINITE:
+          switch (mt) {
+            case MT.POS_INT:
+            case MT.NEG_INT:
+            case MT.TAG:
+              throw new Error(`Invalid indefinite encoding for MT ${mt}`);
+          }
+          val = -1;
+          break;
+        default:
+          val = ai;
+      }
+      ...
+    }
+  }
+</code></pre>
+<pre><code class="language-ts">const parser = c._parse()
+let state = parser.next()
+while (!state.done) {
+  const b = s.read(state.value)
+  if (b == null || b.length !== state.value) {
+    throw new Error(&quot;Insufficient data&quot;)
+  }
+  state = parser.next(b)
+}
+</code></pre>
+<p>このように node-cbor はなんか良さそうな感じがします。
+ただ、stream を使う以上は NodeJS でしか動かないので、実は僕が作ったものはブラウザ上で動かす方法としては優位性があるのかもしれないです。
+まあ意図的に実装をサボっているところがある(date や bignumber のサポートをしていない)ので、限られた場面で僕にしか使えないライブラリになっていますが。。。</p>
+<h2>ソースコード</h2>
+<p>(ここに書き直した軽量版へのリンクを貼る予定でしたが間に合いませんでした！)</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

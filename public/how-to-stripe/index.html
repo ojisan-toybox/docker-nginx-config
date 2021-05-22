@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>stripe を使った決済機能の実装方法を学ぶ前に知っとくといい全体感</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="nabettu さんのstripe のサブスク実装に Firebase の Extension がいいに便乗して stripe">
+    <meta property="og:title" content="stripe を使った決済機能の実装方法を学ぶ前に知っとくといい全体感">
+    <meta property="og:image" content="https://blog.ojisan.io//how-to-stripe/visual.png">
+    <meta property="og:description" content="nabettu さんのstripe のサブスク実装に Firebase の Extension がいいに便乗して stripe">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="stripe を使った決済機能の実装方法を学ぶ前に知っとくといい全体感">
+    <meta name="twitter:description" content="nabettu さんのstripe のサブスク実装に Firebase の Extension がいいに便乗して stripe">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-08</time>
+      <h1>stripe を使った決済機能の実装方法を学ぶ前に知っとくといい全体感</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://twitter.com/nabettu">nabettu</a> さんの<a href="https://nabettu.com/70975021a95f4f5b97e10a2666e37c77">stripe のサブスク実装に Firebase の Extension がいい</a>に便乗して <a href="https://stripe.com/">stripe</a> について書きます。
+stripe は決済機能を簡単に実現できる素晴らしいソリューションですが、自分自身はサブスク機能うんぬんの前に stripe そのものの実装でつまづいていた苦い過去があり、そういうのを払拭すべく stripe そのものの使い方を解説しようと思います。
+サンプルに<a href="https://react-stripe-example.vercel.app/">sadnessOjisan に給料を支払えるサービス</a>を作ったので、このコードを元に解説していきます。</p>
+<p>ちなみにそこで決済するとこのように売り上げが見えるようになり楽しいです。</p>
+<p><img src="./dash.png" alt="ダッシュボード" /></p>
+<p>テスト用のクレジットカード情報を載せていますのでそれを使って僕にじゃんじゃん給料を振り込んでください。
+<strong>実際のところ自分の市場価値がどれくらいか分かっていないので、それを知りたいっていう目的もあるのでリアルな金額を書き込んで欲しいです。</strong></p>
+<p>Stripe は決済周りの実装を簡単にするソリューションとはいえ、Stripe を使っても決済周りは複雑だったりするわけですが、</p>
+<ul>
+<li>全体感の把握</li>
+<li>ライブラリの使い分け</li>
+</ul>
+<p>を意識すればできるようになりましたので頑張りましょう。</p>
+<p>※ 本記事では API サーバーを使うパターンも紹介するため、サーバーを用意・デプロイしやすい NextJS で作っていますが、JS が動けばどの フレームワーク(バニラでも可) を使っても再現可能です。</p>
+<h2>stripe は何か</h2>
+<p><a href="https://stripe.com/jp">stripe</a>はオンライン決済プラットフォームで、決済機能を簡単に自分のアプリケーションに組み込める SaaS/PaaS です。
+決済を行うための各種エンドポイントが用意されており、その API を利用して決済処理を組み込めます。</p>
+<h2>クライアントで完結するのか</h2>
+<p>Stripe にはクライアントだけで完結するものとサーバーが必要なものがあります。
+API を提供するとのことでクライアントだけ書けばいいのかなと初めは思っていたのですが、自前でサーバーを用意しないといけないパターンもあり混乱しました。</p>
+<h3>ドロップインソリューション</h3>
+<p>クライアントだけで完結するパターンとして、<a href="https://stripe.com/jp/payments/checkout">Stripe Checkout</a>とよばれるドロップインな方法があります。
+これは決済画面そのものも Stripe が用意しているため、これを用いるだけで決済機能を実装することができます。
+決済の完了(成功・失敗)後のフローは、決済完了後にリダイレクトされるページでその URL に含まれているトークンを利用することで進めることができます。</p>
+<p><img src="./overview.png" alt="checkout" /></p>
+<p>FYI: https://stripe.com/docs/payments/checkout</p>
+<p>そのためこの方法を用いるだけで簡単に決済機能を実現できます。</p>
+<p><strong>ただ動的に金額を決めたり、在庫の金額管理を管理画面側でやる必要があったり、また決済画面のデザインを手元で持てなかったり諸々のデメリットはある</strong>ので、使いどころは限られるかもしれません。</p>
+<p><img src="./client.png" alt="クライアントサイドだけのシーケンス" /></p>
+<p>FYI: https://github.com/stripe-samples/checkout-one-time-payments</p>
+<h3>サーバーを使ったソリューション</h3>
+<p>そこでなるべく制御権を持ちたいのでサーバーを建てるソリューションで行います。
+サーバーを使う場合のフローはこのようになります。</p>
+<p><img src="./client-server.png" alt="サーバーを含めたシーケンス" /></p>
+<p>FYI: https://stripe.com/docs/payments/accept-a-payment</p>
+<p>この方式のいいところは決済情報をサーバー →stripe に送り、それをクライアントサイドでユーザーに確認させて決済するため、決済内容を動的に変えられる点です。
+サーバー-&gt;Stripe のやりとりで決済内容を決めるので、クライアントからの改竄もできないため安全です。
+また決済ページは自前で構築できるので、カスタマイズ性も高くこのフローを使いたい時は使いたいです。
+ただこのフローは上の図を見ても初見だと単語も概念もよくわからないと思いますので、</p>
+<ul>
+<li>決済フローの仕組みついて</li>
+<li>決済ページの作り方</li>
+</ul>
+<p>を、全体感を日もどきながら概念について解説したいと思います。</p>
+<h2>サーバーから決済機能を使う方法について</h2>
+<h3>API キーの発行などの下準備</h3>
+<p>公式のダッシュボードからキーを発行してください。</p>
+<p><img src="./key.png" alt="キー" /></p>
+<p>pk から始まる public なものと、sk から始まるシークレットなものがあります。
+シークレットの方はサーバーで使うもので環境変数化するなりして見えないようにしておきましょう。</p>
+<h3>コードの全体</h3>
+<p>先に最小構成の全体感を見せた方が分かりやすいと思いますのでべたっと貼り付けます。</p>
+<pre><code class="language-ts:title=pages/api/pay.tsx">import { NextApiRequest, NextApiResponse } from &quot;next&quot;
+// サーバーで使うSDK
+import Stripe from &quot;stripe&quot;
+
+const stripe = new Stripe(process.env.STRIPE_SECRET, {
+  apiVersion: &quot;2020-08-27&quot;,
+})
+
+export default async (req: NextApiRequest, res: NextApiResponse) =&gt; {
+  // 決済する金額を受け取る
+  const value = req.body.amount
+
+  // intentは支払いフローを定義するオブジェクト
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: value,
+    currency: &quot;jpy&quot;,
+    // Verify your integration in this guide by including this parameter
+    metadata: { integration_check: &quot;accept_a_payment&quot; },
+  })
+
+  // intentのsecretをクライアントがstripeに送るとintentが実行される
+  res.status(200).json({ client_secret: paymentIntent.client_secret })
+}
+</code></pre>
+<pre><code class="language-tsx:title=pages/index.tsx">import * as React from &quot;react&quot;
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements,
+} from &quot;@stripe/react-stripe-js&quot;
+import { loadStripe } from &quot;@stripe/stripe-js&quot;
+
+const Payment = () =&gt; {
+  // public key
+  const stripeApiKey = &quot;pk_test_51HLU77BUWDS...jJhJ12C&quot;
+  const stripePromise = loadStripe(stripeApiKey)
+
+  return (
+    &lt;div style={{ padding: 24 }}&gt;
+      &lt;h1&gt;sadnessOjisan に年収を払ってくれる御社を探してます！&lt;/h1&gt;
+      &lt;p&gt;お金欲しい！！！！！！！！！！&lt;/p&gt;
+      &lt;div style={{ maxWidth: 760 }}&gt;
+        &lt;Elements stripe={stripePromise}&gt;
+          {&quot; &quot;}
+          // 中身はContext
+          &lt;CheckoutForm&gt;&lt;/CheckoutForm&gt;
+        &lt;/Elements&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+const CheckoutForm = () =&gt; {
+  const stripe = useStripe()
+  const elements = useElements()
+
+  const handleSubmit = async event =&gt; {
+    event.preventDefault()
+
+    // intentを作るエンドポイントに決済したい金額を送る
+    const res = await fetch(&quot;/api/pay&quot;, {
+      method: &quot;post&quot;,
+      body: JSON.stringify({ amount: event.target.amount.value }),
+      headers: { &quot;Content-Type&quot;: &quot;application/json&quot; },
+    })
+    const data = await res.json()
+    const secret = data.client_secret
+
+    const card = elements.getElement(CardElement) // tokenを使ってintentを実行する
+
+    const result = await stripe.confirmCardPayment(secret, {
+      payment_method: {
+        // FYI: payment_method (https://stripe.com/docs/api/payment_methods)
+        card: card,
+        billing_details: {
+          name: &quot;user name&quot;,
+        },
+      },
+    })
+
+    if (result.error) {
+      /**
+       * 決済の失敗
+       * * api_connection_error
+       * * api_error
+       * * authentication_error
+       * * card_error
+       * * and so on...
+       */
+      console.log(result.error.message)
+    } else {
+      if (result.paymentIntent.status === &quot;succeeded&quot;) {
+        /**
+         * 決済に成功したときの処理をこのブロックに書く
+         */
+        alert(&quot;payment success!!&quot;)
+      }
+    }
+  }
+
+  return (
+    &lt;form onSubmit={handleSubmit}&gt;
+      &lt;label style={{ marginTop: 10, marginBottom: 10, display: &quot;block&quot; }}&gt;
+        年棒（日本円）
+      &lt;/label&gt;
+      &lt;input name=&quot;amount&quot; defaultValue={10000000}&gt;&lt;/input&gt;
+      &lt;label style={{ marginTop: 10, marginBottom: 10, display: &quot;block&quot; }}&gt;
+        カード情報
+        &lt;CardElement /&gt;
+      &lt;/label&gt;
+      &lt;p&gt;↓テスト用クレジットカード情報↓&lt;/p&gt;
+      &lt;ul&gt;
+        &lt;li&gt;番号: 4111111111111111&lt;/li&gt;
+        &lt;li&gt;有効期限: 02/25 (現在より後ならいつでmお)&lt;/li&gt;
+        &lt;li&gt;CVC: 111 (3桁ならなんでも)&lt;/li&gt;
+      &lt;/ul&gt;
+      &lt;button type=&quot;submit&quot;&gt;支払う&lt;/button&gt;
+    &lt;/form&gt;
+  )
+}
+
+export default Payment
+</code></pre>
+<h3>支払いのフローを作る</h3>
+<p>支払いのフローは二つに分かれます。</p>
+<ul>
+<li>支払いたいという intent を実行するための token をサーバーで作成する</li>
+<li>その token を stripe に送って intent を confirm して決済を実行する</li>
+</ul>
+<h4>stripe オブジェクトを作る</h4>
+<p>intent を実行するためにも、stripe を叩くメソッドを持ったオブジェクトをクライアント側に作ります。
+それが <code>const stripePromise = loadStripe(stripeApiKey);</code> です。
+このオブジェクトは context.provider などで決済フォームへ渡して、決済に使います。</p>
+<pre><code class="language-tsx">&lt;Elements stripe={stripePromise}&gt;
+  &lt;CheckoutForm&gt;&lt;/CheckoutForm&gt;
+&lt;/Elements&gt;
+</code></pre>
+<p>の Elements の内部実装が<code>Context.Provider</code>です。
+そのため Elements で括る必要があります。
+こうすることで内部で hooks 経由で様々なメソッドを呼べるようにもなります。</p>
+<h4>payment intent を実行できる client_secret を吐き出す API サーバーを用意する</h4>
+<p>ここからはサーバーでの処理です。
+<code>stripe.paymentIntents.create</code> を使って client_secret を吐き出します。
+このとき stripe オブジェクトは <code>const stripe = new Stripe(process.env.SECRET, { apiVersion: '2020-08-27' })</code> として作られ、サーバー側に秘密鍵が必要になるので扱いには注意しましょう。
+またここで使うライブラリは <code>stripe</code> です。
+<code>@stripe/stripe-js</code> はクライアント側のライブラリです。
+混同に注意しましょう。</p>
+<p>intent は</p>
+<blockquote>
+<p>Use the Payment Intents API to build a payments integration that can handle complexity. This API tracks a payment, from initial creation through the entire checkout process, and triggers additional authentication steps when required.</p>
+</blockquote>
+<p>といったもので、支払いのフローそのものです。</p>
+<p>requires_payment_method =&gt; requires_confirmation =&gt; requires_action =&gt; processing =&gt; result といったフローで進んでいきます。（全部行う必要はない）
+サンプルコードや公式チュートリアルを読むとき、どのフェーズかを意識すると急に読みやすくなりますので意識しておきましょう。</p>
+<p>FYI: https://stripe.com/docs/payments/intents</p>
+<p>ここで作られる intent オブジェクトに client_secret が含まれるのでこれをクライアントに返しましょう。 <code>res.status(200).json({ client_secret: paymentIntent.client_secret })</code></p>
+<p><strong>クライアント側で intent のフローを実行する時にこのトークンが必要となります。</strong></p>
+<h4>client_secret を使って stripe で決済する</h4>
+<p>クライアント側の処理に戻ります。
+intent のフローとして、<code>confirmCardPayment</code> を呼び出し、client_secret を渡せば決済が行われます。</p>
+<pre><code class="language-tsx">const result = await stripe.confirmCardPayment(secret, {
+  payment_method: {
+    card: elements.getElement(CardElement),
+    billing_details: {
+      name: &quot;user name&quot;,
+    },
+  },
+})
+</code></pre>
+<p>その result の結果を見れば後続処理もかけます。</p>
+<pre><code class="language-tsx">if (result.error) {
+  /**
+   * 決済の失敗
+   * * api_connection_error
+   * * api_error
+   * * authentication_error
+   * * card_error
+   * * and so on...
+   */
+  console.log(result.error.message)
+} else {
+  if (result.paymentIntent.status === &quot;succeeded&quot;) {
+    /**
+     * 決済に成功したときの処理をこのブロックに書く
+     */
+    alert(&quot;payment success!!&quot;)
+  }
+}
+</code></pre>
+<p>例えば成功・失敗後に在庫 DB を更新・キャンセルするといったこともできます。</p>
+<h3>UI を作る</h3>
+<p>CardElement というパーツが公式から配布されておりこれを利用します。</p>
+<pre><code class="language-tsx">&lt;form onSubmit={handleSubmit}&gt;
+  &lt;CardElement /&gt;
+  &lt;button type=&quot;submit&quot; disabled={!stripe}&gt;
+    Pay
+  &lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<p>これによりクレジットカードの情報のようなセンシティブなものの状態管理は全部 Stripe のライブラリ側に任せることができます。</p>
+<p>ただこのコンポーネントのスタイリングはかなり見づらいので拡張します。
+CardElement は style option オブジェクトを受け取ることができるのでそれにスタイルを格納して拡張できます。</p>
+<pre><code class="language-tsx">const CARD_OPTIONS = {
+  iconStyle: &quot;solid&quot;,
+  style: {
+    base: {
+      iconColor: &quot;#c4f0ff&quot;,
+      color: &quot;#fff&quot;,
+      fontWeight: 500,
+      fontFamily: &quot;Roboto, Open Sans, Segoe UI, sans-serif&quot;,
+      fontSize: &quot;16px&quot;,
+      fontSmoothing: &quot;antialiased&quot;,
+      &quot;:-webkit-autofill&quot;: { color: &quot;#fce883&quot; },
+      &quot;::placeholder&quot;: { color: &quot;#87bbfd&quot; },
+    },
+    invalid: {
+      iconColor: &quot;#ffc7ee&quot;,
+      color: &quot;#ffc7ee&quot;,
+    },
+  },
+}
+
+const CardField = ({ onChange }) =&gt; (
+  &lt;fieldset className=&quot;FormGroup&quot;&gt;
+    &lt;div className=&quot;FormRow&quot;&gt;
+      &lt;CardElement options={CARD_OPTIONS} onChange={onChange} /&gt;
+    &lt;/div&gt;
+  &lt;/fieldset&gt;
+)
+</code></pre>
+<p>またデフォルトでは郵便番号のフォームも表示されますが、多くの場合は不要だと思うので（あまり見ない気がする）、これも消します。
+これを消すオプションも提供されています。</p>
+<pre><code class="language-tsx">&lt;CardElement options={{ hidePostalCode: true }} /&gt;
+</code></pre>
+<h4>フォームのスタイリングがたりない</h4>
+<p>ただここの style で指定できるスタイルの範囲は限りがあります。
+受け取れる型をみてみると、</p>
+<pre><code class="language-tsx">/**
+ * CSS properties supported by Stripe.js.
+ */
+interface StripeElementCSSProperties {
+  backgroundColor?: string
+  color?: string
+  fontFamily?: string
+  fontSize?: string
+  fontSmoothing?: string
+  fontStyle?: string
+  fontVariant?: string
+  fontWeight?: string
+  iconColor?: string
+  lineHeight?: string
+  letterSpacing?: string
+  textAlign?: string
+  padding?: number
+  textDecoration?: string
+  textShadow?: string
+  textTransform?: string
+}
+</code></pre>
+<p>とのことで<strong>例えば border のスタイリングはできません</strong>。</p>
+<h4>無理やり stripe のフォームにスタイルを当てる</h4>
+<p>そこで、このライブラリが .StripeElement というクラス名のスタイルを持っていることを利用して、無理やり style sheet からスタイルを当てます。
+同様の質問は stack overflow にも上がっており、同様の解決方法が提示されていました。</p>
+<p>FYI: https://stackoverflow.com/questions/43974321/how-can-i-put-border-styling-with-react-stripe-elements-input-component</p>
+<h4>もっと細かく制御したい</h4>
+<p>もし Element が粒度大きすぎてもっと細かく制御したい場合はそれぞれを、CardNumberElement, CardExpiryElement, CardCvcElement として分割できます。
+詳しくは <a href="https://stripe.com/docs/stripe-js/react#available-element-components">available-element-components</a> を参照してください。</p>
+<h2>まとめ</h2>
+<p>これで Stripe を使った決済ページを作ることができるようになりました。
+最後におさらいしましょう。</p>
+<h3>全体感を把握しよう</h3>
+<p>支払いの intent を進めることで決済がなりたちます。
+payment method の作成や confirm はその一部です。
+それぞれのフェーズで何をやっているかを抑えておきましょう。</p>
+<h3>ライブラリの使い分けに注意しよう</h3>
+<p>このサンプルアプリでは 3 つのライブラリが登場しました。</p>
+<ul>
+<li>stripe
+<ul>
+<li>server が使う stripe ライブラリ</li>
+</ul>
+</li>
+<li>@stripe/react-stripe-js
+<ul>
+<li>client が使う stripe ライブラリ</li>
+</ul>
+</li>
+<li>@stripe/stripe-js
+<ul>
+<li>stripe の入力フォームを作る UI キット</li>
+</ul>
+</li>
+</ul>
+<p>それぞれの役割を抑えておきましょう。</p>
+<h3>リクエストの分割に注意しよう</h3>
+<p>Stripe はクライアントだけで完結するものと勘違いするかもしれません。
+特に最近はそういった SaaS, PaaS も増えており混同しがちです。
+Stripe はクライアント側から使える機能もありますが、サーバーから使った方が便利なのでサーバーから使う方法を覚えておきましょう。
+そのときクライアントサイドだけで完結させる方法と混同しないように注意しましょう。
+ちなみにクライアントサイドで完結するドロップインソリューションは、Checkout 機能と呼ばれているものです。
+いま見てる情報が Checkout 機能なのかどうかを意識しておきましょう。</p>
+<h2>ソースコード</h2>
+<p>https://github.com/sadnessOjisan/react-stripe-example</p>
+<h2>最後に</h2>
+<p><a href="https://react-stripe-example.vercel.app/">sadnessOjisan に給料を支払えるサービス</a>に給料を振り込んでください！
+自分の市場価値がどれくらいか分かっていないので、それを知りたいっていう目的もあるのでリアルな金額を書き込んで欲しいです。！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

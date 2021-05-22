@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>mrm で JavaScript ライブラリの config を整える</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="lint-staged の設定をしているとき公式の Installation and setup にnpx mrm lint-staged
+とあったのですが、ここは ">
+    <meta property="og:title" content="mrm で JavaScript ライブラリの config を整える">
+    <meta property="og:image" content="https://blog.ojisan.io//what-is-mrm/visual.png">
+    <meta property="og:description" content="lint-staged の設定をしているとき公式の Installation and setup にnpx mrm lint-staged
+とあったのですが、ここは ">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="mrm で JavaScript ライブラリの config を整える">
+    <meta name="twitter:description" content="lint-staged の設定をしているとき公式の Installation and setup にnpx mrm lint-staged
+とあったのですが、ここは ">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-10-14</time>
+      <h1>mrm で JavaScript ライブラリの config を整える</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://github.com/okonet/lint-staged">lint-staged</a> の設定をしているとき公式の Installation and setup に</p>
+<pre><code class="language-sh">npx mrm lint-staged
+</code></pre>
+<p>とあったのですが、ここは <code>npm i -D lint-staged</code> でもよいはずなので、この <code>mrm</code> が何なのかを調べてみました。</p>
+<h2>mrm とは</h2>
+<p><a href="https://github.com/sapegin/mrm">mrm</a> の公式曰く、</p>
+<blockquote>
+<p>Command line tool to help you keep configuration (package.json, .gitignore, .eslintrc, etc.) of your open source projects in sync.</p>
+</blockquote>
+<p>とのことで、拙訳すると「いろんな設定ファイルをよしなにしてくれるコマンドラインツール」です。</p>
+<p>例えば何かしらのツールを入れるときは package.json に依存を追加するだけでなく、そのツールが要求する設定ファイルを追加したりする必要がありますが、その設定をまるっとまとめて行ってくれるツールです。</p>
+<p>この jest の例が分かりやすいでしょう。</p>
+<p><img src="./jest.png" alt="jestのmrmを実行するとpackage.json以外にも.gitignoreやjest.config.jsなども修正される" /></p>
+<p>実際、<code>npx mrm jest</code> を実行すると、</p>
+<p>package.json は</p>
+<pre><code class="language-json:title=package.json">{
+  ...,
+  &quot;scripts&quot;: {
+    &quot;test:jest&quot;: &quot;jest&quot;,
+    &quot;test:watch&quot;: &quot;jest --watch&quot;,
+    &quot;test:coverage&quot;: &quot;jest --coverage&quot;,
+    &quot;test&quot;: &quot;npm run test:jest --&quot;
+  },
+  &quot;jest&quot;: {
+    &quot;testPathIgnorePatterns&quot;: [
+      &quot;/node_modules/&quot;,
+      &quot;&lt;rootDir&gt;/lib/&quot;
+    ],
+    &quot;transform&quot;: {
+      &quot;^.+\\.tsx?$&quot;: &quot;&lt;rootDir&gt;/node_modules/ts-jest/preprocessor.js&quot;
+    },
+    &quot;testRegex&quot;: &quot;(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$&quot;,
+    &quot;moduleFileExtensions&quot;: [
+      &quot;ts&quot;,
+      &quot;tsx&quot;,
+      &quot;js&quot;,
+      &quot;jsx&quot;,
+      &quot;json&quot;
+    ],
+    &quot;snapshotSerializers&quot;: [
+      &quot;enzyme-to-json/serializer&quot;
+    ],
+    &quot;setupFiles&quot;: [
+      &quot;./test/jestsetup.js&quot;
+    ]
+  }
+}
+
+</code></pre>
+<p>が追加されます。
+<code>jest:</code>以降はよく jest.config.json に書いているものです。</p>
+<p>.gitignore は</p>
+<pre><code class="language-sh:title=.gitignore">coverage/
+</code></pre>
+<p>が追加されます。</p>
+<p>そして新しく .eslintignore が作成され</p>
+<pre><code class="language-sh:title=.eslintignore">types/graphql-types.d.ts
+coverage/*
+</code></pre>
+<p>と設定されます。</p>
+<p>そして enzyme の設定が test/jestsetup.js にされます。</p>
+<pre><code class="language-js:title=test/jestsetup.js">import Enzyme from &quot;enzyme&quot;
+import Adapter from &quot;enzyme-adapter-react-16&quot;
+
+Enzyme.configure({ adapter: new Adapter() })
+</code></pre>
+<p>この設定はおそらく React の既存プロジェクトで実行したからこのような設定になっているのだと思います。</p>
+<h2>mrm がサポートしているツール</h2>
+<p>公式曰く、</p>
+<ul>
+<li>codecov</li>
+<li>contributing</li>
+<li>dependabot</li>
+<li>editorconfig</li>
+<li>eslint</li>
+<li>gitignore</li>
+<li>jest</li>
+<li>license</li>
+<li>lint-staged</li>
+<li>package</li>
+<li>prettier</li>
+<li>readme</li>
+<li>semantic-release</li>
+<li>styleguidist</li>
+<li>stylelint</li>
+<li>travis</li>
+<li>typescript</li>
+</ul>
+<p>とのことです。
+どうやら NodeJS ツールチェインに関わるものというわけではないようです。</p>
+<h2>mrm の挙動を変えたい</h2>
+<p>mrm はそれぞれ設定されたタスクを行っているだけです。
+そのためそのタスクを定義すれば自分の好きな風に挙動を変えることができます。
+mrm-core というライブラリがそのタスクのエンジンとなっており、これを使ってタスクファイルを作り、それを ~/.mrm 配下などに置けば実行できます。</p>
+<p>詳しくはこちらのガイドをご覧ください。</p>
+<p>FYI: https://mrm.js.org/docs/making-tasks</p>
+<p>ユーザーとしてはタスクを定義することはないとは思うので（なぜならタスクを定義するならそのタスクを直に実行した方が早いから）、ライブラリ開発者や再利用可能な設定を配布したい人が知るべき機能なのだと思い、自分は読んでいません。</p>
+<h2>まとめ</h2>
+<p>mrm は いろんな設定ファイルをよしなにしてくれるコマンドラインツールです。</p>
+<pre><code class="language-sh">npx mrm lint-staged
+</code></pre>
+<p>は、mrm というツールで lint-staged をインストールすると同時に設定していたというわけでした。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

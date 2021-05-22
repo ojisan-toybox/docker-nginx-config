@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>yew上で現在時間を取得する</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Rust で時間を扱うとなれば chrono クレートだと思うのですが、 を yew の上で呼び出すとランタイムで落ちてしまって、どうやって現在日付を取得しようと悩んでいました。">
+    <meta property="og:title" content="yew上で現在時間を取得する">
+    <meta property="og:image" content="https://blog.ojisan.io//rust-now/visual.png">
+    <meta property="og:description" content="Rust で時間を扱うとなれば chrono クレートだと思うのですが、 を yew の上で呼び出すとランタイムで落ちてしまって、どうやって現在日付を取得しようと悩んでいました。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="yew上で現在時間を取得する">
+    <meta name="twitter:description" content="Rust で時間を扱うとなれば chrono クレートだと思うのですが、 を yew の上で呼び出すとランタイムで落ちてしまって、どうやって現在日付を取得しようと悩んでいました。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2021-02-12</time>
+      <h1>yew上で現在時間を取得する</h1>
+    </div>
+    <div class="post-contents"><p>Rust で時間を扱うとなれば chrono クレートだと思うのですが、<code>Local::now()</code> を yew の上で呼び出すとランタイムで落ちてしまって、どうやって現在日付を取得しようと悩んでいました。
+<code>Local::now()</code> を含んだコードから出力した wasm をブラウザ上で動かすと、勝手に <code>new Date()</code> 相応に動く訳なんてありませんでした。
+なので、日付を返す関数を JS 側に予め定義しておいて、それを Rust 側から呼び出す interop を実装して解決しました。</p>
+<h2>interop</h2>
+<p>日付を返す関数をあらかじめ定義しておきます。</p>
+<pre><code class="language-html">&lt;script&gt;
+  function getISOString() {
+    const date = new Date()
+    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+  }
+&lt;/script&gt;
+&lt;script type=&quot;module&quot;&gt;
+  import init from &quot;./wasm.js&quot;
+  init()
+&lt;/script&gt;
+</code></pre>
+<p>さきほど定義した関数を Rust 側から呼べるようにバインドを書きます。
+ここで <code>-&gt; String</code> という型指定を忘れると想定通りに動かないので注意しましょう。</p>
+<pre><code class="language-rust">#[wasm_bindgen]
+extern &quot;C&quot; {
+    fn getISOString() -&gt; String;
+}
+</code></pre>
+<p>あとは yew の中から使うだけです。
+ここでは create のタイミングで呼び出しています。</p>
+<pre><code class="language-rust">impl Component for Model {
+    ...
+    fn create(_: Self::Properties, link: ComponentLink&lt;Self&gt;) -&gt; Self {
+        let iso = getISOString(); // YYYY-MM-DD
+        ...
+        self {
+            today: iso
+
+        }
+    }
+}
+</code></pre>
+<p>こうして yew の state として JS から取得した日付を使えるようになりました。</p>
+<h2>web-sys 使いなよ</h2>
+<p>yew は利用する web ライブラリを stdweb, web-sys から選べます。
+yew の features で指定でき、何も指定しなければ web-sys が選ばれ、僕もこれを使っています。
+web-sys には DateTimeValue というものがあり、これが Date 相応のものぽいのですが、これを呼び出そうとすると何故かコンパイルが通らなくて諦めていたという背景があります。
+どうやって web-sys 経由で <code>new Date().getMonth()</code> のようなことができるのか、ご存知の方がいらっしゃいましたら教えてください。</p>
+<h2>なんで yew 使ってるの？</h2>
+<p>こんなクソアプリを作ったからです。</p>
+<p><img src="isi.png" alt="石一覧" /></p>
+<p>ソシャゲの配信日カレンダーです。
+配信日付近に始めたらめちゃくちゃアイテムもらえるから、そこでガチャたくさん引くという欲望を叶えるためのサイトです。</p>
+<p>https://birthstone.web.app/</p>
+<p>今回の JS から取得した日付は、カレンダー上で今日を示す処理のために使っています。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

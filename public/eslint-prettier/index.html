@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>ESLint と Prettier の共存設定とその根拠について</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="注意この記事は 2020 年 09 月 24 日現在、古い情報となりました。eslint-plugin-prettier">
+    <meta property="og:title" content="ESLint と Prettier の共存設定とその根拠について">
+    <meta property="og:image" content="https://blog.ojisan.io//eslint-prettier/visual.png">
+    <meta property="og:description" content="注意この記事は 2020 年 09 月 24 日現在、古い情報となりました。eslint-plugin-prettier">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="ESLint と Prettier の共存設定とその根拠について">
+    <meta name="twitter:description" content="注意この記事は 2020 年 09 月 24 日現在、古い情報となりました。eslint-plugin-prettier">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-06-24</time>
+      <h1>ESLint と Prettier の共存設定とその根拠について</h1>
+    </div>
+    <div class="post-contents"><h1>注意</h1>
+<p>この記事は 2020 年 09 月 24 日現在、古い情報となりました。
+<a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a> の利用は非推奨であると公式がアナウンスを出しています。
+そのことについては <a href="/prettier-eslint-cli">Prettier と ESLint の組み合わせの公式推奨が変わった</a> にてまとめましたので、こちらもご覧ください。</p>
+<p>また eslint-plugin-prettier は公式推奨ではなくなりましたが、それは Editor などの外部環境の進化によるものでこのプラグイン自体に何か問題が起きたわけではありません。
+そして eslint-plugin-prettier を利用した設定方法、特に eslint-plugin-prettier と eslint-config-prettier が何を解決していたかを知らないと、prettier-eslint が何をどう解決したかを理解できないはずなのでこの記事はそのまま残します。そう言う意味では 2020 年 09 月 24 日現在もこの情報は有用なので興味がある方は一読すると良いでしょう。
+ESLint の仕組みについて詳しくなれると思います。</p>
+<h1>本文</h1>
+<p>以前, <a href="https://blog.ojisan.io/eslint-plugin-and-extend">ESLint の plugin と extend について解説した記事</a>を書いた際に、<a href="https://github.com/prettier">Prettier</a> と <a href="https://eslint.org/">ESLint</a> の共存設定について触れました。
+いま Google で「Prettier ESLint」などで検索すると、最善とは言えない情報（重複した設定をしている）や根拠に欠ける情報が上の方に出てきており、混乱を助長していると思いましたので、根拠を示した記事を書きたいと思います。
+この情報は 2020 年 6 月 24 日における公式ドキュメントやライブラリの実装を根拠に解説した記事です。</p>
+<p>(追記) https://dackdive.hateblo.jp/entry/2019/03/15/100000 が日本語の文献だと正しく簡潔にまとまっています。
+これから始める解説は少々分量があり読みにくいところもあるかと思いますので、正しく簡潔に理解したい方はこちらの記事を参照すると良いです。
+私も執筆時に参考にしていました。</p>
+<p>おそらく共存設定に悩んだことがある方、もしくはこれから悩む方は</p>
+<ul>
+<li><a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> と <a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a> の設定は両方必要？</li>
+<li>公式 Doc みたら 2 つのライブラリを入れるのに、どうして ESLint の設定は extends だけでいいの？心配だし plugin にも設定書いていい？</li>
+<li>prettier は自分で入れる必要がある？</li>
+</ul>
+<p>に悩むと思います。この記事ではそれらの疑問を根拠を持って解消していきます。</p>
+<h2>結論</h2>
+<p>ESLint と Prettier を共存させる場合、<strong>「「「ESLint のスタイル設定を全部 OFF にし ESLint の中から Prettier を実行」」」</strong> します。
+公式ドキュメントにも明記されています。</p>
+<blockquote>
+<p>Whatever linting tool you wish to integrate with, the steps are broadly similar. First disable any existing formatting rules in your linter that may conflict with how Prettier wishes to format your code. Then you can either add an extension to your linting tool to format your file with Prettier - so that you only need a single command for format a file, or run your linter then Prettier as separate steps.</p>
+</blockquote>
+<p>FYI: https://prettier.io/docs/en/integrating-with-linters.html</p>
+<p>**具体的にやる作業は、 <a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> と <a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a>を install して、eslint の設定ファイルに <code>{&quot;extends&quot;: [&quot;plugin:prettier/recommended&quot;]}</code> を書くだけです。**この手順についても<a href="https://prettier.io/docs/en/integrating-with-linters.html#recommended-configuration">公式</a>に書かれています。</p>
+<p>では、</p>
+<ul>
+<li>なぜこの設定で実現できるのか</li>
+<li>どうして混乱しやすくなっていたのか</li>
+</ul>
+<p>といった、そのドキュメントには書かれていないことについて、ドキュメントの断片・実装・サンプルコードから説明します。</p>
+<h2>ESLint の plugin と extend</h2>
+<p>その説明を始める前に前提知識として、ESLint の plugin と extend の違いと関係について知る必要があります。
+それは以前に書いた<a href="https://blog.ojisan.io/eslint-plugin-and-extend">ESLint の Plugin と Extend の違い</a>にまとめてありますが、この記事を読むに当たっての前提だけをささっと書きます。
+もし既にご存知でしたらこの章は飛ばしても大丈夫です。
+このイメージがあれば大丈夫です。</p>
+<p><img src="plugimage.png" alt="eslintのextendとpluginのイメージ" /></p>
+<p>ESLint は</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [
+    &quot;eslint:recommended&quot;,
+    &quot;plugin:react/recommended&quot;,
+    &quot;plugin:@typescript-eslint/recommended&quot;,
+  ],
+  plugins: [&quot;react&quot;, &quot;@typescript-eslint&quot;],
+  rules: {},
+}
+</code></pre>
+<p>といった設定ファイルを持ちます。
+上の設定では <code>extends: [...]</code> の 中に <code>plugins:hoge</code> が入っていて、plugin と extends の関係が気になります。</p>
+<h3>extends は config を読み込める</h3>
+<p><strong>extends では shareable config 読み込めます。</strong>
+この sharable config には rule の設定以外に、plugin, env などの設定を含められます。
+つまり、他のファイルに書かれている rules の記述や、plugin の記述を持ち込めます。
+sharable config とはこのファイルではない .eslintrc と捉えると良いかもしれません。
+他の人が書いた(自分が書いたものでもいいのですが) .eslintrc で 自分の .eslintrc を拡張できるイメージです。</p>
+<h3>plugin の中に sharable config を定義できる</h3>
+<p>一方で plugin は config の実装を提供します。
+つまり config が rule の ON/OFF を設定するのに対して、その rule 自体の実装を提供します。
+ただそれだけではなく、ここが一番ややこしいポイントなのですが、plugin は sharable config も提供できます。</p>
+<pre><code class="language-javascript:title=eslint-plugin-myPlugin.js">module.exports = {
+  configs: {
+    myConfig: {
+      plugins: [&quot;&quot;],
+      env: [&quot;&quot;],
+      rules: {
+    }
+  },
+}
+</code></pre>
+<p>FYI: https://eslint.org/docs/developer-guide/working-with-plugins</p>
+<p>その Plugin に含まれた config は eslint の設定ファイル上で</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:myPlugin/myConfig&quot;],
+}
+</code></pre>
+<p>として読み込めます。</p>
+<h3>config の中に plugin の読み込み設定を書ける</h3>
+<p>先ほどの eslint-plugin-myPlugin.js では</p>
+<pre><code class="language-javascript:title=eslint-plugin-myPlugin.js">module.exports = {
+  configs: {
+    myConfig: {
+      plugins: [&quot;&quot;],
+      env: [&quot;&quot;],
+      rules: {
+    }
+  },
+}
+</code></pre>
+<p>とあるように、config の中で plugin を指定できます。
+これは、 <strong>plugin に定義されている config を extends に指定するだけで、その config に plugin の読み込み設定が書かれていれば、 plugin の設定を書かずとも plugin の設定をできる</strong>ということです。
+これは ESLint と Prettier の設定の混乱の原因の一つでもあるので覚えておきましょう。</p>
+<p>それでは Prettier が提供している plugin や config についてみていきましょう。</p>
+<h2>eslint-config-prettier の責務</h2>
+<p><a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> は</p>
+<blockquote>
+<p>Turns off all rules that are unnecessary or might conflict with Prettier.</p>
+</blockquote>
+<p>とあり、<strong>ESLint と Prettier の競合設定における、ESLint 側の設定を全部 OFF</strong> にしてくれます。
+具体的には style に関する設定を OFF にしくてれ、どのような設定がスタイルに関するものかどうかは eslint-config-prettier が管理しています。</p>
+<h3>各 plugin が持つスタイル設定を OFF にできる</h3>
+<p>公式サイトによると、</p>
+<ul>
+<li>@typescript-eslint/eslint-plugin</li>
+<li>eslint-plugin-babel</li>
+<li>eslint-plugin-flowtype</li>
+<li>eslint-plugin-react</li>
+<li>eslint-plugin-standard</li>
+<li>eslint-plugin-unicorn</li>
+<li>eslint-plugin-vue</li>
+</ul>
+<p>で設定されるルールにおける、スタイルに関するものを OFF にできる config を<strong>持ちます</strong>。</p>
+<p>ここで「持ちます」と書いたのは、この config を入れただけだと設定されたわけではないからです。
+<strong>どの plugin が入れた style のルールを OFF にするかはユーザーが自分で eslint の設定ファイルに書く必要があります。</strong></p>
+<p>例えば、eslint 標準のルールにおける style に関する設定を OFF にする場合は、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;prettier&quot;],
+}
+</code></pre>
+<p>と書きます。</p>
+<p>もし、TypeScript や React の設定を読み込んでいる場合は、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;prettier&quot;, &quot;prettier/@typescript-eslint&quot;, &quot;prettier/react&quot;],
+}
+</code></pre>
+<p>と書きます。</p>
+<p>この &quot;prettier/@typescript-eslint&quot; という設定は、<a href="https://github.com/typescript-eslint/typescript-eslint/tree/master/packages/eslint-plugin">@typescript-eslint/eslint-plugin</a> が注入する rule のうち style に関するものを OFF にし、&quot;prettier/react&quot; という設定は、<a href="https://github.com/yannickcr/eslint-plugin-react">eslint-plugin-react</a> が注入する rule のうち style に関するものを OFF にします。</p>
+<h3>スタイル設定を OFF にする config の実装</h3>
+<p>実装を見てみると、例えば eslint 組み込みの rule に対しては</p>
+<pre><code class="language-javascript:title=index.js">...
+
+module.exports = {
+  rules: Object.assign(
+    {
+      &quot;arrow-body-style&quot;: 0,
+      &quot;lines-around-comment&quot;: 0,
+      &quot;max-len&quot;: 0,
+      &quot;no-confusing-arrow&quot;: 0,
+
+      ...
+
+      &quot;operator-linebreak&quot;: &quot;off&quot;,
+      &quot;padded-blocks&quot;: &quot;off&quot;,
+      &quot;quote-props&quot;: &quot;off&quot;,
+      &quot;rest-spread-spacing&quot;: &quot;off&quot;,
+      &quot;semi-spacing&quot;: &quot;off&quot;,
+      &quot;semi-style&quot;: &quot;off&quot;,
+
+      ...
+
+  ),
+}
+</code></pre>
+<p>といった 特定のルールを OFF にする sharable config が定義され export されています。</p>
+<p>FYI: https://github.com/prettier/eslint-config-prettier/blob/master/index.js</p>
+<p>他にも TypeScript の <a href="https://github.com/typescript-eslint/typescript-eslint/tree/master/packages/eslint-plugin">@typescript-eslint/eslint-plugin</a>ルール に対しては</p>
+<pre><code class="language-javascript:title=@typescript-eslint.js">&quot;use strict&quot;
+
+module.exports = {
+  rules: {
+    &quot;@typescript-eslint/quotes&quot;: 0,
+    &quot;@typescript-eslint/brace-style&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/comma-spacing&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/func-call-spacing&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/indent&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/keyword-spacing&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/member-delimiter-style&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/no-extra-parens&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/no-extra-semi&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/semi&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/space-before-function-paren&quot;: &quot;off&quot;,
+    &quot;@typescript-eslint/type-annotation-spacing&quot;: &quot;off&quot;,
+  },
+}
+</code></pre>
+<p>FYI: https://github.com/prettier/eslint-config-prettier/blob/master/%40typescript-eslint.js</p>
+<p>といった 特定のルールを OFF にする sharable config が定義され export されています。</p>
+<h3>extends のどこに設定を書くか</h3>
+<p>もちろん、extends には prettier の競合回避設定以外の設定も書かれていると思います。
+たとえば最初の例では、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [
+    &quot;eslint:recommended&quot;,
+    &quot;plugin:react/recommended&quot;,
+    &quot;plugin:@typescript-eslint/recommended&quot;,
+  ],
+  plugins: [&quot;react&quot;, &quot;@typescript-eslint&quot;],
+  rules: {},
+}
+</code></pre>
+<p>のような設定を書きました。</p>
+<p>この場合、style に関する rule を off にする extend の設定は、 <strong>extends の最後</strong>に書いてください。
+<a href="https://prettier.io/docs/en/integrating-with-linters.html">公式</a>でも</p>
+<blockquote>
+<p>Make sure to put it last in the extends array, so it gets the chance to override other configs.</p>
+</blockquote>
+<p>と言及されています。
+後から足された config によって style の設定が ON になるかもしれないため、このようなやり方になっています。</p>
+<h2>eslint-plugin-prettier の責務</h2>
+<p>一方で <a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a> は何をしているでしょうか。
+これが prettier の実行をになっています。</p>
+<p>この plugin は公式には</p>
+<blockquote>
+<p>Runs Prettier as an ESLint rule and reports differences as individual ESLint issues.</p>
+</blockquote>
+<p>と説明されており、<strong>ESLint の世界から prettier を実行し、そこで見つけた format のエラーを ESLint 上でのエラーとして報告してくれる</strong>ライブラリです。</p>
+<h3>1 ファイルだけのシンプルな実装</h3>
+<p>ライブラリの本体も 1 ファイルだけでとてもシンプルなものです。</p>
+<pre><code class="language-javascript:title=eslint-plugin-prettier.js">...
+
+rules: {
+    prettier: {
+
+...
+
+// ここで prettier を読み込んで
+if (!prettier) {
+  prettier = require('prettier');
+}
+
+...
+
+let prettierSource;
+try {
+    // ここで 整形して
+  prettierSource = prettier.format(source, prettierOptions);
+} catch (err) {
+  if (!(err instanceof SyntaxError)) {
+    throw err;
+}
+
+...
+
+// ここで ESLintのエラーとして報告する
+context.report({ message, loc: err.loc });
+return;
+</code></pre>
+<p>FYI: https://github.com/prettier/eslint-plugin-prettier/blob/master/eslint-plugin-prettier.js</p>
+<h3>prettier の実行エラーをエラーとして報告する</h3>
+<p>ESLint の rule は <code>0, 1, 2</code> や <code>off, warn, error</code> といった値で、その rule の違反をどう扱うかを決められます。
+いわゆる rule field に書く プロパティとその設定をどう設定するかという話です。
+ここでは ESLint で起きた Prettier のエラーをエラーとして扱いたいので、そのことを rule に記述します。</p>
+<p>実装では</p>
+<pre><code class="language-javascript:title=eslint-plugin-prettier.js">module.exports = {
+  configs: {
+    ...
+  },
+  rules: {
+    prettier: {
+      ...
+</code></pre>
+<p>と定義されているので、ルール名は prettier です。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  rules: {
+    &quot;prettier/prettier&quot;: &quot;error&quot;,
+  },
+}
+</code></pre>
+<p>と書けば良さそうです。
+rules の プロパティは <code>${plugin名}/${ルール名}</code> です。
+plugin 名は、eslint-plugin-foo だと foo を指し、ここでは prettier が plugin 名です。
+そのため、 <code>&quot;prettier/prettier&quot;: &quot;error&quot;,</code> と指定します。</p>
+<p>FYI: https://eslint.org/docs/user-guide/configuring#use-a-plugin</p>
+<h3>prettier はユーザーが install しておく必要がある</h3>
+<p>ところで、 ESLint と Prettier の共通設定をする時は、あらかじめ prettier はユーザー側で読み込んでおく必要があるといった話を聞いたことがあるかもしれません。
+その理由がまさしく、先ほどのコード内にあった <code>prettier = require('prettier');</code> です。</p>
+<p>実際、eslint-plugin-prettier の package.json は</p>
+<pre><code class="language-json:title=package.json">{
+  ...
+  &quot;dependencies&quot;: {
+    &quot;prettier-linter-helpers&quot;: &quot;^1.0.0&quot;
+  },
+  &quot;peerDependencies&quot;: {
+    &quot;eslint&quot;: &quot;&gt;=5.0.0&quot;,
+    &quot;prettier&quot;: &quot;&gt;=1.13.0&quot;
+  },
+  &quot;devDependencies&quot;: {
+    ...
+    &quot;vue-eslint-parser&quot;: &quot;^6.0.0&quot;
+  },
+  ...
+}
+</code></pre>
+<p>FYI: https://github.com/prettier/eslint-plugin-prettier/blob/master/package.json</p>
+<p>となっており、peerDependencies に prettier が指定されています。
+つまり prettier は開発者側にあらかじめ必要です。
+prettier は各自で入れておきましょう。</p>
+<p>そのため、行うべき設定とは</p>
+<pre><code class="language-sh">$ npm install -D eslint-plugin-prettier prettier
+</code></pre>
+<p>と必要パッケージを install した上で、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  plugins: [&quot;prettier&quot;],
+  rules: {
+    &quot;prettier/prettier&quot;: &quot;error&quot;,
+  },
+}
+</code></pre>
+<p>という eslint の設定ファイルを書くことです。</p>
+<h2>なぜ extend の設定だけでいいか</h2>
+<p>ここまでの情報を総合すると、<a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> と <a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a> を使う設定は、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;prettier&quot;],
+  plugins: [&quot;prettier&quot;],
+  rules: {
+    &quot;prettier/prettier&quot;: &quot;error&quot;,
+  },
+}
+</code></pre>
+<p>となりそうです。
+しかし、実際には</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:prettier/recommended&quot;],
+}
+</code></pre>
+<p>という設定が正解です。
+これは<strong>eslint-plugin-prettier に含まれる sharable config が全て設定してくれる</strong>ためです。
+この<code>extends: [&quot;plugin:prettier/recommended&quot;]</code> の実体を見てみましょう。
+その実装は <a href="https://github.com/prettier/eslint-plugin-prettier/blob/master/eslint-plugin-prettier.js">ここ</a>に含まれており、</p>
+<pre><code class="language-javascript:title=eslint-plugin-prettier.js">module.exports = {
+  configs: {
+    recommended: {
+      extends: ['prettier'],
+      plugins: ['prettier'],
+      rules: {
+        'prettier/prettier': 'error'
+      }
+    }
+  },
+  rules: {
+      ...
+  },
+}
+</code></pre>
+<p>として定義されています。
+そのため extends や rules の設定を書かずとも、eslint-plugin-prettier で定義されている sharable cofnig を読み込むと、extends や rules の設定が自動で行われるというカラクリがあります。
+また extends に prettier が指定されていることは、<a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> における ESLint 標準ルールのスタイル OFF 設定も含まれています。
+そのため</p>
+<pre><code class="language-sh">$ npm i -D eslint-plugin-prettier eslint-config-prettier prettier
+</code></pre>
+<p>を実行し、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:prettier/recommended&quot;],
+}
+</code></pre>
+<p>とすれば、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;prettier&quot;],
+  plugins: [&quot;prettier&quot;],
+  rules: {
+    &quot;prettier/prettier&quot;: &quot;error&quot;,
+  },
+}
+</code></pre>
+<p>が設定されたとことと同義であり、</p>
+<ul>
+<li>衝突の原因である ESLint 側のスタイル設定が OFF になる</li>
+<li>ESLint の実行で prettier が実行される</li>
+<li>style の崩れを prettier が検知すれば、それは ESLint のエラーとして報告される</li>
+</ul>
+<p>となります。
+もちろん ESLint 組み込みのルール以外(TS, React の設定など)を使っている場合は、その config は自分で入れる必要があります。</p>
+<h3>TS, React などを併用するときの設定</h3>
+<p>TS, React などを併用するときの設定は、こういった TS, React 用の ESLint plugin が入っているとして、</p>
+<pre><code class="language-sh">$ npm i -D @typescript-eslint/eslint-plugin eslint-plugin-react
+</code></pre>
+<p>prettier 用の plugin, config を install して、</p>
+<pre><code class="language-sh">$ npm i -D eslint-plugin-prettier eslint-config-prettier prettier
+</code></pre>
+<p>config の中にある TS, React 用の設定を入れることで実現できます。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [
+    &quot;eslint:recommended&quot;,
+    &quot;plugin:react/recommended&quot;,
+    &quot;plugin:@typescript-eslint/recommended&quot;,
+    &quot;plugin:prettier/recommended&quot;,
+    &quot;prettier/@typescript-eslint&quot;,
+    &quot;prettier/react&quot;,
+  ],
+  plugins: [&quot;react&quot;, &quot;@typescript-eslint&quot;],
+  rules: {},
+}
+</code></pre>
+<p>検証コード: https://github.com/ojisan-toybox/eslint-prettier-angry</p>
+<h2>混乱の原因は何だったか</h2>
+<p>結論からして、共存設定は <strong><a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> と <a href="https://prettier.io/docs/en/integrating-with-linters.html">eslint-plugin-prettier</a>を install して、eslint の設定ファイルに <code>{&quot;extends&quot;: [&quot;plugin:prettier/recommended&quot;]}</code> を書くだけです。</strong>(※ TS, React などの plugin を書いているなら他にも eslint-config-prettier に含まれている sharable config を書く必要がある。)</p>
+<p>こんなに単純なのにどうして混乱するのでしょうか。
+おそらく次の 3 つだと思っています。</p>
+<h3>eslint の設定ファイルの extends に config を書くだけでいいのに、config と plugin 両方の install が必要</h3>
+<p>設定ファイルとしては</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:prettier/recommended&quot;],
+}
+</code></pre>
+<p>ですが、これは sharable config なので、その config の実態は</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;prettier&quot;],
+  plugins: [&quot;prettier&quot;],
+  rules: {
+    &quot;prettier/prettier&quot;: &quot;error&quot;,
+  },
+}
+</code></pre>
+<p>です。</p>
+<p>plugin の設定はされるものの、その plugin 自体は手元に必要なので、config と plugin 双方の install が必要です。
+またその plugin は prettier の実行を担うので、prettier 本体も手元に必要です。</p>
+<pre><code class="language-sh">$ npm i -D eslint-plugin-prettier eslint-config-prettier prettier
+</code></pre>
+<p><strong>設定ファイルに <code>eslint-config-prettier</code> は出てこないのに、 それを入れる必要があるのが混乱の原因</strong>になっています。
+一般的には その sharable config は plugin の実装も中に含まれるはずなので、plugin を入れるだけで済むはずなのに、Prettier は sharable config を cofig としてライブラリを分離しているのでそのようなことが起きています。</p>
+<h3>plugin の sharable config で extends の設定を補えることに気づけない</h3>
+<p>eslint-plugin-prettier を eslint で使うための config は、eslint-plugin-prettier それ本体に recommended config として含まれていることを知る必要もあります。
+これに気付くためには ESLint の extend の plugin の違いや関係を理解する必要があり、特に plugin に sharable config という仕組みを知っておく必要がありました。
+実際のところ Twitter で extend の plugin の違い についてアンケートを取ったところ大勢の方が混乱していそうです。</p>
+<p><img src="eslint-config-plugin.png" alt="eslintのextendとpluginの混乱" /></p>
+<p>FYI: https://twitter.com/sadnessOjisan/status/1272347998370975744</p>
+<h3>prettier/** という extends の実体が名前からでは見えづらい</h3>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [
+    ...
+    &quot;plugin:prettier/recommended&quot;,
+    &quot;prettier/@typescript-eslint&quot;,
+    &quot;prettier/react&quot;,
+  ],
+  ...
+}
+</code></pre>
+<p>とあったとして、これらが何かが名前からでは見えづらいです。
+この設定から<strong>これらは eslint-config-prettier に含まれる sharable config で、各 plugin が注入するルールのうちスタイルに関するルールの設定を OFF にする</strong>とは読み取れないです。
+ましてや<a href="https://github.com/prettier/eslint-config-prettier">eslint-config-prettier</a> と <a href="https://github.com/prettier/eslint-plugin-prettier">eslint-plugin-prettier</a>といった似たような名前があるので、混乱もしやすいです。
+prettier/@typescript-eslint も prettier/react もそれ用のライブラリがあるかのような設定名で、eslint-config-prettier にそれらの config が含まれていることは気付きにくいです。</p>
+<h2>改めて結論</h2>
+<p>やることはたったのこれだけです。</p>
+<p>必要なパッケージを install します。</p>
+<pre><code class="language-sh">npm install -D eslint-plugin-prettier eslint-config-prettier prettier
+</code></pre>
+<p>共存設定として eslint-plugin-prettier に含まれている sharable config を書きます。</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [&quot;plugin:prettier/recommended&quot;],
+}
+</code></pre>
+<p>もし、他の ESLint plugin を使っているなら、その plugin が ON にできるスタイルを OFF にする config を追加します。
+それらは eslint-config-prettier に含まれています。
+たとえば、TS と React の plugin を使っているのならば、</p>
+<pre><code class="language-javascript:title=.eslintrc.js">module.exports = {
+  extends: [
+    &quot;plugin:prettier/recommended&quot;,
+    &quot;prettier/@typescript-eslint&quot;,
+    &quot;prettier/react&quot;,
+  ],
+  plugins: [&quot;react&quot;, &quot;@typescript-eslint&quot;],
+  rules: {},
+}
+</code></pre>
+<p>となります。</p>
+<p>実際に plugin のルールにスタイル関連で怒られてみて、それを prettier の config を入れることで解消されるかどうかという実験は <a href="https://github.com/ojisan-toybox/eslint-prettier-angry">こちら</a>で行いましたので、もしまだ実感が持てないという方はお手元でお試しください。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

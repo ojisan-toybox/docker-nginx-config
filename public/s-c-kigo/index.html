@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>styled-components の :&>before(記号) まとめ</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="styled-components の 入れ子の中で使う記号()や、擬似要素 , 擬似クラス , さらには ">
+    <meta property="og:title" content="styled-components の :&>before(記号) まとめ">
+    <meta property="og:image" content="https://blog.ojisan.io//s-c-kigo/visual.png">
+    <meta property="og:description" content="styled-components の 入れ子の中で使う記号()や、擬似要素 , 擬似クラス , さらには ">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="styled-components の :&>before(記号) まとめ">
+    <meta name="twitter:description" content="styled-components の 入れ子の中で使う記号()や、擬似要素 , 擬似クラス , さらには ">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-15</time>
+      <h1>styled-components の :&>before(記号) まとめ</h1>
+    </div>
+    <div class="post-contents"><p><a href="https://styled-components.com/">styled-components</a> の 入れ子の中で使う記号(<code>&amp;&gt;+~</code>)や、擬似要素 <code>before/after</code>, 擬似クラス <code>hover</code>, さらには <code>&amp; &amp;</code> といった書き方、これがいつも分からなくなるのが最近の悩みです。
+きっと CSS を習得するより先に React の勉強を始めた方は同じような悩みを持っているのではないでしょうか。
+僕はいつもこの記号がわからなくなるので、ちゃんと調べてメモすることにしました。
+その結果、基本的には <strong>styled-components の中で SCSS の記法が使えるだけ</strong>っていう風に覚えておけばいいことがわかりましたが、<strong>一部そうでないものもありました</strong>。
+それについて順を追って説明していきます。</p>
+<p>(TIPS: &gt;+~についてググるとき直接記号を入れると検索されにくいですが、これらは<strong>隣接セレクタ</strong>と呼ばれておりその言葉で検索すると比較的ヒットします。)</p>
+<h2>CSS の復習</h2>
+<p>初学者にとっては CSS/SCSS の記号運用と styled-components での記号運用を区別がつかないと思いますので、そういったところから包括的に整理していこうと思います。
+諸々の実験はここでしているのでご確認ください。</p>
+<p>FYI: https://codesandbox.io/s/css-sandbox-1qjew?file=/index.html</p>
+<h3>hoge, fuga</h3>
+<p><code>,</code> は複数のセレクタを対象にします。</p>
+<pre><code class="language-css">h1,
+h2 {
+  color: red;
+}
+</code></pre>
+<p>これは h1 と h2 にスタイルを当てています。</p>
+<h3>hoge fuga</h3>
+<p>スペースは子孫要素を表します。</p>
+<pre><code class="language-css">div p {
+  color: red;
+}
+</code></pre>
+<p>この例では div の中の p にスタイルを当てています。
+絞り込んでいると考えた方がわかりやすいでしょう。</p>
+<h3>el.hoge</h3>
+<p>要素名に続けてクラス名を指定することで、その要素だけに絞り込めます。</p>
+<pre><code class="language-css">div.hoge {
+  color: red;
+}
+</code></pre>
+<p>ちなみに .class.class のようなことはできません。
+気になる方は sandbox でお試しください。</p>
+<h3>.hoge #fuga</h3>
+<p>これは説明する必要ないだろと思うかもしれませんが、ジャンル的には記号なので念のため説明を追加します。
+.はクラスのセレクタ, #は id のセレクタです。
+そのため</p>
+<pre><code class="language-css">.hoge #fuga {
+  color: red;
+}
+</code></pre>
+<p>は、hoge クラス要素の直下にある hoge id 要素へ color: red を当てるものです。</p>
+<h3>hoge &gt; fuga</h3>
+<p><code>&gt;</code> は直下要素を表します。</p>
+<pre><code class="language-css">div &gt; p {
+  color: red;
+}
+</code></pre>
+<p>直下は 1 階層だけ下という意味であり、</p>
+<pre><code class="language-html">&lt;div&gt;
+  &lt;p&gt;スタイル当たる&lt;/p&gt;
+  &lt;form&gt;
+    &lt;p&gt;スタイル当たらない&lt;/p&gt;
+  &lt;/form&gt;
+&lt;/div&gt;
+</code></pre>
+<p>ということです。</p>
+<h3>hoge + fuga</h3>
+<p>+ は直後の隣接要素を表します。</p>
+<pre><code class="language-css">p + span {
+  color: orange;
+}
+</code></pre>
+<pre><code class="language-html">&lt;p class=&quot;hoge&quot;&gt;
+  一つ内側(p　.hoge)
+  &lt;span&gt;二つ内側(span)&lt;/span&gt;
+&lt;/p&gt;
+&lt;span&gt;一つ内側(span)(ここにスタイルが当たる)&lt;/span&gt;
+&lt;span&gt;一つ内側(span)&lt;/span&gt;
+&lt;span&gt;一つ内側(span)&lt;/span&gt;
+</code></pre>
+<p>直後の一つにしか当たらないことに注意しましょう。</p>
+<h3>hoge ~ fuga</h3>
+<p>一方で~ は 後続の隣接要素を表します。
++ が直後だけだったのに対し、これは後続のもの全てが対象です。</p>
+<pre><code class="language-css">p ~ span {
+  color: orange;
+}
+</code></pre>
+<pre><code class="language-html">&lt;p class=&quot;hoge&quot;&gt;
+  一つ内側(p　.hoge)
+  &lt;span&gt;二つ内側(span)&lt;/span&gt;
+&lt;/p&gt;
+&lt;span&gt;一つ内側(span)(ここにスタイルが当たる)&lt;/span&gt;
+&lt;span&gt;一つ内側(span)(ここにスタイルが当たる)&lt;/span&gt;
+&lt;span&gt;一つ内側(span)(ここにスタイルが当たる)&lt;/span&gt;
+</code></pre>
+<h3>hoge:hover</h3>
+<p>: は擬似クラス(pseudo-class)を表すのに使います。
+MDN の説明を借りるなら、擬似クラスは「セレクターに付加するキーワードであり、選択された要素に対して特定の状態を指定します。」です。</p>
+<p>FYI: https://developer.mozilla.org/ja/docs/Web/CSS/Pseudo-classes</p>
+<pre><code class="language-css">selector:pseudo-class {
+  property: value;
+}
+</code></pre>
+<p>といった文法で表現でき、pseudo-class は</p>
+<ul>
+<li>hover</li>
+<li>root</li>
+<li>not</li>
+<li>first</li>
+<li>link</li>
+<li>focus
+...</li>
+</ul>
+<p>などたくさんあり、全部書き出すことはできないので、MDN をご参照ください。
+ただここで伝えたかったのは **実は擬似クラスと思ってなかったものがあったりして、それが混乱の原因だったかも？**ということで、何が擬似クラスであるかを把握しておくと、記号まみれになる styled-components でも理解を進めていくとができると思います。</p>
+<h3>hoge::before</h3>
+<p>:: は擬似要素(Pseudo-elements)を表すのに使います。
+MDN の説明を借りるなら、擬似要素 Pseudo-elements はセレクターに付加するキーワードで、選択された要素の特定の部分にスタイル付けできるようにするものです。</p>
+<p>FYI: https://developer.mozilla.org/ja/docs/Web/CSS/Pseudo-elements</p>
+<pre><code class="language-css">selector::pseudo-element {
+  property: value;
+}
+</code></pre>
+<p>といった文法で表現でき、pseudo-element には</p>
+<ul>
+<li>before</li>
+<li>after</li>
+<li>que</li>
+<li>selection</li>
+<li>placeholder</li>
+</ul>
+<p>などが入ります。
+これも意外と数があるので気になる方は MDN を参照ください。</p>
+<p>ここで覚えておきたいことは <strong>before, after 以外にもある</strong>ということと、<strong>: ではなく :: が必要</strong>ということです。
+特に <strong>: の数や使い方については後々の混乱の原因にもつながってくる</strong>ので意識しておいてください。</p>
+<h2>SCSS の復習</h2>
+<p>さきほどあげた CSS の記法は SCSS の記法で置き換えられます。
+ただ CSS に変換されるだけなので詳しい例はあげませんが、気になる方はデバッグ環境を用意したので適当に値を入れて出力を見てください。</p>
+<p>FYI: https://github.com/ojisan-toybox/scss-exec</p>
+<h3>スタイルのネスト</h3>
+<p>子孫要素の指定（絞り込み）は CSS だと、</p>
+<pre><code class="language-css">div p {
+  color: red;
+}
+</code></pre>
+<p>としていましたが、SCSS では</p>
+<pre><code class="language-scss">div {
+  p {
+    color: red;
+  }
+}
+</code></pre>
+<p>とネストで表現できます。</p>
+<h3>&gt;+~をネストと一緒に使う</h3>
+<p>下層へのスタイルの指定を制御していた &gt;+~(隣接セレクタ) などもネストと組み合わせてすっきりと書けるようになります。（この例ではわかりにくいですが複雑に慣ればなるほど構造化されてすっきりと見えるはずです。）</p>
+<pre><code class="language-css">div &gt; p {
+  color: red;
+}
+</code></pre>
+<p>を</p>
+<pre><code class="language-scss">div {
+  &gt; p {
+    color: red;
+  }
+}
+</code></pre>
+<p>と、表現できます。</p>
+<h3>&amp; を使った親要素参照</h3>
+<p>SCSS の便利な機能として <strong>&amp; でネストの親のセレクタ名を参照できる</strong>機能があります。</p>
+<p>それを使えば、</p>
+<pre><code class="language-css">p {
+  color: red;
+}
+
+span p {
+  color: blue;
+}
+</code></pre>
+<p>を</p>
+<pre><code class="language-scss">p {
+  color: red;
+
+  span &amp; {
+    color: blue;
+  }
+}
+</code></pre>
+<p>として書くことができます。
+このとき &amp; には親の p が入るとしてみると、<code>span p</code>になることがわかると思います。</p>
+<h3>&amp;:hover, &amp;::before, &amp;__hoge</h3>
+<p>段々記号がごちゃごちゃになってきましたね。</p>
+<p>この&amp;を使えば、</p>
+<pre><code class="language-css">div:hover {
+  color: red;
+}
+</code></pre>
+<p>を</p>
+<pre><code class="language-scss">div {
+  &amp;:hover {
+    color: red;
+  }
+}
+</code></pre>
+<p>として書くことができます。
+このとき &amp; には親の div が入るとしてみると、<code>div:hoge</code>になることがわかると思います。</p>
+<p>そして : を 2 つ使うパターンとして擬似要素の指定もでき、</p>
+<pre><code class="language-css">div::before {
+  color: red;
+}
+</code></pre>
+<p>を</p>
+<pre><code class="language-scss">div {
+  &amp;::before {
+    color: red;
+  }
+}
+</code></pre>
+<p>と書くこともできます。</p>
+<p><code>&amp;::</code> は記号 3 連発でややこしいですが、紐どいて考えるとわかりやすいと思います。</p>
+<p>そして &amp; を使った興味深いパターンは __ などと組み合わせた CSS 設計論への追従です。</p>
+<p>たとえば</p>
+<pre><code class="language-scss">.child {
+  color: red;
+
+  &amp;__modifed {
+    color: blue;
+  }
+}
+</code></pre>
+<p>は</p>
+<pre><code class="language-css">.child {
+  color: red;
+}
+
+.child__modifed {
+  color: blue;
+}
+</code></pre>
+<p>としてコンパイルでき、CSS の命名規則のようになりました。
+この使われ方はそれなりにみる機会もあり、<code>__</code> は いかにもな記号ですが SCSS には何の関係もないので注意しましょう。
+命名規則です。
+命名規則としては同様に<code>--</code>を使うパターンもあったりします。</p>
+<h3>&amp; &amp; &amp;</h3>
+<p>この &amp; を複数使うとどうなるでしょうか。</p>
+<pre><code class="language-scss">div {
+  &amp; &amp; &amp; {
+    color: blue;
+  }
+}
+</code></pre>
+<p>は</p>
+<pre><code class="language-css">div div div {
+  color: blue;
+}
+</code></pre>
+<p>となります。</p>
+<p>これの何が嬉しいかというと<strong>詳細度(スタイルの当たる優先度)を制御</strong>できます。
+セレクタの上乗せで調節することはたまに使うこともあるテクニックですが、SCSS では &amp; を複数使うことで実現できます。
+記号がたくさん出てきてギョッとしますが一度覚えておくといざというときに読み解けるはずです。</p>
+<h2>styled-components の記法</h2>
+<p>さあようやく styled-components にきました。
+なぜここまで CSS/SCSS をくどくど説明したかというと、CSS の記法は SCSS の記法で置き換えられ、<strong>SCSS の記法は styled-component の記法で置き換えられる</strong>からです。
+そのため SCSS の書き方を知っていれば styled-components の書き方をほとんど知っているも同然です。</p>
+<p><strong>styled-components は CSS プロセッサに <a href="https://stylis.js.org/">stylis</a> を利用しており</strong>、SCSS の記法を使うことが可能となっています。
+ただしよく読むと scss-like とあるので完全に SCSS というわけではなく、ちょっとした改変もありそうな気がするので検証していきましょう！</p>
+<blockquote>
+<p>The preprocessor we use, stylis, supports scss-like syntax for automatically nesting styles.</p>
+</blockquote>
+<p>FYI: https://styled-components.com/docs/basics#pseudoelements-pseudoselectors-and-nesting</p>
+<p>(注意: 後述しますが実際に使っているのは stylis ではなく@emotion/stylis です。しかしこの微妙な差異がまた大きな混乱(or バグ?)の原因になってそうです。)</p>
+<h3>置き換える方法</h3>
+<p>template literal の中に SCSS を書くだけで SCSS が適用されます。</p>
+<pre><code class="language-jsx">const Wrapper = styled.div`
+  &gt; p {
+    color: red;
+  }
+  &amp;:hover {
+    color: blue;
+  }
+`
+</code></pre>
+<p>などといった記法を好き放題にかけます。
+このとき <code>&amp;:hover</code> は wrapper コンポーネントに対する擬似クラスとして振る舞います。</p>
+<h3>:hover と &amp;:hover</h3>
+<p>しかしやっかいなものがあり、それが :hover と &amp;:hover です。
+これは SCSS の記法を考えると <code>&amp;:hover</code> が正しいのですが、 <code>:hover</code> でも動くのが実情です。</p>
+<pre><code class="language-jsx">const AAA = styled.div`
+  &amp;:hover {
+    color: blue;
+  }
+`
+const BBB = styled.div`
+  :hover {
+    color: blue;
+  }
+`
+</code></pre>
+<p>このとき、:hover は SCSS の記法としては間違いなのですが、 このコンポーネントをクライアントで動かした時に inject される CSS は同様です。
+<code>AAA:hover</code> として出力されます。(実際には AAA には styled-components が出力したクラス名が入る. )</p>
+<p>ちなみにこれは SCSS の記法で書くと失敗することは確認できます。</p>
+<pre><code class="language-scss">div {
+  &amp;:hover {
+    color: red;
+  }
+  :hover {
+    color: red;
+  }
+}
+</code></pre>
+<p>をコンパイルすると</p>
+<pre><code class="language-css">div:hover {
+  color: red;
+}
+
+div :hover {
+  color: red;
+}
+</code></pre>
+<p>となるからです。</p>
+<p><strong>CSS では要素の後にスペースが開くと擬似クラス CSS は適用されないことに注意しましょう。</strong></p>
+<p>FYI: https://github.com/ojisan-toybox/hover-spacing</p>
+<p>ちなみにこれは stylis を実行しても同様の結果が得られます。</p>
+<pre><code class="language-js">import { compile, serialize, stringify } from &quot;stylis&quot;
+
+const css = `
+div {
+    &amp;:hover {
+        color: blue;
+    }
+    :hover {
+        color: blue;
+    }
+}
+`
+
+console.log(serialize(compile(css), stringify))
+</code></pre>
+<p>を実行すると</p>
+<pre><code class="language-css">div:hover {
+  color: blue;
+}
+div :hover {
+  color: blue;
+}
+</code></pre>
+<p>となり、div のあとに space が生まれます。</p>
+<p>ただ上の実験結果としては SCSS としては動かないものの、styled-components としては <code>:hover</code> でも動くのが実情です。</p>
+<p>わかりづらいかもしれませんが、空白をつけた hover とそうでない hover を持つ component からは同じ CSS が injection されています。</p>
+<p><img src="./css.png" alt="styled-componentsからのCSSの出力結果を確認すると、hoverの前にspaceありなしで差はなかった" /></p>
+<pre><code class="language-jsx">import React from &quot;react&quot;
+import styled from &quot;styled-components&quot;
+
+const AAA = styled.div`
+  color: red;
+  :hover {
+    color: blue;
+  }
+`
+
+const BBB = styled.div`
+  color: red;
+  &amp;:hover {
+    color: blue;
+  }
+`
+
+export default function App() {
+  return (
+    &lt;div className=&quot;App&quot;&gt;
+      &lt;AAA&gt;afewfwefwe&lt;/AAA&gt;
+      &lt;BBB&gt;fiojfwjfi&lt;/BBB&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="language-css">.iyzagy:hover {
+  color: blue;
+}
+.jqEGWN {
+  color: red;
+}
+.jqEGWN:hover {
+  color: blue;
+}
+.iyzagy {
+  color: red;
+}
+</code></pre>
+<p>FYI: https://codesandbox.io/s/schover-gldmv</p>
+<p>しかし、 <code>&amp;:hover</code>ではなく<code>:hover</code> が動くことは styled-components に書かれていなさそうなので、<code>&amp;:hover</code>を使った方が良いと筆者は考えています。</p>
+<h3>&amp;&amp;&amp; と &amp; &amp; &amp;</h3>
+<p>同様のスペースの扱いに関しては &amp; &amp; &amp; についても言えます。
+これは SCSS の節で紹介した通り、詳細度をコントロールするテクニックです。
+このセレクタは &amp; の間にスペースが必要で、実際 &amp;&amp;&amp; として SCSS をコンパイルするとエラーになります。</p>
+<pre><code class="language-scss">div {
+  &amp;&amp; {
+    color: blue;
+  }
+}
+</code></pre>
+<pre><code class="language-sh">$ npx node-sass index.scss
+{
+  &quot;status&quot;: 1,
+  &quot;file&quot;: &quot;/scss-exec/index.scss&quot;,
+  &quot;line&quot;: 4,
+  &quot;column&quot;: 9,
+  &quot;message&quot;: &quot;Invalid CSS after \&quot;&amp;\&quot;: expected \&quot;{\&quot;, was \&quot;&amp;\&quot;\n\n\&quot;&amp;\&quot;
+  may only be used at the beginning of a compound selector.&quot;,
+  &quot;formatted&quot;: &quot;Error: Invalid CSS after \&quot;&amp;\&quot;: expected \&quot;{\&quot;, was \&quot;&amp;\&quot;\n\n
+  \&quot;&amp;\&quot; may only be used at the beginning of a compound selector.\n
+   on line 4 of index.scss\n&gt;&gt;   span &amp;&amp; {\n\n   --------^\n&quot;
+}
+</code></pre>
+<p>しかし styled-components では成功します。</p>
+<pre><code class="language-jsx">const CCC = styled.div`
+  &amp;&amp; {
+    color: blue;
+  }
+`;
+...
+&lt;CCC&gt;fiojfwjfi&lt;/CCC&gt;
+</code></pre>
+<pre><code class="language-css">.lmbrhy.lmbrhy.lmbrhy {
+  color: blue;
+}
+</code></pre>
+<p>これも SCSS と記法がぶれてる箇所なので注意しましょう。
+ここは反対に <strong>styled-components では <code>&amp;&amp;</code> ではなく <code>&amp; &amp;</code>だとスタイルが当たってくれません</strong>。
+公式の例も <code>&amp;&amp;</code> と並べて書いています。</p>
+<p>FYI: https://styled-components.com/docs/basics#pseudoelements-pseudoselectors-and-nesting</p>
+<p>気をつけましょう。</p>
+<h2>個人的勘違いポイント</h2>
+<p>と、ここまでの話を踏まえて、僕が styled-components 内の記号においてどういうところで混乱していたかを紹介します。</p>
+<h3>:+~&gt;&amp; は styled-components 特有の特別な記法ではない</h3>
+<p>たとえば : は擬似クラス、::は擬似要素で使う CSS にもある記号です。
+:hover, ::before のように : の数で混乱しないように意識しましょう。</p>
+<p>あと個人的には</p>
+<pre><code class="language-jsx">const Component = styled.div`
+  &gt; p {
+  }
+
+  &amp; p {
+  }
+`
+</code></pre>
+<p>の使い分けに悩んでいました。
+SCSS の記法を意識すればわかりますね。
+<code>div &gt; p</code> と <code>div p</code> の違いです。
+直下要素にスタイルを当てるか、複数にスタイルを当てるかという違いです。</p>
+<h3>&amp; なしでも子孫の指定ができる</h3>
+<p>ただし、 上の例に付け加えるなら</p>
+<pre><code class="language-jsx">const Component = styled.div`
+  p {
+  }
+`
+</code></pre>
+<p>というパターンもあり得ます。</p>
+<p>公式には &amp; なしのパターンと紹介されており、</p>
+<blockquote>
+<p>If you put selectors in without the ampersand, they will refer to children of the component.</p>
+</blockquote>
+<p>とのことです。</p>
+<p>そしてこれは直下だけではなく子を全て対象にとっています。</p>
+<pre><code class="language-jsx">const DDD = styled.div`
+  p {
+    color: green;
+  }
+`;
+
+...
+
+&lt;DDD&gt;
+  &lt;p&gt;
+    aaaaaaa（適用される）
+  &lt;/p&gt;
+  &lt;p&gt;
+    aaaaaaa（適用される）
+  &lt;/p&gt;
+  &lt;p&gt;
+    aaaaaaa（適用される）
+  &lt;/p&gt;
+  &lt;p&gt;
+    aaaaaaa（適用される）
+  &lt;/p&gt;
+&lt;/DDD&gt;
+</code></pre>
+<p>そして、この場合においては</p>
+<pre><code class="language-jsx">const DDD = styled.div`
+  p {
+    color: green;
+  }
+`
+
+const EEE = styled.div`
+  &amp; p {
+    color: yellow;
+  }
+`
+</code></pre>
+<p>は同じセレクタ(.class p) を出力します。
+これも混乱のもとなので気をつけましょう。
+&amp;を付けないパターンはなるべく使わないようにすると良いと思います。</p>
+<h3>:hover は SCSS の記法では &amp;:hover</h3>
+<p>:hover の利用は、styled-components では 動きますがやめておいた方が良さそうです。
+たとえば、styled-components が利用しているライブラリ(stylis)を直接叩くと white-space が入り、hover できない CSS が出力されることが確認できます。</p>
+<pre><code class="language-js">import { compile, serialize, stringify, tokenize, parse } from &quot;stylis&quot;
+
+const css = `
+div {
+    &amp;:hover {
+        color: blue;
+    }
+    :hover {
+        color: blue;
+    }
+}
+`
+
+console.log(serialize(compile(css), stringify))
+</code></pre>
+<pre><code class="language-sh">$ node index.js
+div:hover{color:blue;}div :hover{color:blue;}
+</code></pre>
+<p>なのに、styled-components では &amp;無し hover は hover できる CSS として出力されるので <strong>&amp;の役割とは何なのか</strong>と混乱することになりました。</p>
+<h2>個人的な主張</h2>
+<p>&amp; がなくても動くパターンがありますが、とりあえず SCSS の記法に従って全部 &amp; を付けた書き方をすれば混乱はないと思います。</p>
+<h2>次回予告: なぜ styled-components では結果が異なるのか</h2>
+<p>そこで気になるのはどうして styled-components には &amp; がなくても hover ができるのかということです。
+ざっと読んだ限りでは、答えは内部で使っている stylis にあることがわかりました。
+（※ 実際は styled-components は stylis ではなく、@emotion/stylis という stylis を軽量化したものを使っています。）</p>
+<blockquote>
+<p>switched from stylis to @emotion/stylis (#2640); mostly a bundle size win and a minor performance boost</p>
+</blockquote>
+<p>FYI: https://styled-components.com/releases#v5.0.0-beta.5</p>
+<p>これは stylis 互換のはずですが、stylis そのものと I/F が違っており怪しんでいます。
+また @emotion/stylis を実行すると styled-components の出力結果と同じものが吐き出されてることが確認できたので、 これが&amp; やスペースの扱いを制御していそうです。(=つまり SCSS に準拠していないものが @emotion/stylis から吐かれている)。
+(ここにデバッガを入れて確認した。 https://github.com/styled-components/styled-components/blob/1fde8f09ac77a7a6647b15628b25c774ea42463e/packages/styled-components/src/utils/stylis.js#L93 )
+ではここの stylis インスタンスがどういう設定になっているかを読めば解決なのですが、<a href="https://github.com/emotion-js/emotion/tree/master/packages/stylis">@emotion/stylis</a> がソースそのものが minify されていて読めず明らかにできていないのが現状です。
+しかしこのライブラリの影響によるということはデバッグの末に掴んでいるので、次回は styled-components をデバッグする記事を書いて紹介したいと思います。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

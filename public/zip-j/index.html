@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>特定のフォルダの特定のファイルだけを1段目の階層に収まるようにzipしたい</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="結論 を使う！やりたいことdist/module/script.js という階層にファイルがあるとして、この script.js だけを配布したいとします。">
+    <meta property="og:title" content="特定のフォルダの特定のファイルだけを1段目の階層に収まるようにzipしたい">
+    <meta property="og:image" content="https://blog.ojisan.io//zip-j/visual.png">
+    <meta property="og:description" content="結論 を使う！やりたいことdist/module/script.js という階層にファイルがあるとして、この script.js だけを配布したいとします。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="特定のフォルダの特定のファイルだけを1段目の階層に収まるようにzipしたい">
+    <meta name="twitter:description" content="結論 を使う！やりたいことdist/module/script.js という階層にファイルがあるとして、この script.js だけを配布したいとします。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-09-12</time>
+      <h1>特定のフォルダの特定のファイルだけを1段目の階層に収まるようにzipしたい</h1>
+    </div>
+    <div class="post-contents"><h2>結論</h2>
+<p><code>-j</code> を使う！</p>
+<h2>やりたいこと</h2>
+<p>dist/module/script.js という階層にファイルがあるとして、この script.js だけを配布したいとします。
+ここで GitHub Release などに載せたいので zip したいです。
+このとき単に <code>zip script.zip dist/module/script.js</code> とすると <code>script.zip</code> が出来上がりますがこれを解凍すると <code>dist/module/script.js</code> が出てくるので、実行するのがめんどくさかったりします。</p>
+<p>つまり、</p>
+<pre><code class="language-sh"># zip
+$ zip script.zip dist/module/script.js
+
+# 同一階層で解答したらフォルダ名がかぶるので移動
+$ cd ..
+
+# 移動した先に応じてscript.zip へのパスは変えること
+# dist が解答される
+$ unzip script.zip
+
+
+# 表示
+$ ls dist
+module
+</code></pre>
+<p>となり、script.js は見えないのを、解凍した時点で script.js が見える形にしたいというのが要望です。</p>
+<h2>-j でディレクトリ名や構造を無視して zip する</h2>
+<p>zip には -j というオプションがあります。</p>
+<p><code>--help</code> でみてみると、</p>
+<pre><code class="language-sh">-j   junk (don't record) directory names
+</code></pre>
+<p>とのことです。</p>
+<p>-j は junk という意味で、junk は 記録しない っていう意味のようです。
+名前が保存されないという意味に捉えていたのでこれが構造を無視して保存できるオプションとは気づけなかったのですが、このオプションがいまやりたいことへの解でした。</p>
+<p>そこで junk オプションをつけてみましょう。</p>
+<pre><code class="language-sh"># zip
+$ zip -j script.zip dist/module/script.js
+
+# script が解答される
+$ unzip script.zip
+
+# 表示
+$ ls dist
+script.js
+</code></pre>
+<p>と、対象の zip をそのままの構造で解凍することができました。</p>
+<h2>調べたときに「これからも！」って思ったオプション</h2>
+<p>このオプションに気づくまで結構時間がかかってそのときに試して「なるほど！」って思ったものも紹介します。
+😢oOO(コマンドのオプションってヘルプ見ても使い方とか結果がわからなくて自分で試さないと結局良くわからないってなってるのは僕だけ？）</p>
+<h3>-b オプション</h3>
+<p>-b は <code>--temp-path</code> を指定するオプションです。
+いかにもこれが使えそうな気がしますよね。
+と、同じように課題をこのコマンドで片付けられると考えていた方もいらっしゃるようです。</p>
+<p>FYI: https://unix.stackexchange.com/questions/77605/change-working-directory</p>
+<p>この質問の回答欄にもありますが、<code>-b</code> は <code>Use the specified path for the temporary zip archive.</code>を示し、zip するときの一時作業フォルダを指定するものです。
+-b から base path を想起させますが(そういう説明をどこかでみたことがある)、<code>--temp-path</code> なので注意しましょう。</p>
+<h3>-i(include) オプション</h3>
+<p>保存対象を指定できるオプションです。</p>
+<pre><code class="language-sh">$ zip --include='*.png' hoge.zip src/contents/20200610-1st-blog-stack/*
+</code></pre>
+<p>などとして使えます。</p>
+<p>同様に -x というファイルを除外するオプションもあります。</p>
+<p>しかしそれらを使ってもファイルを指定はできるものの、フォルダの構造を指定することはできませんので、今回やりたかったことは実現できませんでした。</p>
+<h2>改めて結論</h2>
+<p>フォルダの階層を無視して特定のファイルを zip 化したい場合は <code>-j</code> を使おう！</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>

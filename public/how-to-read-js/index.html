@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="jp">
+  <head>
+    <title>JavaScriptライブラリを読むときのコツ</title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="少し前からライブラリを読むトレーニングを始めたのですが、最近ようやく読み方がわかってきたので、やり始めた頃に知っておきたかったことをまとめます。">
+    <meta property="og:title" content="JavaScriptライブラリを読むときのコツ">
+    <meta property="og:image" content="https://blog.ojisan.io//how-to-read-js/visual.png">
+    <meta property="og:description" content="少し前からライブラリを読むトレーニングを始めたのですが、最近ようやく読み方がわかってきたので、やり始めた頃に知っておきたかったことをまとめます。">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@sadnessOjisan">
+    <meta name="twitter:title" content="JavaScriptライブラリを読むときのコツ">
+    <meta name="twitter:description" content="少し前からライブラリを読むトレーニングを始めたのですが、最近ようやく読み方がわかってきたので、やり始めた頃に知っておきたかったことをまとめます。">
+    <link
+      href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c"
+      rel="stylesheet"
+      id="webfont"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://fonts.googleapis.com/css?family=Inconsolata"
+    />
+    <!-- FYI: https://highlightjs.org/static/demo/ -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/nord.min.css"
+    />
+    <link rel="stylesheet" href="../post.css" />
+    <link rel="stylesheet" href="../reset.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <span class="title">blog.ojisan.io</span>
+      </a>
+    </header>
+    <div class="post-head">
+      <img src="visual.png" class="key_visual"></img>
+      <time>2020-06-18</time>
+      <h1>JavaScriptライブラリを読むときのコツ</h1>
+    </div>
+    <div class="post-contents"><p>少し前からライブラリを読むトレーニングを始めたのですが、最近ようやく読み方がわかってきたので、やり始めた頃に知っておきたかったことをまとめます。
+これから JavaScript/TypeScript で書かれたライブラリを読んでみようと思っている方の助けになれば嬉しいです。</p>
+<p>「私はこういう道具を使ったり、こういう工夫をしています」みたいな感じの内容ですので、もし「もっといい読み方があるよ」みたいなのがありましたら<a href="https://github.com/sadnessOjisan/blog.ojisan.io/issues">Issue</a>などで教えていただきたいです。</p>
+<p>（※ライブラリを読むにあたって、ブラウザの話と NodeJS の話があるのですが、似てる点がほとんどなのでごった煮します。）</p>
+<h2>エントリポイントを探す</h2>
+<p>ライブラリを読むにあたって</p>
+<ul>
+<li>そのライブラリが持つ module がどう協調して全体が作られるのか</li>
+<li>その関数は正確にはどういう挙動をするのか</li>
+</ul>
+<p>などを考えると、ユーザーから渡された入力や呼び出しがどう変化していくかを追っていくことになります。
+そこで、<strong>logger や debugger を入れる</strong>ことが一つの読み方になってきます。
+ただ、それらをどこに入れるかは、処理の呼び出しを辿らないと分かりません。
+そこで、その処理を辿るためのエントリポイントを探しましょう。</p>
+<h3>package.json の main</h3>
+<p>ライブラリのエントリポイントは package.json の main に書かれています。
+hogeLib ライブラリが <code>main: 'lib/index.js'</code> を持つなら、<code>require(&quot;hogeLib&quot;)</code> としたときは lib/index.js が呼ばれます。</p>
+<pre><code class="language-javascript:title=package.json">{
+  &quot;name&quot;: &quot;hogeLib&quot;,
+  &quot;description&quot;: &quot;hogeなライブラリ&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;author&quot;: &quot;sadnessOjisan&quot;,
+  &quot;main&quot;: &quot;lib/index.js&quot;
+}
+</code></pre>
+<p>そして大体エントリポイントはこういうファイルになっています。</p>
+<pre><code class="language-javascript:title=index.js">&quot;use strict&quot;;
+function __export(m) {
+    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
+Object.defineProperty(exports, &quot;__esModule&quot;, { value: true });
+var application_1 = require(&quot;./lib/application&quot;);
+
+...
+
+exports.TypeDocReader = options_1.TypeDocReader;
+exports.ArgumentsReader = options_1.ArgumentsReader;
+var serialization_1 = require(&quot;./lib/serialization&quot;);
+exports.JSONOutput = serialization_1.JSONOutput;
+const TypeScript = require(&quot;typescript&quot;);
+exports.TypeScript = TypeScript;
+//# sourceMappingURL=index.js.map
+</code></pre>
+<p>ぐええ読みにくいですね。</p>
+<p>ライブラリはビルドされた状態で配布されるので、minify などされており読みにくいです。
+そこで、どのファイルがエントリポイントかわかれば、そのファイルのビルド前のコードを探して読みましょう。</p>
+<p>先ほどのトランスパイル前のコードはこのようなものです。</p>
+<pre><code class="language-javascript:title=index.ts">export { Application } from './lib/application';
+export { CliApplication } from './lib/cli';
+
+export { EventDispatcher, Event } from './lib/utils/events';
+export { resetReflectionID } from './lib/models/reflections/abstract';
+export { normalizePath } from './lib/utils/fs';
+export * from './lib/models/reflections';
+export * from './lib/output/plugins';
+export { Renderer } from './lib/output/renderer';
+export { DefaultTheme, NavigationBuilder } from './lib/output/themes/DefaultTheme';
+export { NavigationItem } from './lib/output/models/NavigationItem';
+export { UrlMapping } from './lib/output/models/UrlMapping';
+
+...
+
+export { JSONOutput } from './lib/serialization';
+
+import * as TypeScript from 'typescript';
+export { TypeScript };
+</code></pre>
+<p>読みやすいですね。</p>
+<p>トランスパイル前のコードは<strong>src/などといった名前のディレクトリに、package.json の main で指定しているファイル名と同じ名前で作られている</strong>ことが多いので、そこから探しましょう。
+<strong>ただし node_modules の中にあるライブラリは配布用に build されたものなので、build 前のものは GitHub などから探す必要があります。</strong>
+GitHub のリンクは、node_modules の中に package.json と README.md が入っているので、そこに書かれているであろうリンクから辿れます。
+<strong>ライブラリのエントリポイントは上の例のように、他の関数を import してそれをまとめて export していることが多いです。</strong>
+<strong>基本的にはここから code jump で辿ると目的の処理を見つけられます。</strong></p>
+<h3>bin に登録されているコマンド</h3>
+<p>これは CLI からエントリポイントを辿るときのやり方です。
+たとえば <code>npx babel</code> や <code>npx webpack</code> としたときの処理をどう辿るかという話です。</p>
+<p>当然、babel や webpack を実行しているのですが、これらは package.json で指定されている main を実行していません。
+ここでの babel や webpack といったコマンドはある関数を実行しています。
+その関数は <code>node_modules/.bin</code> に入ってる関数です。
+<code>npx babel</code> は <code>node_modules/.bin/babel</code> を実行し、<code>npx webpack</code> は <code>node_modules/.bin/webpack</code> を実行しています。</p>
+<p>そして例えば babel だと、</p>
+<pre><code class="language-javascript:title=babel">#!/usr/bin/env node
+
+require(&quot;../lib/babel&quot;)
+</code></pre>
+<p>を実行しています。</p>
+<p>この <code>&quot;../lib/babel&quot;</code> を辿ると、</p>
+<pre><code class="language-javascript:title=index.js">#!/usr/bin/env node
+&quot;use strict&quot;
+
+var _options = _interopRequireDefault(require(&quot;./options&quot;))
+var _dir = _interopRequireDefault(require(&quot;./dir&quot;))
+var _file = _interopRequireDefault(require(&quot;./file&quot;))
+
+function _interopRequireDefault(obj) {
+  return obj &amp;&amp; obj.__esModule ? obj : { default: obj }
+}
+
+const opts = (0, _options.default)(process.argv)
+
+if (opts) {
+  const fn = opts.cliOptions.outDir ? _dir.default : _file.default
+  fn(opts).catch(err =&gt; {
+      ...
+</code></pre>
+<p>といった関数を実行しています。
+この場合 <code>const fn = opts.cliOptions.outDir ? _dir.default : _file.default</code> の先を読んでいくことで、そのコマンドが何をしているのかを追っていけます。</p>
+<p>どういうときに.bin があるかというと、<strong>ライブラリを作ったときの package.json の bin フィールドを書いたとき</strong>です。
+node_modules は package.json に <code>bin</code> を登録することで、コマンド名を実行関数への link として登録できます。</p>
+<pre><code class="language-javascript:title=package.json">{
+  ...
+  &quot;bin&quot;: {
+    &quot;main&quot;: &quot;main.js&quot;,
+    &quot;sub&quot;: &quot;sub.js&quot;
+  },
+}
+</code></pre>
+<pre><code class="language-javascript:title=main.js">#!/usr/bin/env node
+
+console.log(&quot;i am main&quot;)
+</code></pre>
+<p>ライブラリを作らないとイメージできないところだとは思いますが、bin の最小構成を用意したのでよければ参考にしてください。</p>
+<p>FYI: https://github.com/ojisan-toybox/node-bin-bin</p>
+<h2>コードを読み進める</h2>
+<p>エントリポイントから辿ったり検索して、読みたい処理を見つけたら、その処理がなにをしているかを知るべく、周辺にあるコードを読んでいきましょう。
+イメージとしては少しずつ実験してヒントを集めていく感じです。</p>
+<h3>print debug</h3>
+<p>その処理が何をやっているかを理解するためには、関数単位で実行したり、関数の返り値を覗くと分かることもあります。
+そのためには print debug が有効な手立てになります。</p>
+<p>コードリーディングは GitHub にあるきれいなコードを使っていましたが、print debug は</p>
+<ul>
+<li>node_modules の中のコードに logger を仕掛ける</li>
+<li>library に example が含まれていたらそこに logger を仕掛ける</li>
+<li>library を clone してきて実験用の最小構成の動作コードを作る</li>
+</ul>
+<p>必要があります。</p>
+<h4>console.log の引数を活用してマークを入れていく</h4>
+<p>print debug といえば console.* です。</p>
+<p>ただし無闇に出力すると、何の log かわからないのでマークを入れています。
+<strong>console.log() は複数の引数を取れる</strong>ので、</p>
+<pre><code class="language-js">console.log(&quot;[class名]&lt;関数名&gt; x: &quot;, x)
+</code></pre>
+<p>といった <strong>マーク付きの loggaer を仕込めます</strong>。
+こうすると</p>
+<pre><code class="language-sh">&gt; [class名]&lt;関数名&gt; x: 10
+</code></pre>
+<p>といった出力を得ることができます。
+こうすることでどのファイルのどの関数がどの順番でよばれてそのときの x の値はこれだったということがわかるようになります。</p>
+<p>ブラウザで debug する場合は関数名やファイルは出力されますが、NodeJS をコンソールに吐き出しているときはそういった情報が見えないので、こういうマークを入れています。</p>
+<p>またブラウザで debug している場合も sourcemap などがなければどのファイルで何が起きたか追えなかったりするので、こういった mark をしかけた logger をよく書いています。</p>
+<p>console 系は log 以外にもいろんなメソッドがあります。
+筆者は使っていませんが、特にブラウザ上での動作確認時に役立ちそうなのがたくさんあるので使ってもいいかもしれません。</p>
+<p>FYI: https://qiita.com/mtoyopet/items/7274761af5424cee342a</p>
+<h4>console.Console</h4>
+<p>logger を使った print debug の場合、出力したものが長すぎるとコンソールからはみでて見えなくなります。
+クライアントサイドの開発ならブラウザがオブジェクトを折りたたんでくれるので問題にはなりづらいですが、NodeJS の開発だとそうはいきません。
+そこで logger の出力をファイルに吐き出します。</p>
+<pre><code class="language-js">const fs = require(&quot;fs&quot;)
+const log = fs.createWriteStream(&quot;result.log&quot;)
+const logger = new console.Console(log)
+
+logger.log(x)
+</code></pre>
+<p>普段何気なく使っている <code>console.log()</code> も <a href="https://nodejs.org/api/console.html#console_class_console">Console</a> クラスの instance method です。
+この instance を作るときにどこに出力するかを決めることができます。</p>
+<p>NodeJS の <a href="https://nodejs.org/api/console.html#console_class_console">Console</a> は <a href="https://nodejs.org/api/stream.html#stream_class_stream_writable">writableStream</a> を引数に取り、出力先を指定した logger を作れます。
+上の例では result.log というファイルに出力する logger を作っています。
+これで x の内容が result.log というファイルに出力されます。</p>
+<pre><code class="language-sh">[path.js]&lt;node&gt; node Node {
+  type: 'File',
+  start: 0,
+  end: 11,
+  loc: SourceLocation {
+    start: Position { line: 1, column: 0 },
+    end: Position { line: 1, column: 11 }
+  },
+  errors: [],
+  program: Node {
+    type: 'Program',
+    start: 0,
+    end: 11,
+    loc: SourceLocation { start: [Position], end: [Position] },
+    sourceType: 'script',
+    interpreter: null,
+    body: [ [Node] ],
+    directives: []
+  },
+  comments: []
+}
+[path.js]&lt;node&gt; node Node {
+  type: 'Program',
+  start: 0,
+  end: 11,
+  loc: SourceLocation {
+    start: Position { line: 1, column: 0 },
+    end: Position { line: 1, column: 11 }
+  },
+  sourceType: 'script',
+  interpreter: null,
+  body: [
+    Node {
+      type: 'VariableDeclaration',
+      start: 0,
+      end: 11,
+      loc: [SourceLocation],
+      declarations: [Array],
+      kind: 'const'
+    }
+  ],
+  directives: []
+}
+...
+</code></pre>
+<p>これの便利なところは、ファイルに出力したい log は自作した logger, そのままコンソールに出力させたいものは組み込みの console.log を使うといった使い分けができることです。
+<strong>自分の関心があるものだけをファイルに出力させられる</strong>ので、この変数の挙動だけを追いたいといったときに使いやすいです。
+logger を仕込みすぎてどれがどれかわからないといったときにも活躍します。</p>
+<h3>debugger と node-inspect</h3>
+<p>ファイル出力したログがあまりにも大きいときは node-inspect や debugger を使います。
+これにより処理を Step 実行し、その Step での状態を探索できるようになります。
+つまり調べたい挙動のところでコードの実行を止めて、その時点での変数へのアクセスを可能にします。</p>
+<p><a href="https://github.com/nodejs/node-inspect">node-inspect</a>は NodeJS に最初から付随しています。
+debugger 文 は break point を作れます。
+break point をセットすればそのポイントまで関数を実行してそこで止めることができます。</p>
+<pre><code class="language-js">$ node inspect index.js
+</code></pre>
+<p>inspector の起動 は inspect をつけて実行するだけで、 デバッガが立ち上がり 1step ずつコードが実行されます。
+その中で <code>c</code> と入力すると debugger 文 を仕込んだところまで実行されます。
+デバッガ の中にいるときは <code>repl</code> と打てば repl を起動できます。
+repl の中ではそのステップ時の変数にアクセスできます。
+また console.log(), typeof, Object.keys() などのコマンドも使えるので、調べたい変数が複雑で巨大でも掘っていくことができます。</p>
+<pre><code class="language-sh">&gt; XXX
+{ type: 'Program',
+  start: 0,
+  end: 11,
+  loc: SourceLocation,
+  sourceType: 'script',
+  ... }
+
+&gt; console.log(XXX)
+&lt; XXX {
+&lt;   type: 'Program',
+&lt;   start: 0,
+&lt;   end: 11,
+&lt;   loc: SourceLocation {
+&lt;     start: Position { line: 1, column: 0 },
+&lt;     end: Position { line: 1, column: 11 }
+&lt;   },
+&lt;   sourceType: 'script',
+&lt;   interpreter: null,
+&lt;   body: [
+&lt;     Node {
+&lt;       type: 'VariableDeclaration',
+&lt;       start: 0,
+&lt;       end: 11,
+&lt;       loc: [SourceLocation],
+&lt;       declarations: [Array],
+&lt;       kind: 'const'
+&lt;     }
+&lt;   ],
+&lt;   directives: []
+&lt; }
+&gt; undefined
+
+&gt; Object.keys(XXX)
+[ 'type',
+  'start',
+  'end',
+  'loc',
+  'sourceType',
+  'interpreter',
+  'body',
+  'directives' ]
+
+&gt; XXX.type
+'Program'
+</code></pre>
+<p>(※ XXX は本当は node なのですが、名前から変数名と分かりにくいので XXX に置き換えています. )</p>
+<p>上の例は AST のような出力が長くてどのような key を持つかの想像がつかないようなものに対して <code>Object.keys()</code> で持ってるキーを調べてアクセスしています。
+（key の種類を調べるのは型を見ればいいのですが、FlowType の型定義が見えなくなっていたので、このように出力するしかなかったという事情があります）</p>
+<h3>定義ジャンプのために LSP クライアントになるエディタを使う</h3>
+<p>エディタは何が良いかという論争はしたくないのであまり言及をしたくないのですが、コードを読むとき私は VSCode を使っています。
+<strong>定義先と定義元への Jump</strong> ができるので処理の流れを追うのに便利です。
+後述する<strong>ドキュメンテーション</strong>のためにも役立つので、LSP クライアントになるエディタを使いたいです。</p>
+<h3>わかったことは tsdoc で残す</h3>
+<p>読み進めるうちに分かった処理は <a href="https://github.com/microsoft/tsdoc">tsdoc</a> を書くようにしています。
+そうすることでエディタでカーソルを合わせたときに、その呼び出している処理が何だったかすぐ見つけることができます。</p>
+<p><img src="hover.png" alt="カーソル合わせたときの表示" /></p>
+<p>ライブラリを読むときは関数やクラスを何個も追っていくことになります。
+余程慣れていない限り、各処理がどう連携しているかという全体感を掴むことができません。
+そのときにわかった情報は適宜ドキュメントにして即時に参照可能にしておくと、記憶力や経験がなくても読める手がかりになるので、私はそうしています。</p>
+<p>このとき <strong>tsdoc 準拠の文字列で書いておくと、変数や型や戻り値や注意事項などの情報を出せます</strong>。</p>
+<h4>tsdoc のおすすめ使い方</h4>
+<p>tsdoc 準拠の <code>@param</code> , <code>@return</code> はもちろん、jsdoc 準拠の文字列も使えるため、 <code>@see</code> や <code>@throws</code> も使えます。
+see は参考になるサイトなどの情報をメモするのに便利で、throws はその関数が例外を投げることを知れるので有益な情報です。
+tsdoc に準拠して書いていると、（やる意味はないと思いますが）<a href="https://typedoc.org/">typedoc</a> を使えばそれらをページとして出力もできます。</p>
+<p>この annotation は Language Server(tsserver) 的には tag 情報として扱われます。
+その tag 情報は@で始まっていれば何でもいいので正直なんでも入れることができます。</p>
+<pre><code class="language-js">/**
+ * なんかhogeする関数
+ * @param input 入力される数
+ * @今日のご飯 カレーライス
+ * @いきたい場所 横浜
+ * @ラーメンといえば とんこつ
+ * @returns number
+ */
+const hoge = (input: number): number =&gt; {
+  return input
+}
+</code></pre>
+<pre><code class="language-sh">$ tsserver
+
+# 標準入力
+{
+    &quot;command&quot;: &quot;open&quot;,
+    &quot;arguments&quot;: {
+        &quot;file&quot;: &quot;./index.ts&quot;
+    }
+}
+
+{
+    &quot;type&quot;: &quot;response&quot;,
+    &quot;seq&quot;: 2,
+    &quot;command&quot;: &quot;quickinfo&quot;,
+    &quot;arguments&quot;: {
+        &quot;file&quot;: &quot;./index.ts&quot;,
+        &quot;line&quot;: 9,
+        &quot;offset&quot;: 7
+    }
+}
+
+# 標準出力
+{
+    &quot;seq&quot;: 0,
+    &quot;type&quot;: &quot;response&quot;,
+    &quot;command&quot;: &quot;quickinfo&quot;,
+    &quot;request_seq&quot;: 2,
+    &quot;success&quot;: true,
+    &quot;body&quot;: {
+        &quot;kind&quot;: &quot;const&quot;,
+        &quot;kindModifiers&quot;: &quot;&quot;,
+        &quot;start&quot;: {
+            &quot;line&quot;: 9,
+            &quot;offset&quot;: 7
+        },
+        &quot;end&quot;: {
+            &quot;line&quot;: 9,
+            &quot;offset&quot;: 11
+        },
+        &quot;displayString&quot;: &quot;const hoge: (input: number) =&gt; number&quot;,
+        &quot;documentation&quot;: &quot;なんかhogeする関数&quot;,
+        &quot;tags&quot;: [
+            {
+                &quot;name&quot;: &quot;param&quot;,
+                &quot;text&quot;: &quot;input 入力される数&quot;
+            },
+            {
+                &quot;name&quot;: &quot;今日のご飯&quot;,
+                &quot;text&quot;: &quot;カレーライス&quot;
+            },
+            {
+                &quot;name&quot;: &quot;いきたい場所&quot;,
+                &quot;text&quot;: &quot;横浜&quot;
+            },
+            {
+                &quot;name&quot;: &quot;ラーメンといえば&quot;,
+                &quot;text&quot;: &quot;とんこつ&quot;
+            },
+            {
+                &quot;name&quot;: &quot;returns&quot;,
+                &quot;text&quot;: &quot;number&quot;
+            }
+        ]
+    }
+}
+</code></pre>
+<p><strong>typedoc で出力しないなら自分の見やすい annotation を使ってもいい</strong>かもしれません。
+例えばこんな風に tsdoc のスキーマにないものを好き放題日本語で埋め込むこともできます。</p>
+<p><img src="doc.png" alt="カスタマイズしたドキュメンテーション" /></p>
+<p>私は、例外・注意事項・疑問をまとめておくと格段に読みやすくなりました。</p>
+<h3>テストを読む</h3>
+<p>挙動がわからないときはテストも読みます。
+テストには入力と期待する動作が書かれているのでその処理の概略は掴めます。</p>
+<p>ただ大きい処理だといわゆる in と out がしっかりしている unit テストではなく、mock した値の中をたくさん検査するといったテストで、読んでもよくわからないときもあるので、期待のしすぎはしない方が良いです。
+それでも JavaScript のテストは <code>test(&quot;XXX関数にこういうinputを与えるとこういう挙動になる&quot;, ()=&gt;{})</code> といった <a href="https://ja.javascript.info/testing-mocha#ref-108">spec</a> が書かれていることが多いので、その関数が何をしているかという雰囲気は掴みやすいです。</p>
+<pre><code class="language-js">test(&quot;get returns the last registration&quot;, () =&gt; {
+  const registration1: Registration = {
+    options: { lifecycle: Lifecycle.Singleton },
+    provider: { useValue: &quot;provider&quot; },
+  }
+  const registration2: Registration = {
+    options: { lifecycle: Lifecycle.Singleton },
+    provider: { useValue: &quot;provider&quot; },
+  }
+
+  registry.set(&quot;Bar&quot;, registration1)
+  registry.set(&quot;Bar&quot;, registration2)
+
+  expect(registry.has(&quot;Bar&quot;)).toBeTruthy()
+  expect(registry.get(&quot;Bar&quot;)).toStrictEqual(registration2)
+})
+</code></pre>
+<p>経験上、OSS はコメントがほとんど書かれていないので、コードを読むしかないのですが、テストには自然言語があるので、コードを読めなくてもそこからヒントを掴めたりします。</p>
+<h2>経験として学んだ読み方</h2>
+<p>これらはこれまで読み進めていく中で「あ〜そいういうこと！」ってなったようなことをまとめています。</p>
+<h3>new でインスタンスが作られるとは限らない</h3>
+<p>大規模なライブラリはよく クラスが使われています。
+そして DI もよく見ます。
+なので依存の関係や、呼び出しの順序を辿るときは、基本的には new () を探せばいいのですが、そんな簡単にはいきませんでした。</p>
+<h4>static factory method</h4>
+<p>ライブラリによっては constructor が private になっていて代わりに <code>static of(){}</code> などでインスタンス生成がされています。
+これは static factory method と呼ばれており <a href="https://maku77.github.io/java/effective/01.html">こういう</a>インスタンス生成のメソッドに具体名を付けれるといったメリットがあります。</p>
+<pre><code class="language-js">class Coordinate {
+  // ...
+  private constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+  static doubledCoordinate(x: number, y: number) {
+    return new Coordinate(x * 2, y * 2)
+  }
+}
+const coordinate = Coordinate.doubleCoordinate(1, 5)
+</code></pre>
+<p>FYI: https://dev.to/adtm/static-factory-methods-nnb</p>
+<p>static factory method を使うことが推奨されている場合もあり、そういうコードに出会うこともあります。
+そのとき、インスタンス生成の順番を追おうとしても、new で検索しても出てこないので注意しましょう。
+new がなくて static factory method 使ってそうと思ったら、 <code>of</code> / <code>valueOf</code> のようなコードで検索するか、 <code>static</code> で検索をかけると見つかりやすいです。</p>
+<h4>instance を作る専用関数の存在</h4>
+<pre><code class="language-js">class InstantiationService {
+  ...
+  private _createInstance&lt;T&gt;(ctor: any, args: any[] = [], _trace: Trace): T {
+    let serviceDependencies = _util.getServiceDependencies(ctor).sort((a, b) =&gt; a.index - b.index);
+    ...
+    return &lt;T&gt;new ctor(...[...args, ...serviceArgs]);
+  }
+}
+</code></pre>
+<p>といった感じで、constructor を受け取って instance を生成する関数といった風に、呼び出し元が new を使わずに instance を作ることもあります。
+new だけを追いかけると依存を見落とすので注意しましょう。
+(こういった関数を最後まで追いかけると new に行き当たったりするが、Jump が途切れたり、何度も Jump することになって迷子になるので見切りを new まで探す必要はないと思っています。)</p>
+<p>こういうケースは生成済みのインスタンスのキャッシュを使って injection するといったときに出てきます。
+ライブラリのコードはパフォーマンスに気が遣われていることがほとんどで、なるべくキャッシュを再利用してやろうといった意思が感じられます。</p>
+<h4>module import で instance 化</h4>
+<p>上の例で紹介したような instance を生成する関数を class の外で実行しているものもあります。
+そういった関数が書かれたファイルは、<strong>呼び出されなくても module として import されたら実行</strong>されてインスタンスが出来上がります。</p>
+<pre><code class="language-javascript:title=index.ts">import &quot;./module&quot;
+import { instances } from &quot;./data&quot;
+
+console.log(instances)
+</code></pre>
+<pre><code class="language-javascript:title=data.ts">export const instances = []
+</code></pre>
+<pre><code class="language-javascript:title=module.ts">import { instances } from &quot;./data&quot;;
+
+class Hoge {
+  private constructor() {}
+
+  static of() {
+    return new Hoge();
+  }
+}
+
+const registerModule = () =&gt; {
+  instances.push(Hoge.of());
+};
+
+registerModule();
+</code></pre>
+<p>このコードの index.ts は処理としては<code>console.log(instances)</code>をしているだけですが、出力した instances には値が入っています。</p>
+<pre><code class="language-sh">$ npx tsc src/*.ts --outDir dist
+
+$ node dist/index.js
+[ Hoge {} ]
+</code></pre>
+<p>巨大なライブラリの関数の<strong>呼び出し順</strong>を探るときにはこの罠にひっかかることがあるので注意しましょう。
+<strong>インスタンスやオブジェクトのできる順番を追っているときに、気付いたらインスタンスができていた</strong>といったとき、この module 読み込み時にインスタンスが生成されてどこかに登録されていたみたいなことを疑うとよいです。</p>
+<h3>code jump できないときに mixin を疑う</h3>
+<p>JS では <code>prototype</code> と <code>Object.assign</code> を使って mixin ができます。</p>
+<pre><code class="language-javascript:title=index.ts">class Base {
+  returnOne() {
+    return 1
+  }
+}
+
+const mixin = {
+  returnTwo() {
+    return 2
+  },
+}
+
+Object.assign(Base.prototype, mixin)
+
+const base = new Base()
+
+console.log(base.returnOne())
+console.log(base.returnTwo())
+</code></pre>
+<p>これを実行すると、もともと Base クラスになかった <code>returnTwo</code> を呼び出すことができ、</p>
+<pre><code class="language-sh">$ npx tsc index.ts
+
+$ node index.js
+1
+2
+</code></pre>
+<p>となります。</p>
+<p>ただし、<code>console.log(base.returnTwo())</code>の returnTwo が jump できません。
+というより実は npx の時点でエラーは出ていました。（ビルドはできる）</p>
+<pre><code class="language-sh">$ npx tsc index.ts
+index.ts:18:15 - error TS2339: Property 'returnTwo' does not exist on type 'Base'.
+
+18 console.log(b.returnTwo());
+                 ~~~~~~~~~
+
+
+Found 1 errors.
+</code></pre>
+<p>(※ Object.assign の declare を上書いたり、target を ES6 にしています)</p>
+<p><code>Object.assign(a, b)</code> は a に b をコピーできるのですが、このとき prototype にコピーすることで method を混ぜることができます。</p>
+<p>ちなみに Object.assign の型定義は</p>
+<pre><code class="language-js">assign&lt;T, U&gt;(target: T, source: U): T &amp; U;
+</code></pre>
+<p>なので、戻り値を使うと <code>returnTwo</code> にもアクセスできます。</p>
+<pre><code class="language-js">class Base {
+  returnOne() {
+    return 1
+  }
+}
+
+const mixin = {
+  returnTwo() {
+    return 2
+  },
+}
+
+const mixed = Object.assign(Base.prototype, mixin)
+const base = new Base()
+
+// NG
+console.log(base.returnOne())
+console.log(base.returnTwo())
+
+// OK
+console.log(mixed.returnOne())
+console.log(mixed.returnTwo())
+</code></pre>
+<p>ただ クラスに対する mixin だと 戻り値は使わないので、そのようなコードだと Jump できないインスタンスに出会う可能性はあります。
+古いコードや TS が使われていないコードでは Object.assign での mixin に出会うかもしれません。
+<strong>もしコードリーディング中に Jump できない関数にであったら mixin の可能性があります。しれっと mixin されているみたいなこともありました。</strong></p>
+<p>FYI: https://github.com/babel/babel/blob/master/packages/babel-traverse/src/path/index.js#L211</p>
+<p>ちなみに TypeScript を使っていると、クラスを引数でとり、それを extends して return する関数を作ることで実現できます。
+この場合は code jump が可能です。</p>
+<pre><code class="language-js">function Timestamped&lt;TBase extends Constructor&gt;(Base: TBase) {
+  return class extends Base {
+    timestamp = Date.now();
+  };
+}
+</code></pre>
+<p>FYI: https://typescript-jp.gitbook.io/deep-dive/type-system/mixins</p>
+<h3>些末な関数は無視する</h3>
+<p>わからない処理があっても大事そうでないところは全部飛ばしています。
+ライブラリを作る知識を学ぶという点では学べるところが多いと思いますが、ライブラリ内部の気になるところをみたいだけなら飛ばしていいと思います。
+実際に OSS を読むと設定を返す関数を何個も踏んで、ようやく核心に迫るという感じでした。
+設定を返す関数はちょっとしたテクニックぽいものもあったりしてよく理解できないので、僕は読み飛ばしています。
+多分理解できなくてもライブラリを作る側に回らない限りは困らないと思います。
+目的意識をもって読むことが大事です。</p>
+<h2>最後に</h2>
+<p>ライブラリを読むって最初はすごい難しそうなイメージがあり実際難しかったのですが、続けていくとパターンやコツみたいなのが見えてきて意外といけるようになってきました。
+読み進めていくと OSS 特有 のパターンや落とし穴みたいなのが見つかるので、そういうのを経験するともっと効率よく読めるようになるのだろうなと思ってこれからも読むモチベーションになっています。
+これからも頑張っていきます。</p>
+</div>
+    <footer>
+      <p>
+        このサイトでは Google
+        Analyticsでの計測のため、クッキーを利用しています。
+      </p>
+
+      <p>
+        このサイトのソースコードは<a
+          href="https://github.com/sadnessOjisan/new-blog.ojisan.io"
+          >こちら</a
+        >。
+      </p>
+      <p>©︎ <a href="https://twitter.com/sadnessOjisan">sadnessOjisan</a></p>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
+    <script>
+      (function () {
+        var webfont = document.getElementById("webfont");
+        webfont.rel = "stylesheet";
+      })();
+    </script>
+  </body>
+</html>
