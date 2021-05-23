@@ -1,5 +1,7 @@
 # docker-nginx-config
 
+blog.ojisan.io を nginx で動かしたい
+
 ```sh
 # dockerfile -> image
 docker build -t server .
